@@ -11,19 +11,23 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [x] ~~Survey `loglog_experiments/` (prior attempt); decide fresh restart, no code
       ported~~
 - [x] ~~Write `PLAN.md`~~
-- [ ] Pin `requirements.txt` (numpy, scipy for stats/bootstrap, matplotlib, pytest)
-- [ ] `git init`, first commit of scaffolding
+- [x] ~~Pin `requirements.txt` (numpy, scipy for stats/bootstrap, matplotlib, pytest)~~
+- [x] ~~`git init`, first commit of scaffolding~~
 
 ## Phase 0 — Synthetic (see PLAN.md for full checkpoint table)
-- [ ] 0.1 Planted generator + fidelity check
+- [x] ~~0.1 Planted generator + fidelity check (`generator.py`, `run_checkpoint_0_1.py`)~~
 - [ ] 0.2 `tools/loglog.py` estimator + identity/noiseless unit tests
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
 - [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage
 
 ## Shared tools (built alongside Phase 0, as each is first needed)
-- [ ] `tools/rng.py` — independent-stream seeding (ground rule 2)
-- [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths
+- [ ] `tools/rng.py` — independent-stream seeding (ground rule 2); not yet needed since
+      0.1 only draws one replicate per call — will extract once 0.3 needs many fresh
+      independent replicates
+- [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths;
+      kept local to `experiments/00_synthetic/generator.py` for now (one consumer so
+      far) — extract to `tools/` once a second experiment needs the same pattern
 - [ ] `tools/loglog.py` — weighted estimator
 - [ ] `tools/allocation.py` — budget allocation rule + cost accounting
 - [ ] `tools/wilson.py` — Wilson CI
