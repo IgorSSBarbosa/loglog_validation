@@ -200,7 +200,7 @@ def _write_metadata(*, path: Path, params: SyntheticParams, scales: list[int], n
     return path
 
 
-def _params_from_json(d: dict) -> SyntheticParams:
+def params_from_json(d: dict) -> SyntheticParams:
     return SyntheticParams(
         gamma=float(d["gamma"]),
         a0=float(d.get("a0", 1.0)),
@@ -231,7 +231,7 @@ def _main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     cfg = json.loads(args.meta.read_text())
-    params = _params_from_json(cfg["params"])
+    params = params_from_json(cfg["params"])
     scales = cfg["scales"]
     n = cfg["n"]
 
