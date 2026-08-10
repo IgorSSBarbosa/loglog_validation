@@ -1,0 +1,161 @@
+# Log-Log Plot Technique — Simulation Validation
+
+Companion simulation project for the paper **"The Log-Log Plot Technique"**
+(`../article_writting/article.tex`). Purpose: **validate or refute** the paper's
+assumptions and theorems by simulation, across a ladder of testbeds of increasing
+complexity. Writing/review of the paper itself happens in `article_writting/`, not here.
+
+This is a fresh restart of `../loglog_experiments/` (kept, untouched, as a historical
+reference — do not port its code). That attempt moved fast enough that it became hard
+to trust which numbers were actually checked against anything. This project inverts the
+priority: **correctness of each piece, checked numerically, comes before any figure.**
+
+## Ground rules
+
+1. **Verify before visualize.** A tool or model is not "done" when it produces a plot;
+   it is done when it has passed a stated numeric check (a closed-form identity, a
+   degenerate/noiseless case, or a calibration test with an explicit tolerance). Every
+   `experiments/*/README.md` states its acceptance criteria as numbers, not adjectives.
+   A figure is a supplement to a passing numeric check, never a replacement for one.
+2. **Independence rule — no reuse of simulations across configurations.** Every
+   `(experiment, configuration, replicate)` draws fresh, independent randomness. Raw
+   samples generated for one scale, one budget point, or one estimator window must
+   never be sliced or resampled into another. This is a direct fix for the bug in
+   `presentation18-05-2026/coding/analysis/*.py`, which sliced overlapping chunks of one
+   shared `V_pool` across different `(n, m, m0)` regimes and different budgets — breaking
+   the i.i.d.-across-replicates assumption the theory depends on, and making the
+   resulting comparisons between regimes silently invalid. See `tools/rng.py`.
+3. **One experiment at a time**, and within it, one checkpoint at a time. Design is
+   agreed before coding, especially wherever the article itself is still incomplete
+   (e.g. the SRW and Bethe-lattice appendices are currently empty stubs — those
+   testbeds need an explicit closed-form target before any code is written).
+4. **No guessed formulas.** Every statistical object used is taken from the article by
+   equation/theorem number (see the reference table below). If something is ambiguous,
+   stop and ask.
+5. **Reproducibility.** Every stochastic run seeds its RNG and records the seed,
+   config, and elapsed time in a metadata sidecar next to its output.
+6. **No output sprawl.** Each `(experiment, configuration)` writes to a fixed,
+   deterministic path and overwrites on rerun. Timestamped one-off files are only for
+   explicitly archived milestone results, not the default — this is a direct fix for
+   the timestamp-per-run clutter in `loglog_experiments/data/` and `figures/`.
+7. **Percolation observable: side-connected cluster, not origin cluster.** For all
+   percolation testbeds, $Y_i$ is the number of open sites in a box of side $i$
+   connected to a full face (side) of the box — not the cluster containing the origin.
+   This was the concrete methodological fix requested for this project, correcting
+   `presentation18-05-2026`'s origin-anchored $V(r)$.
+
+## Paper objects (source of truth — cite by equation/theorem, don't re-derive)
+
+| Object | Article location | Form |
+|---|---|---|
+| $J$-order expansion (Assumption 1) | eq. (232) | $\E Y_i = a_0 i^\gamma \exp(a_1 i^{-\omega_1} + \cdots + \phi_J(i) i^{-\omega_J})$ |
+| Positivity (Assumption 2) | line 279 | $Y_i > 0$ |
+| $\phi_j$ uniformly bounded (Assumption 3) | eq. (289) | $\max_j \sup_i \lvert\phi_j(i)\rvert \le \phi^+$ |
+| $(2+\delta)$-moment of $\xi_k$ (Assumption 4) | eq. (305) | $\E\lvert\xi_k - 1\rvert^{2+\delta} \le M$ |
+| $(2+\delta)$-moment of $\log\xi_k$ (Assumption 5) | eq. (319) | $\E\lvert\log\xi_k\rvert^{2+\delta} \le \Lambda$ |
+| $\sigma_k^2 \to \sigma_\infty^2$ (Assumption 6) | eq. (332) | convergence; polynomial-rate variant eq. (342) |
+| $\cost(i) = i^d$ (Assumption 7) | eq. (353) | budget cost model |
+| Weighted estimator $\hat\beta,\hat\gamma$ | eq. (523)–(531) | $\hat\beta = \sum_k w_{k,m}\log\overline{Y}_{\rho^k}$ |
+| Weights | eq. (526) | $w_{k,m} = \dfrac{12(k - m_0 - (m+1)/2)}{m(m^2-1)}$ |
+| Weight identities (Lemma linearization) | eq. (542) | $\sum w_{k,m}=0$, $\sum w_{k,m}k = 1$ |
+| CLT for $\hat\gamma$ | Theorem, eq. (583) | $\sqrt{nm^3}(\hat\gamma - \E\hat\gamma) \dto \mathcal N(0, 12\sigma_\infty^2/\log^2\rho)$ |
+| Wilson interval | Theorem, eq. (720) | 4-term bound: finite-size + good-event + bad-event bias + $\Phi(\alpha)\sigma_{\mathrm{se}}$ |
+| Finite-size bias order | Prop. (820) | $\mathcal B_{\mathrm{fs}} \asymp \rho^{-\omega_1 m_0}/m^2$ |
+| Optimal allocation | Prop. (932), eq. (945)–(946) | $\theta_1 = \frac{2\omega_1}{d+2\omega_1}$, $\theta_2 = \frac{1}{d+2\omega_1}$; $n = \kappa B^{\theta_1}$, $m_0 = \theta_2 \log_\rho B$ |
+| Error decay | eq. (941)/(966) | $\lvert\hat\beta - \beta\rvert \lesssim B^{-\omega_1/(d+2\omega_1)}$, MSE $\lesssim B^{-2\omega_1/(d+2\omega_1)}$ |
+| Minimax lower bound | Theorem (1011) | matches the rate up to $\log^2 B$ |
+
+$\sigma_k^2 = \Var(\xi_k)$, $\xi_k = Y_{\rho^k}/\E Y_{\rho^k}$ (notation summary, line 2352).
+
+## Repository layout
+
+```
+loglog_validation/
+  PLAN.md  TODO.md  README.md  requirements.txt
+  tools/                        <- shared, experiment-agnostic. May not import
+                                    from experiments/. Every function here has a
+                                    unit test in tools/tests/ before it is used
+                                    by any experiment.
+    loglog.py                    weighted OLS estimator (eq. 523-531)
+    wilson.py                    Wilson CI (eq. 720)
+    allocation.py                budget allocation rule (eq. 945-946) + cost accounting
+    bootstrap.py                 resampling helpers for constants (sigma_inf^2, omega1, a1)
+    rng.py                       independent-stream seeding (SeedSequence.spawn keyed by
+                                  (experiment, config_id, replicate_index)) — enforces
+                                  ground rule 2
+    io.py                        metadata-sidecar writer/reader (seed, config, timing)
+    tests/                       pytest unit tests, run against closed forms
+  experiments/
+    00_synthetic/                planted-truth model, cheap — start here
+    01_srw/                      simple random walk (needs closed-form target — open)
+    02_rwre/                     random walk in random environment
+    03_percolation_zd/           site percolation, Z^d, d = 2..6/7
+    04_percolation_hierarchical/ Bethe lattice / hierarchical graphs
+    each experiment/:
+      README.md                  what this validates + numeric acceptance criteria +
+                                  current status (not started / in progress / passing)
+      model.py / generator.py    the simulator or generator, nothing else
+      run_<checkpoint>.py        one script per checkpoint, not one monolith
+      data/                      this experiment's data only, never shared
+      images/                    this experiment's figures only, never shared
+```
+
+## Experiment ladder
+
+Each rung only starts once the previous rung's acceptance criteria pass. Rungs get
+harder along two axes at once: **statistical** (is $Y_i$ well-modeled by the $J$-order
+expansion, are the moment assumptions plausible) and **computational** (is $\cost(i)
+\approx i^d$ actually true here, and what does that do to feasible box sizes).
+
+1. **Synthetic** — ground truth is planted, cost is a stated formula, no model-fidelity
+   question at all. Purely tests the *statistical* machinery (estimator, CLT, Wilson CI,
+   allocation rule, $\omega_1$-bootstrap) in isolation. See detailed checkpoints below.
+2. **SRW** — first real stochastic process with an exactly known asymptotic (the article
+   reserves Appendix `appendix-SimpleRandomWalk` for this but it's currently empty), so
+   ground truth for $\gamma,\omega_1$ can be checked by hand, not just by planting it.
+   Cheap to simulate ($\cost(i)$ linear-ish), so still mostly a statistics-focused rung.
+3. **RWRE** — same idea as SRW but with a disordered environment; introduces genuine
+   model uncertainty (the relevant exponent isn't classical) and connects to
+   `critical_exponents/` (whose `estimators/log_log_plot.py` implements the same
+   estimator this project validates — worth cross-checking against, not importing).
+4. **Percolation, $\mathbb Z^d$** — first rung where $\cost(i)=i^d$ is a real geometric
+   fact to verify (BFS/union-find over $i^d$ sites), not an assumption. $d=2$ has known
+   $d_f = 91/48$; higher $d$ up to the mean-field threshold ($d\ge 6$) are progressively
+   more expensive and are where the budget-allocation theory should matter most in
+   practice. Side-connected cluster (ground rule 7), not origin cluster.
+5. **Hierarchical / Bethe lattice** — exactly solvable via branching-process recursion
+   (also currently an empty article appendix), so simulation can be checked against an
+   exact generating-function computation rather than only Monte Carlo — the strongest
+   correctness check available in this project.
+
+---
+
+## Phase 0 — Synthetic data: detailed checkpoints
+
+This is the immediate next work. Model: $\E Y_i = a_0\, i^\gamma \exp(a_1 i^{-\omega_1})$
+(the $J=1$ case of eq. 232), realized multiplicatively as $Y_i = \E Y_i \cdot \xi_i$ with
+$\xi_i > 0$, $\E\xi_i = 1$, chosen (e.g. lognormal) so $\Var(\xi_i) = \sigma_i^2 \to
+\sigma_\infty^2$ by construction — letting us plant $\sigma_\infty^2$ directly and check
+Assumption 6 is *exactly* satisfied by design, before ever touching a model where it's
+only approximately true.
+
+| # | Checkpoint | Acceptance criterion (numeric) |
+|---|---|---|
+| 0.1 | Planted generator matches its own formula | At large $i$ (e.g. $i=2^{20}$), empirical mean over many i.i.d. draws matches $a_0 i^\gamma\exp(a_1 i^{-\omega_1})$ within 3 Monte-Carlo standard errors |
+| 0.2 | Estimator is algebraically correct | `tools/loglog.py` weights satisfy $\sum w_{k,m}=0$, $\sum w_{k,m}k=1$ to float precision, for a spread of $(m,m_0)$; on **noiseless** data ($a_1=0$, pure power law) recovers $\gamma$ to float precision for any $(m,m_0)$ |
+| 0.3 | CLT holds empirically | Over many independent fresh replicates (ground rule 2) at fixed $(n,m,m_0)$: $\E\hat\gamma \approx \gamma$ (small bias) and $\Var(\hat\gamma)$ matches $12\sigma_\infty^2/(nm^3\log^2\rho)$ (eq. 583) within a bootstrap CI |
+| 0.4 | $\omega_1$-bootstrap recovers the planted constant | A resampling/estimation procedure for $(\omega_1, \sigma_\infty^2, a_1)$ — candidates: nonlinear fit of the expansion directly, or local-slope-drift regression — is **calibration-tested**: over $\gtrsim 200$ independent full synthetic experiments, the bootstrap 95% CI for $\omega_1$ covers the true value in $\approx 93$–$97\%$ of them |
+| 0.5 | Error-decay law | Under the optimal allocation (eq. 945-946), for a geometric grid of budgets $B$, empirical RMSE$(B)$ over many fresh independent replicates per $B$ has $\log$-$\log$ slope matching $-\omega_1/(d+2\omega_1)$ within a stated CI; Wilson CI (eq. 720) empirical coverage checked against nominal level at the same time |
+
+Checkpoint 0.4 is exactly the "bootstrap strategy to calculate constants needed for a
+scalable use of the computational budget" step requested — it's what makes 0.5 possible
+without cheating by looking at the planted truth.
+
+## Open questions before Phase 1 (SRW)
+
+- The article's `appendix-SimpleRandomWalk` and `appendix-BetheLattice` are empty
+  section headers — no closed form is written down yet. Before writing any SRW code we
+  need to agree on: which observable $Y_i$ (return probability at step $i$? range after
+  $i$ steps? something else), its known $\gamma$, and its known/conjectured $\omega_1$.
+  This should probably be worked out on paper (and could become the content that fills
+  those appendices) before Phase 1 starts.

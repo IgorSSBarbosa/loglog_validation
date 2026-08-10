@@ -1,0 +1,38 @@
+# TODO
+
+Checked items are struck through. One checkpoint at a time; each is "done" only when
+its numeric acceptance criterion (see PLAN.md) passes, not when it runs without error.
+
+## Setup
+- [x] ~~Read article theorems relevant to simulation (Sections 2-4, Appendix technical
+      proofs, notation summary)~~
+- [x] ~~Survey `presentation18-05-2026/` for reusable lessons; identify the pool-reuse
+      bug (`analysis/*.py` slicing a shared `V_pool` across regimes/budgets)~~
+- [x] ~~Survey `loglog_experiments/` (prior attempt); decide fresh restart, no code
+      ported~~
+- [x] ~~Write `PLAN.md`~~
+- [ ] Pin `requirements.txt` (numpy, scipy for stats/bootstrap, matplotlib, pytest)
+- [ ] `git init`, first commit of scaffolding
+
+## Phase 0 — Synthetic (see PLAN.md for full checkpoint table)
+- [ ] 0.1 Planted generator + fidelity check
+- [ ] 0.2 `tools/loglog.py` estimator + identity/noiseless unit tests
+- [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
+- [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
+- [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage
+
+## Shared tools (built alongside Phase 0, as each is first needed)
+- [ ] `tools/rng.py` — independent-stream seeding (ground rule 2)
+- [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths
+- [ ] `tools/loglog.py` — weighted estimator
+- [ ] `tools/allocation.py` — budget allocation rule + cost accounting
+- [ ] `tools/wilson.py` — Wilson CI
+- [ ] `tools/bootstrap.py` — resampling for constants
+
+## Later phases (not started, not designed yet)
+- [ ] Resolve open question: SRW/Bethe-lattice closed forms (article appendices are
+      empty stubs) — needed before Phase 1 can be designed
+- [ ] Phase 1 — SRW
+- [ ] Phase 2 — RWRE (cross-check against `critical_exponents/estimators/log_log_plot.py`)
+- [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster
+- [ ] Phase 4 — Percolation on hierarchical/Bethe graphs, exact recursion cross-check
