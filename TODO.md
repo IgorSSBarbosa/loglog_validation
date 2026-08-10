@@ -19,7 +19,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       $(a_j,\omega_j)$ corrections, CLI (`-meta config.json`) + programmatic
       (`generate(out_dir=...)`) entry points, JSON reproducibility~~
 - [x] ~~`tools/loglog_plot.py`: generic log-log plot of $\overline Y_i$ vs $i$ (any
-      experiment's `{scale: samples}`), $\pm 1$ SE bars, optional known-$\E Y_i$
+      experiment's `{scale: samples}`), $\pm 1$ SE bars, optional known-$\mathbb{E} Y_i$
       overlay; `experiments/00_synthetic/plot_loglog.py` wires it to `generator.py`~~
 - [ ] Decide how checkpoint acceptance criteria actually get verified going forward
       (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —

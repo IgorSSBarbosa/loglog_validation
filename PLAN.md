@@ -48,24 +48,24 @@ priority: **correctness of each piece, checked numerically, comes before any fig
 
 | Object | Article location | Form |
 |---|---|---|
-| $J$-order expansion (Assumption 1) | eq. (232) | $\E Y_i = a_0 i^\gamma \exp(a_1 i^{-\omega_1} + \cdots + \phi_J(i) i^{-\omega_J})$ |
+| $J$-order expansion (Assumption 1) | eq. (232) | $\mathbb{E} Y_i = a_0 i^\gamma \exp(a_1 i^{-\omega_1} + \cdots + \phi_J(i) i^{-\omega_J})$ |
 | Positivity (Assumption 2) | line 279 | $Y_i > 0$ |
 | $\phi_j$ uniformly bounded (Assumption 3) | eq. (289) | $\max_j \sup_i \lvert\phi_j(i)\rvert \le \phi^+$ |
-| $(2+\delta)$-moment of $\xi_k$ (Assumption 4) | eq. (305) | $\E\lvert\xi_k - 1\rvert^{2+\delta} \le M$ |
-| $(2+\delta)$-moment of $\log\xi_k$ (Assumption 5) | eq. (319) | $\E\lvert\log\xi_k\rvert^{2+\delta} \le \Lambda$ |
+| $(2+\delta)$-moment of $\xi_k$ (Assumption 4) | eq. (305) | $\mathbb{E}\lvert\xi_k - 1\rvert^{2+\delta} \le M$ |
+| $(2+\delta)$-moment of $\log\xi_k$ (Assumption 5) | eq. (319) | $\mathbb{E}\lvert\log\xi_k\rvert^{2+\delta} \le \Lambda$ |
 | $\sigma_k^2 \to \sigma_\infty^2$ (Assumption 6) | eq. (332) | convergence; polynomial-rate variant eq. (342) |
-| $\cost(i) = i^d$ (Assumption 7) | eq. (353) | budget cost model |
+| $cost(i) = i^d$ (Assumption 7) | eq. (353) | budget cost model |
 | Weighted estimator $\hat\beta,\hat\gamma$ | eq. (523)–(531) | $\hat\beta = \sum_k w_{k,m}\log\overline{Y}_{\rho^k}$ |
 | Weights | eq. (526) | $w_{k,m} = \dfrac{12(k - m_0 - (m+1)/2)}{m(m^2-1)}$ |
 | Weight identities (Lemma linearization) | eq. (542) | $\sum w_{k,m}=0$, $\sum w_{k,m}k = 1$ |
-| CLT for $\hat\gamma$ | Theorem, eq. (583) | $\sqrt{nm^3}(\hat\gamma - \E\hat\gamma) \dto \mathcal N(0, 12\sigma_\infty^2/\log^2\rho)$ |
+| CLT for $\hat\gamma$ | Theorem, eq. (583) | $\sqrt{nm^3}(\hat\gamma - \mathbb{E}\hat\gamma) \dto \mathcal N(0, 12\sigma_\infty^2/\log^2\rho)$ |
 | Wilson interval | Theorem, eq. (720) | 4-term bound: finite-size + good-event + bad-event bias + $\Phi(\alpha)\sigma_{\mathrm{se}}$ |
 | Finite-size bias order | Prop. (820) | $\mathcal B_{\mathrm{fs}} \asymp \rho^{-\omega_1 m_0}/m^2$ |
 | Optimal allocation | Prop. (932), eq. (945)–(946) | $\theta_1 = \frac{2\omega_1}{d+2\omega_1}$, $\theta_2 = \frac{1}{d+2\omega_1}$; $n = \kappa B^{\theta_1}$, $m_0 = \theta_2 \log_\rho B$ |
 | Error decay | eq. (941)/(966) | $\lvert\hat\beta - \beta\rvert \lesssim B^{-\omega_1/(d+2\omega_1)}$, MSE $\lesssim B^{-2\omega_1/(d+2\omega_1)}$ |
 | Minimax lower bound | Theorem (1011) | matches the rate up to $\log^2 B$ |
 
-$\sigma_k^2 = \Var(\xi_k)$, $\xi_k = Y_{\rho^k}/\E Y_{\rho^k}$ (notation summary, line 2352).
+$\sigma_k^2 = Var(\xi_k)$, $\xi_k = Y_{\rho^k}/\mathbb{E} Y_{\rho^k}$ (notation summary, line 2352).
 
 ## Repository layout
 
@@ -104,7 +104,7 @@ loglog_validation/
 
 Each rung only starts once the previous rung's acceptance criteria pass. Rungs get
 harder along two axes at once: **statistical** (is $Y_i$ well-modeled by the $J$-order
-expansion, are the moment assumptions plausible) and **computational** (is $\cost(i)
+expansion, are the moment assumptions plausible) and **computational** (is $cost(i)
 \approx i^d$ actually true here, and what does that do to feasible box sizes).
 
 1. **Synthetic** — ground truth is planted, cost is a stated formula, no model-fidelity
@@ -113,12 +113,12 @@ expansion, are the moment assumptions plausible) and **computational** (is $\cos
 2. **SRW** — first real stochastic process with an exactly known asymptotic (the article
    reserves Appendix `appendix-SimpleRandomWalk` for this but it's currently empty), so
    ground truth for $\gamma,\omega_1$ can be checked by hand, not just by planting it.
-   Cheap to simulate ($\cost(i)$ linear-ish), so still mostly a statistics-focused rung.
+   Cheap to simulate ($cost(i)$ linear-ish), so still mostly a statistics-focused rung.
 3. **RWRE** — same idea as SRW but with a disordered environment; introduces genuine
    model uncertainty (the relevant exponent isn't classical) and connects to
    `critical_exponents/` (whose `estimators/log_log_plot.py` implements the same
    estimator this project validates — worth cross-checking against, not importing).
-4. **Percolation, $\mathbb Z^d$** — first rung where $\cost(i)=i^d$ is a real geometric
+4. **Percolation, $\mathbb Z^d$** — first rung where $cost(i)=i^d$ is a real geometric
    fact to verify (BFS/union-find over $i^d$ sites), not an assumption. $d=2$ has known
    $d_f = 91/48$; higher $d$ up to the mean-field threshold ($d\ge 6$) are progressively
    more expensive and are where the budget-allocation theory should matter most in
@@ -132,9 +132,9 @@ expansion, are the moment assumptions plausible) and **computational** (is $\cos
 
 ## Phase 0 — Synthetic data: detailed checkpoints
 
-This is the immediate next work. Model: $\E Y_i = a_0\, i^\gamma \exp(a_1 i^{-\omega_1})$
-(the $J=1$ case of eq. 232), realized multiplicatively as $Y_i = \E Y_i \cdot \xi_i$ with
-$\xi_i > 0$, $\E\xi_i = 1$, chosen (e.g. lognormal) so $\Var(\xi_i) = \sigma_i^2 \to
+This is the immediate next work. Model: $\mathbb{E} Y_i = a_0\, i^\gamma \exp(a_1 i^{-\omega_1})$
+(the $J=1$ case of eq. 232), realized multiplicatively as $Y_i = \mathbb{E} Y_i \cdot \xi_i$ with
+$\xi_i > 0$, $\mathbb{E}\xi_i = 1$, chosen (e.g. lognormal) so $Var(\xi_i) = \sigma_i^2 \to
 \sigma_\infty^2$ by construction — letting us plant $\sigma_\infty^2$ directly and check
 Assumption 6 is *exactly* satisfied by design, before ever touching a model where it's
 only approximately true.
@@ -143,7 +143,7 @@ only approximately true.
 |---|---|---|
 | 0.1 | Planted generator matches its own formula | At large $i$ (e.g. $i=2^{20}$), empirical mean over many i.i.d. draws matches $a_0 i^\gamma\exp(a_1 i^{-\omega_1})$ within 3 Monte-Carlo standard errors |
 | 0.2 | Estimator is algebraically correct | `tools/loglog.py` weights satisfy $\sum w_{k,m}=0$, $\sum w_{k,m}k=1$ to float precision, for a spread of $(m,m_0)$; on **noiseless** data ($a_1=0$, pure power law) recovers $\gamma$ to float precision for any $(m,m_0)$ |
-| 0.3 | CLT holds empirically | Over many independent fresh replicates (ground rule 2) at fixed $(n,m,m_0)$: $\E\hat\gamma \approx \gamma$ (small bias) and $\Var(\hat\gamma)$ matches $12\sigma_\infty^2/(nm^3\log^2\rho)$ (eq. 583) within a bootstrap CI |
+| 0.3 | CLT holds empirically | Over many independent fresh replicates (ground rule 2) at fixed $(n,m,m_0)$: $\mathbb{E}\hat\gamma \approx \gamma$ (small bias) and $Var(\hat\gamma)$ matches $12\sigma_\infty^2/(nm^3\log^2\rho)$ (eq. 583) within a bootstrap CI |
 | 0.4 | $\omega_1$-bootstrap recovers the planted constant | A resampling/estimation procedure for $(\omega_1, \sigma_\infty^2, a_1)$ — candidates: nonlinear fit of the expansion directly, or local-slope-drift regression — is **calibration-tested**: over $\gtrsim 200$ independent full synthetic experiments, the bootstrap 95% CI for $\omega_1$ covers the true value in $\approx 93$–$97\%$ of them |
 | 0.5 | Error-decay law | Under the optimal allocation (eq. 945-946), for a geometric grid of budgets $B$, empirical RMSE$(B)$ over many fresh independent replicates per $B$ has $\log$-$\log$ slope matching $-\omega_1/(d+2\omega_1)$ within a stated CI; Wilson CI (eq. 720) empirical coverage checked against nominal level at the same time |
 
