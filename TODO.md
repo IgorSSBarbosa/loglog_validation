@@ -15,7 +15,13 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [x] ~~`git init`, first commit of scaffolding~~
 
 ## Phase 0 — Synthetic (see PLAN.md for full checkpoint table)
-- [x] ~~0.1 Planted generator + fidelity check (`generator.py`, `run_checkpoint_0_1.py`)~~
+- [x] ~~Planted generator (`generator.py`): pluggable noise family, arbitrary-length
+      $(a_j,\omega_j)$ corrections, CLI (`-meta config.json`) + programmatic
+      (`generate(out_dir=...)`) entry points, JSON reproducibility~~
+- [ ] Decide how checkpoint acceptance criteria actually get verified going forward
+      (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —
+      unclear value, not the right shape; alternative not yet agreed)
+- [ ] 0.1 fidelity check — reopen once verification approach is settled
 - [ ] 0.2 `tools/loglog.py` estimator + identity/noiseless unit tests
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
