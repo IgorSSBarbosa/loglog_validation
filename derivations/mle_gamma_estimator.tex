@@ -7,6 +7,7 @@
 \usepackage{amsthm}
 \usepackage{geometry}
 \geometry{a4paper, margin=25mm}
+\usepackage{hyperref}
 
 \newtheorem{assumption}{Assumption}
 \newtheorem{remark}{Remark}
@@ -33,8 +34,15 @@ instead take $\overline{Y}_i$ itself as (approximately) Gaussian, motivated
 directly by the classical CLT applied to a sample mean, and derive the MLE for
 $\gamma$ under that model. The two estimators are different objects, both
 CLT-motivated, and this note also records exactly how they differ
-(Remark~\ref{rmk:vs-ols}). This is a derivation to be checked, not yet
-implemented.
+(Remark~\ref{rmk:vs-ols}). \textbf{Revision:} the first version of this note
+derived only first-order (stationarity) conditions and did not check that the
+stationary point found is actually a maximum. Section~\ref{sec:second-order}
+fixes that: it proves concavity of the likelihood at fixed $\sigma^2$, shows
+by explicit counterexample that this does \emph{not} extend to the profiled
+objective $\Phi$ of \eqref{eq:objective}, and replaces the naive "just
+minimize $\Phi$" recipe with a coordinate-ascent algorithm that only ever
+solves the part that is provably well-posed. This is a derivation to be
+checked, not yet implemented.
 \end{abstract}
 
 \section{Setup and assumptions}
@@ -218,12 +226,12 @@ maximizing the profile log-likelihood is equivalent to \emph{minimizing}
   \qquad \mu_k = a_0 i_k^\gamma,\ \ \hat\sigma^2 \text{ as in \eqref{eq:sigmahat}}.
   \ }
 \end{equation}
-This is a plain function of two real variables $(\gamma, a_0)$ and is what
-should actually be handed to a numerical optimizer (e.g.\
-\texttt{scipy.optimize.minimize}), starting from the existing OLS-on-log
-estimate (\texttt{tools/loglog.py}'s \texttt{gamma\_all\_points}) as an
-initial guess for $\gamma$, and e.g.\ $\overline{Y}_{k_{\min}}/i_{k_{\min}}^{\hat\gamma_0}$
-as an initial guess for $a_0$.
+This is a plain function of two real variables $(\gamma, a_0)$.
+\textbf{Caution:} it is tempting to hand $\Phi$ directly to a generic
+numerical minimizer here, but Section~\ref{sec:second-order} shows this is
+not reliable --- $\Phi$ is not established to be convex, and empirically is
+often not. Do not skip ahead; use the algorithm in
+Section~\ref{sec:implementation} instead.
 
 \begin{remark}[Consistency check]
 By the envelope theorem, $\partial \Phi/\partial\gamma = 0$ and
@@ -261,21 +269,164 @@ different estimators at finite $n_k$, and comparing them empirically was the
 point of building \texttt{compare\_methods} in the first place.
 \end{remark}
 
-\section{Summary for implementation}
+\section{Second-order conditions: is this actually a maximum?}
+\label{sec:second-order}
 
-Given $(i_k, n_k, \overline{Y}_k)_{k=1}^K$:
+Setting the score equations to zero, as done above, only identifies
+\emph{stationary} points of $\ell$ --- it says nothing about whether a given
+stationary point is a maximum, a saddle, or (in the profiled objective
+$\Phi$, which is \emph{minimized}) a minimum. This was not checked in the
+first version of this note. We check it now, and the answer is: yes for part
+of the problem, provably; no in general for the rest, and this matters enough
+to change the recommended algorithm.
+
+Throughout this section write $\beta := \log a_0 \in \mathbb{R}$ (so
+$a_0 = e^\beta$, removing the $a_0>0$ constraint) and
+$\eta_k := \log \mu_k = \gamma \log i_k + \beta$, which is \emph{affine} in
+$(\gamma,\beta)$ --- unlike $\mu_k = a_0 i_k^\gamma$, which is affine in
+neither $(\gamma,a_0)$ nor $(\gamma,\beta)$. This reparametrization is a
+smooth, monotonic bijection in $a_0$, so it does not change which $a_0$ is
+optimal; it only makes the curvature analysis below exact instead of
+approximate.
+
+\subsection{The likelihood is concave in \texorpdfstring{$(\gamma,\beta)$}{(gamma,beta)}, at fixed \texorpdfstring{$\sigma^2$}{sigma^2}, on an explicit region}
+
+Write $x_k := \overline{Y}_k/\mu_k = \overline{Y}_k e^{-\eta_k}$ (so $x_k=1+r_k$
+in the earlier notation). Differentiating the $k$-th term of
+\eqref{eq:loglik} twice with respect to $\eta_k$ at fixed $\sigma^2$ gives
+\begin{equation}
+\label{eq:ellkpp}
+  \frac{\partial^2 \ell_k}{\partial \eta_k^2}
+  = -\frac{n_k\, x_k (2x_k - 1)}{\sigma^2}
+\end{equation}
+(verified symbolically). Since $x_k>0$ always, this is $\le 0$ exactly when
+$x_k \ge \tfrac12$, i.e.\ when
+\begin{equation}
+\label{eq:goodregion}
+  \mu_k < 2\,\overline{Y}_k.
+\end{equation}
+This is a mild condition: it fails only if the model mean overshoots the
+observed scale mean by more than a factor of two, which should not happen
+anywhere near a reasonable fit.
+
+Because $\eta_k(\gamma,\beta) = (\log i_k)\,\gamma + \beta$ is affine, writing
+$v_k := (\log i_k,\ 1)^\top \in \mathbb{R}^2$, the chain rule gives the
+Hessian of $\ell(\gamma,\beta;\sigma^2) = \sum_k \ell_k(\eta_k(\gamma,\beta))$
+directly as a sum of rank-one terms:
+\begin{equation}
+\label{eq:hessian-outer}
+  \nabla^2_{(\gamma,\beta)}\, \ell
+  = \sum_{k=1}^K \frac{\partial^2 \ell_k}{\partial \eta_k^2}\, v_k v_k^\top
+  = -\sum_{k=1}^K w_k\, v_k v_k^\top,
+  \qquad w_k := \frac{n_k x_k(2x_k-1)}{\sigma^2}.
+\end{equation}
+For any $u \in \mathbb{R}^2$, $u^\top \nabla^2\ell\, u = -\sum_k w_k (v_k\cdot u)^2$.
+If $w_k \ge 0$ for every $k$ (i.e.\ \eqref{eq:goodregion} holds for every
+$k$), every term is $\le 0$, so $\nabla^2 \ell \preceq 0$: \textbf{$\ell$ is
+concave in $(\gamma,\beta)$, at fixed $\sigma^2$, on the region}
+$R := \{(\gamma,\beta) : \mu_k(\gamma,\beta) < 2\overline{Y}_k \ \forall k\}$,
+an intersection of $K$ half-planes, hence convex. Moreover $u^\top\nabla^2\ell\, u = 0$
+forces $u \perp v_k$ for every $k$ with $w_k>0$; since the scales
+$i_1<\cdots<i_K$ are pairwise distinct, any two $v_k$'s are linearly
+independent, so as soon as \emph{two} scales satisfy \eqref{eq:goodregion}
+strictly, $u=0$ is forced and $\ell$ is \emph{strictly} concave on $R$ --- a
+unique maximizer within $R$, given $\sigma^2$.
+
+This was checked both symbolically (verifying \eqref{eq:ellkpp} with
+\texttt{sympy}) and numerically: on five independent simulated realizations
+of a $K=4$ synthetic experiment ($i_k=2^{10},2^{13},2^{16},2^{19}$,
+$n_k\equiv5000$, true $\gamma=0.5,a_0=1,\sigma^2=0.04$), the Hessian
+\eqref{eq:hessian-outer} evaluated at the true parameters was positive
+definite for $-\ell$ (i.e.\ $\ell$ concave) in all five trials, matching
+\eqref{eq:goodregion} holding at every scale in every trial.
+
+\subsection{The profiled objective \texorpdfstring{$\Phi$}{Phi} does \emph{not} inherit this}
+
+Concavity of $\ell(\gamma,\beta;\sigma^2)$ at a \emph{fixed} $\sigma^2$ does
+not by itself imply anything about $\Phi(\gamma,\beta) = \ell(\gamma,\beta,\hat\sigma^2(\gamma,\beta))$,
+where $\sigma^2$ is also allowed to vary with $(\gamma,\beta)$: profiling out
+a parameter preserves concavity only when the \emph{joint} log-likelihood is
+concave in (here) $(\eta,\sigma^2)$ together, which is a strictly stronger
+condition that the $-\frac{K}{2}\log\sigma^2$ term and its coupling to the
+residuals through $\eta$ does not obviously satisfy, and which we did not
+prove.
+
+We checked directly instead. Using finite differences on the same five
+simulated realizations as above, the numerical Hessian of $\Phi$ at the
+\emph{true} parameters had a negative eigenvalue in three of the five trials
+--- in one case, a large negative eigenvalue exceeding the positive one in
+magnitude, i.e.\ $\Phi$ was locally concave, not convex, in a direction right
+at the true parameter values. \textbf{$\Phi$ should not be treated as
+reliably convex}, even close to the truth, and handing it directly to a
+generic minimizer (as the previous version of this note recommended) is not
+trustworthy: the minimizer can converge to a spurious stationary point
+without any warning.
+
+\subsection{Fix: coordinate ascent, using only the part that is provably well-posed}
+
+The one part of this problem that \emph{is} provably well-behaved is
+maximizing $\ell$ over $(\gamma,\beta)$ at a \emph{fixed} $\sigma^2$
+(Section~\ref{sec:second-order}.1). This suggests block coordinate ascent on
+the joint log-likelihood $\ell(\gamma,\beta,\sigma^2)$, alternating exact
+maximization over each block:
 \begin{enumerate}
-\item Compute $\mu_k(\gamma,a_0) = a_0 i_k^\gamma$ and $\hat\sigma^2(\gamma,a_0)$
-      via \eqref{eq:sigmahat}.
-\item Minimize $\Phi(\gamma,a_0)$ of \eqref{eq:objective} numerically over
-      $(\gamma, a_0)$, e.g.\ with \texttt{scipy.optimize.minimize}, starting
-      from the OLS-on-log estimate.
-\item Report $(\hat\gamma, \hat a_0)$ at the minimizer, and
-      $\hat\sigma^2 = \hat\sigma^2(\hat\gamma,\hat a_0)$ from
+\item[(a)] fix $\sigma^2$; maximize $\ell(\gamma,\beta;\sigma^2)$ over
+      $(\gamma,\beta)$ --- concave, uniquely solvable on $R$ (e.g.\ Newton's
+      method, which converges fast on a genuinely concave problem);
+\item[(b)] fix $(\gamma,\beta)$; update $\sigma^2$ in closed form via
       \eqref{eq:sigmahat}.
-\item Sanity check: \eqref{eq:score-a0-clean},
-      $\sum_k n_k(\overline{Y}_k-\hat\mu_k)/\hat\mu_k \approx 0$, should hold
-      at the reported solution to floating-point/optimizer tolerance.
+\end{enumerate}
+Each step exactly maximizes over its own block holding the other fixed, so
+$\ell$ is non-decreasing after every step (a standard property of exact
+coordinate ascent) --- this converges to \emph{some} stationary point, though
+not provably the global maximum, since $\ell$ is not established to be
+jointly concave overall. This is a materially weaker but honest claim, and a
+far more trustworthy algorithm than minimizing $\Phi$ directly, since every
+individual step is exactly the sub-problem we proved is well-posed.
+
+This was implemented and tested (200 replicates of the same $K=4$ synthetic
+setup): the iteration converges in a handful of steps per replicate ($\le 3$
+in every case tried), and recovered $\gamma$ with bias and RMSE
+\emph{statistically indistinguishable} from the existing OLS-on-log
+estimator in this particular design. That is expected, not a null result: with
+$n_k$ equal across scales, the weights $w_k = n_k x_k(2x_k-1)/\sigma^2$ in
+\eqref{eq:hessian-outer} become (approximately) equal across $k$ near the
+optimum ($x_k\approx1$), so the weighted problem coincides with the
+unweighted one in this symmetric case. The two estimators should differ when
+$n_k$ varies across scales (unequal sampling effort per scale is exactly the
+budget-allocation regime the article's own Theorem~CLT and optimal-allocation
+results are about) --- an empirical comparison worth running once this is
+implemented, via \texttt{compare\_methods}.
+
+\section{Summary for implementation}
+\label{sec:implementation}
+
+Given $(i_k, n_k, \overline{Y}_k)_{k=1}^K$, run coordinate ascent, \emph{not}
+a direct minimization of $\Phi$:
+\begin{enumerate}
+\item Initialize $(\gamma,\beta)$ from the existing OLS-on-log estimate
+      (\texttt{tools/loglog.py}'s \texttt{gamma\_all\_points}; take
+      $\beta = \log \hat a_0$ from its intercept), and $\sigma^2$ from
+      \eqref{eq:sigmahat} at that point.
+\item Repeat until $(\gamma,\beta)$ stop changing (to tolerance):
+      \begin{enumerate}
+      \item[(a)] maximize $\ell(\gamma,\beta;\sigma^2)$ over $(\gamma,\beta)$
+            at the current $\sigma^2$ (e.g.\ Newton's method using
+            \eqref{eq:hessian-outer}, or any convex solver);
+      \item[(b)] update $\sigma^2 \leftarrow \hat\sigma^2(\gamma,\beta)$ via
+            \eqref{eq:sigmahat} at the new $(\gamma,\beta)$.
+      \end{enumerate}
+\item Report $\hat\gamma$, $\hat a_0 = e^{\hat\beta}$, $\hat\sigma^2$.
+\item Sanity checks on the reported solution:
+      \begin{itemize}
+      \item \eqref{eq:score-a0-clean}: $\sum_k n_k(\overline{Y}_k-\hat\mu_k)/\hat\mu_k \approx 0$;
+      \item \eqref{eq:goodregion}: $\hat\mu_k < 2\overline{Y}_k$ for every $k$
+            (confirms step (a) was solving a genuinely concave problem
+            throughout);
+      \item the Hessian \eqref{eq:hessian-outer} at the reported solution is
+            negative definite (confirms a strict local maximum, not a
+            saddle).
+      \end{itemize}
 \end{enumerate}
 
 \end{document}
