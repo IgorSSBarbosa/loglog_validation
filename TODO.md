@@ -50,14 +50,25 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `trustworthy` status color rather than a 4th hue); `plot_loglog.py` writes
       `images/<stem>_estimates.png`. Verified against both a 3-scale and a dense
       10-scale synthetic run, and the untrustworthy-MLE styling path~~
+- [x] ~~`generator.py`: record per-scale wall-clock draw time (`timing_seconds` in
+      the output metadata JSON -- raw material for a future meta-log-log plot of
+      cost(i) vs i, to estimate the article's cost-model exponent d) and an
+      opt-in `progress` flag (stderr, one line per scale; off by default so
+      library/Monte-Carlo callers aren't spammed, on for the CLI, which also
+      gains an `elapsed_ms` column in its summary table)~~
 - [ ] Decide how checkpoint acceptance criteria actually get verified going forward
       (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —
       unclear value, not the right shape; alternative not yet agreed)
 - [ ] 0.1 fidelity check — reopen once verification approach is settled
-- [ ] 0.2 the article's exact closed-form $w_{k,m}$ weighted estimator (eq. 523-526)
+- [x] ~~0.2 the article's exact closed-form $w_{k,m}$ weighted estimator (eq. 523-526)
       + algebraic-identity unit tests (eq. 542) — `tools/loglog.py`'s general OLS form
       is mathematically equivalent on a consecutive grid but the closed form itself
-      isn't implemented/tested yet
+      isn't implemented/tested yet~~ — `closed_form_weights`/`gamma_closed_form` added
+      to `tools/loglog.py`; `tools/tests/test_loglog.py` (first test file in the repo)
+      checks all five weight identities (a)-(e) of Lemma "Elementary identities" for a
+      spread of $(m,m_0)$, exact noiseless recovery, agreement with `gamma_all_points`
+      on a consecutive grid, and rejection of a non-consecutive one. Verified via
+      `python3 -m pytest tools/tests/`, all passing
 - [ ] Classical Hill estimator (tail-index from one heavy-tailed sample) -- the
       thing originally requested under this name turned out to target a different
       problem than ours; resolved instead via the MLE above. True Hill estimator

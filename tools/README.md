@@ -47,9 +47,16 @@ methods don't have it, since they never divide by an estimated variance).
 
 `compare_methods` bundles all four into one JSON-serializable dict (now takes
 `n`, the per-scale sample counts, in addition to `scales`/`y_bar`, since
-`gamma_mle` needs it). **Not yet implemented**: the article's exact
-closed-form $w_{k,m}$ weights and their algebraic identities (eq. 542) —
-that's checkpoint 0.2's specific acceptance criterion, still open.
+`gamma_mle` needs it). Not wired into `compare_methods` (which is deliberately
+grid-agnostic): the article's exact closed-form $w_{k,m}$ weights,
+`closed_form_weights`/`gamma_closed_form` — checkpoint 0.2's acceptance
+criterion. Unlike the other four, this one requires `scales` to be exactly the
+consecutive grid $\rho^k$, $k=m_0+1,\dots,m_0+m$ (raises otherwise), so it
+isn't a drop-in fifth method for arbitrary scale sets. `tools/tests/test_loglog.py`
+(first test file in the repo) checks all five weight identities (a)-(e) of
+Lemma "Elementary identities" for a spread of $(m,m_0)$, exact recovery on
+noiseless data, agreement with `gamma_all_points` on a consecutive grid, and
+the rejection path.
 
 Not started yet — planned modules (see `PLAN.md` repo layout): `wilson.py`,
 `allocation.py`, `bootstrap.py`, `rng.py`, `io.py`.

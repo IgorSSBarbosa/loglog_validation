@@ -11,9 +11,10 @@ specialized to equally-spaced integer k); the general form is used here because
 not every experiment's scales are on such a grid (e.g. the current
 `example_config.json` spans 2**10, 2**15, 2**20 -- not consecutive).
 
-The exact closed-form weights (eq. 526) and their algebraic identities (eq. 542)
-are checkpoint 0.2's own acceptance criterion and are a separate, still-open
-item (see PLAN.md / TODO.md) -- not implemented here.
+The exact closed-form weights (eq. 526), `closed_form_weights`/`gamma_closed_form`
+below, are checkpoint 0.2's own acceptance criterion (see PLAN.md / TODO.md);
+their algebraic identities (eq. 542, Lemma "Elementary identities") are checked
+in `tests/test_loglog.py`, not asserted at runtime.
 
 `gamma_mle` is a 4th, genuinely different estimator: the maximum-likelihood
 estimate under Y_bar_k ~ N(mu_k, sigma^2 mu_k^2/n_k) (a CLT approximation of
@@ -91,6 +92,41 @@ def gamma_drop_leading(scales, y_bar) -> list[dict]:
             }
         )
     return estimates
+
+
+def closed_form_weights(m: int, m0: int = 0) -> np.ndarray:
+    """Regression weights w_{k,m}, article eq. (526), for k = m0+1, ..., m0+m.
+
+    Shift-invariant in m0 (Lemma "Elementary identities" (a)): the value only
+    depends on the local index j = k - m0 in {1, ..., m}, so `m0` doesn't
+    change the returned array -- kept as a parameter purely to document which
+    k the array indexes (weights[0] is w_{m0+1,m}).
+    """
+    j = np.arange(1, m + 1, dtype=np.float64)
+    return 12.0 * (j - (m + 1) / 2.0) / (m * (m**2 - 1))
+
+
+def gamma_closed_form(scales, y_bar, rho: float, m0: int = 0) -> float:
+    """Closed-form beta_hat/gamma_hat via the article's own weights (eq. 523-526),
+    rather than generic OLS -- an independent check that the two forms agree.
+
+    `scales` must be exactly the consecutive rho^k grid k = m0+1, ..., m0+m
+    (any order; sorted internally) -- that grid structure is what the closed
+    form assumes. Raises ValueError otherwise; use `gamma_all_points` for
+    scales off a single consecutive grid (e.g. a mix of rho^k for several rho).
+    """
+    log_i, log_y = _sorted_log(scales, y_bar)
+    m = len(log_i)
+    k = np.rint(log_i / np.log(rho)).astype(np.int64)
+    expected_k = np.arange(m0 + 1, m0 + m + 1)
+    if not np.array_equal(k, expected_k):
+        raise ValueError(
+            f"scales must be the consecutive grid rho**k for k={m0 + 1}..{m0 + m} (rho={rho}); "
+            f"got k={k.tolist()}"
+        )
+    w = closed_form_weights(m, m0)
+    beta_hat = float(np.dot(w, log_y))
+    return beta_hat / np.log(rho)
 
 
 def _neg_loglik(params, log_i, n, y_bar):
