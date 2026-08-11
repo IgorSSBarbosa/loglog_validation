@@ -27,7 +27,10 @@ Two kinds of JSON file appear in this module, and they are NOT the same file:
     resolved to a concrete int, so the pair (.npz, .json) is self-contained:
     the .npz is the data, the .json is everything needed to regenerate it
     from scratch as a correctness check (see `reproduce`), or just to read
-    what was run without loading numpy at all.
+    what was run without loading numpy at all. It also carries
+    "timing_seconds" (wall-clock draw time per scale) -- not used by anything
+    here yet, but the raw material for a future meta-log-log plot of
+    cost(i) vs i to estimate the article's cost-model exponent d.
 
 Downstream tools (e.g. plot_loglog.py) should take a **data path** (the .npz)
 as their input, not a JSON -- a single recipe can produce many different runs
@@ -52,6 +55,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -149,6 +153,7 @@ def generate(
     seed: int | None = None,
     out_dir: str | Path | None = None,
     tag: str | None = None,
+    progress: bool = False,
 ) -> dict[int, np.ndarray]:
     """Draw i.i.d. synthetic samples Y_i at each requested scale.
 
@@ -167,10 +172,18 @@ def generate(
         CLI / read the returned metadata path, if you need to know it).
     out_dir : path, optional
         If given, the samples are saved to `<out_dir>/<tag>.npz` and their
-        metadata to `<out_dir>/<tag>.json` (see module docstring).
+        metadata to `<out_dir>/<tag>.json` (see module docstring), the latter
+        now including per-scale wall-clock time under "timing_seconds" -- the
+        raw material for a future meta-log-log plot of cost(i) vs i (article
+        Assumption cost_is_power_law, cost(i) = i**d).
     tag : str, optional
         Filename stem for both output files. Defaults to a hash of the run's
         content, so identical reruns overwrite rather than accumulate.
+    progress : bool, optional
+        Print a one-line-per-scale progress update to stderr as sampling
+        proceeds. Off by default so library callers (e.g. a Monte Carlo loop
+        calling `generate` hundreds of times) aren't spammed; the CLI turns
+        it on.
 
     Returns
     -------
@@ -185,18 +198,36 @@ def generate(
     rng = np.random.default_rng(seed_seq)
 
     samples: dict[int, np.ndarray] = {}
-    for i, n_i in zip(scales_list, n_list):
+    timings: dict[int, float] = {}
+    for idx, (i, n_i) in enumerate(zip(scales_list, n_list), start=1):
+        t0 = time.perf_counter()
         xi = draw_xi(rng, (n_i,), params.sigma_inf2)
         y = mean_Y(i, params) * xi
         assert np.all(y > 0), f"Assumption 2 (Y_i > 0) violated at scale i={i} for family={params.family!r}"
         samples[i] = y
+        timings[i] = time.perf_counter() - t0
+        if progress:
+            print(
+                f"\r[{idx}/{len(scales_list)}] scale i={i} n={n_i} ({timings[i] * 1e3:.1f} ms)"
+                + " " * 10,
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+    if progress:
+        print(file=sys.stderr)
 
     if out_dir is not None:
         stem = tag or _content_id(params, scales_list, n_list, seed_seq.entropy)
         base = Path(out_dir) / stem
         save_samples(base.with_suffix(".npz"), samples)
         _write_metadata(
-            path=base.with_suffix(".json"), params=params, scales=scales_list, n=n_list, seed=seed_seq.entropy
+            path=base.with_suffix(".json"),
+            params=params,
+            scales=scales_list,
+            n=n_list,
+            seed=seed_seq.entropy,
+            timing_seconds=timings,
         )
 
     return samples
@@ -252,7 +283,15 @@ def _content_id(params: SyntheticParams, scales: list[int], n: list[int], seed) 
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
-def _write_metadata(*, path: Path, params: SyntheticParams, scales: list[int], n: list[int], seed) -> Path:
+def _write_metadata(
+    *,
+    path: Path,
+    params: SyntheticParams,
+    scales: list[int],
+    n: list[int],
+    seed,
+    timing_seconds: dict[int, float] | None = None,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {
         "params": asdict(params),
@@ -261,6 +300,8 @@ def _write_metadata(*, path: Path, params: SyntheticParams, scales: list[int], n
         "seed": seed,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
+    if timing_seconds is not None:
+        meta["timing_seconds"] = {str(i): t for i, t in timing_seconds.items()}
     path.write_text(json.dumps(meta, indent=2, sort_keys=True))
     return path
 
@@ -319,18 +360,22 @@ def _main(argv: list[str] | None = None) -> None:
     resolved_seed = seed_seq.entropy
 
     out_dir = args.out_dir or (HERE / "data")
-    samples = generate(scales_list, n_list, params, seed=resolved_seed, out_dir=out_dir, tag=args.tag)
+    samples = generate(
+        scales_list, n_list, params, seed=resolved_seed, out_dir=out_dir, tag=args.tag, progress=True
+    )
 
     stem = args.tag or _content_id(params, scales_list, n_list, resolved_seed)
+    timing = load_metadata(out_dir / stem)["timing_seconds"]
 
     print(
         f"family={params.family!r}  gamma={params.gamma}  corrections={params.corrections}  "
         f"sigma_inf2={params.sigma_inf2}"
     )
-    print(f"{'i':>12} {'n':>8} {'target':>14} {'sample_mean':>14}")
+    print(f"{'i':>12} {'n':>8} {'target':>14} {'sample_mean':>14} {'elapsed_ms':>12}")
     for i in scales_list:
         y = samples[i]
-        print(f"{i:>12} {len(y):>8} {mean_Y(i, params).item():>14.4f} {y.mean():>14.4f}")
+        elapsed_ms = timing[str(i)] * 1e3
+        print(f"{i:>12} {len(y):>8} {mean_Y(i, params).item():>14.4f} {y.mean():>14.4f} {elapsed_ms:>12.2f}")
     print(f"\nseed     = {resolved_seed}")
     print(f"data     = {out_dir / (stem + '.npz')}")
     print(f"metadata = {out_dir / (stem + '.json')}")
