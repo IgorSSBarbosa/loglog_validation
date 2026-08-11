@@ -213,7 +213,29 @@ def load_samples(path: str | Path) -> dict[int, np.ndarray]:
 
 def load(metadata_or_recipe_path: str | Path) -> dict[int, np.ndarray]:
     """Load the persisted .npz paired with a metadata/recipe JSON (same stem, .npz extension)."""
-    return load_samples(Path(metadata_or_recipe_path).with_suffix(".npz"))
+    path = Path(metadata_or_recipe_path)
+    npz_path = path.with_suffix(".npz")
+    if not npz_path.exists():
+        meta = {}
+        if path.exists():
+            try:
+                meta = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        if "created" in meta:
+            reason = f"{path} is generated metadata, but its paired data file is missing (moved or deleted?)."
+        else:
+            reason = (
+                f"{path} looks like a hand-authored recipe, not generated output -- "
+                f"recipes don't have data until you run the generator on them."
+            )
+        raise FileNotFoundError(
+            f"{reason}\n"
+            f"Expected data at: {npz_path}\n"
+            f"Generate it with: python3 generator.py -meta {path} --tag <name>\n"
+            f"then point this at the printed 'metadata' path (data/<name>.json), not the recipe."
+        )
+    return load_samples(npz_path)
 
 
 def reproduce(metadata_path: str | Path) -> dict[int, np.ndarray]:

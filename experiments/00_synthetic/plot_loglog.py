@@ -49,7 +49,10 @@ def main(argv: list[str] | None = None) -> None:
 
     cfg = json.loads(args.meta.read_text())
     params = params_from_json(cfg["params"])
-    samples = load(args.meta)
+    try:
+        samples = load(args.meta)
+    except FileNotFoundError as e:
+        parser.error(str(e))
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
     loglog_plot(samples, ax=ax, target_fn=lambda i: mean_Y(i, params), label=params.family)
