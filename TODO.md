@@ -29,11 +29,23 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [x] ~~`tools/loglog_plot.py`: generic log-log plot of $\overline Y_i$ vs $i$ (any
       experiment's `{scale: samples}`), $\pm 1$ SE bars, optional known-$\mathbb{E} Y_i$
       overlay; `experiments/00_synthetic/plot_loglog.py` wires it to `generator.py`~~
+- [x] ~~`tools/loglog.py`: three $\hat\gamma$ estimators (`gamma_all_points`,
+      `gamma_two_point`, `gamma_drop_leading`) as the general OLS slope of
+      $\log\overline Y_i$ vs $\log i$; `compare_methods` bundles them.
+      `plot_loglog.py` writes `data/<stem>_results.json`. Verified: exact recovery
+      on a noiseless planted power law, unsorted-input handling~~
 - [ ] Decide how checkpoint acceptance criteria actually get verified going forward
       (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —
       unclear value, not the right shape; alternative not yet agreed)
 - [ ] 0.1 fidelity check — reopen once verification approach is settled
-- [ ] 0.2 `tools/loglog.py` estimator + identity/noiseless unit tests
+- [ ] 0.2 the article's exact closed-form $w_{k,m}$ weighted estimator (eq. 523-526)
+      + algebraic-identity unit tests (eq. 542) — `tools/loglog.py`'s general OLS form
+      is mathematically equivalent on a consecutive grid but the closed form itself
+      isn't implemented/tested yet
+- [ ] Hill-estimator-style method for $\hat\gamma$ — requested, but the classical Hill
+      estimator targets a different problem (tail index from one heavy-tailed sample)
+      than ours (cross-scale exponent from many low-$n$ per-scale samples); flagged
+      back to the user for discussion rather than guessing a formula
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
 - [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage
@@ -45,7 +57,6 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths;
       kept local to `experiments/00_synthetic/generator.py` for now (one consumer so
       far) — extract to `tools/` once a second experiment needs the same pattern
-- [ ] `tools/loglog.py` — weighted estimator
 - [ ] `tools/allocation.py` — budget allocation rule + cost accounting
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants

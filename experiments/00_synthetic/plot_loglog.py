@@ -1,17 +1,24 @@
-"""Log-log plot of a synthetic experiment's persisted data.
+"""Log-log plot of a synthetic experiment's persisted data, plus a comparison
+of a few gamma-hat estimators over the same data.
 
 Thin glue: loads the samples generator.py already saved, and hands them to
-the generic, experiment-agnostic `tools/loglog_plot.py` (which never imports
-from `experiments/`, so it works the same way for SRW, percolation, etc. once
-those exist). Since the synthetic model's E[Y_i] is known exactly, the true
-curve is overlaid as a reference when available. This script only reads data
--- it never generates any, so run generator.py first.
+the generic, experiment-agnostic `tools/loglog_plot.py` and `tools/loglog.py`
+(neither imports from `experiments/`, so both work the same way for SRW,
+percolation, etc. once those exist). Since the synthetic model's E[Y_i] is
+known exactly, the true curve/gamma is overlaid as a reference when available.
+This script only reads data -- it never generates any, so run generator.py
+first.
 
 Takes a **data path** (the .npz), not a JSON: a single recipe can produce many
 different runs (different tags/seeds), so pointing this at a JSON would be
 ambiguous about which run's data you mean. Metadata (for the reference-curve
-overlay) is read from the same stem's .json if present, but isn't required --
-missing metadata just means no overlay, not a failure to plot.
+overlay and true_gamma) is read from the same stem's .json if present, but
+isn't required -- missing metadata just means no overlay/true_gamma, not a
+failure to plot or estimate.
+
+Writes two outputs, both named after the data file's stem: the plot to
+`images/<stem>.png`, and the method-comparison to `data/<stem>_results.json`
+(see tools/loglog.py's compare_methods for the three methods compared).
 
 Run (after generating some data, e.g. `generator.py -meta example_config.json
 --tag demo_run`):
@@ -22,6 +29,7 @@ Run (after generating some data, e.g. `generator.py -meta example_config.json
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -34,7 +42,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))  # repo root, for tools/
 sys.path.insert(0, str(HERE))  # this dir, for generator
 
-from tools.loglog_plot import loglog_plot  # noqa: E402
+from tools.loglog import compare_methods  # noqa: E402
+from tools.loglog_plot import loglog_plot, loglog_points  # noqa: E402
 
 from generator import load_metadata, load_samples, mean_Y, params_from_json  # noqa: E402
 
@@ -57,11 +66,12 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(e))
 
     meta = load_metadata(args.data)
-    target_fn, label = None, None
+    target_fn, label, true_gamma = None, None, None
     if meta is not None:
         params = params_from_json(meta["params"])
         target_fn = lambda i: mean_Y(i, params)  # noqa: E731
         label = params.family
+        true_gamma = params.gamma
     else:
         print(f"note: no metadata at {args.data.with_suffix('.json')} -- plotting data only, no reference curve")
 
@@ -73,6 +83,21 @@ def main(argv: list[str] | None = None) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")
+
+    scales, y_bar, _se = loglog_points(samples)
+    results = compare_methods(scales, y_bar, true_gamma=true_gamma)
+    results["source_npz"] = str(args.data)
+    results_path = args.data.parent / f"{args.data.stem}_results.json"
+    results_path.write_text(json.dumps(results, indent=2, sort_keys=True))
+
+    m = results["methods"]
+    print(f"\ngamma estimates (true_gamma={true_gamma}):")
+    print(f"  all_points        : {m['all_points']['gamma_hat']:.4f}")
+    two_pt = [e["gamma_hat"] for e in m["two_point"]["estimates"]]
+    print(f"  two_point         : {['%.4f' % g for g in two_pt]}")
+    drop = [e["gamma_hat"] for e in m["drop_leading"]["estimates"]]
+    print(f"  drop_leading      : {['%.4f' % g for g in drop]}")
+    print(f"Results written to {results_path}")
 
 
 if __name__ == "__main__":
