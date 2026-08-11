@@ -1,23 +1,27 @@
 """Log-log plot of a synthetic experiment's persisted data.
 
-Thin glue: loads the samples generator.py already saved (the .npz paired with
-a metadata JSON, same stem -- see generator.py's docstring), and hands them to
+Thin glue: loads the samples generator.py already saved, and hands them to
 the generic, experiment-agnostic `tools/loglog_plot.py` (which never imports
 from `experiments/`, so it works the same way for SRW, percolation, etc. once
 those exist). Since the synthetic model's E[Y_i] is known exactly, the true
-curve is overlaid as a reference. This script only reads data -- it never
-generates any, so run generator.py first.
+curve is overlaid as a reference when available. This script only reads data
+-- it never generates any, so run generator.py first.
+
+Takes a **data path** (the .npz), not a JSON: a single recipe can produce many
+different runs (different tags/seeds), so pointing this at a JSON would be
+ambiguous about which run's data you mean. Metadata (for the reference-curve
+overlay) is read from the same stem's .json if present, but isn't required --
+missing metadata just means no overlay, not a failure to plot.
 
 Run (after generating some data, e.g. `generator.py -meta example_config.json
 --tag demo_run`):
 
-    python3 plot_loglog.py -meta data/demo_run.json
+    python3 plot_loglog.py -data data/demo_run.npz
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -32,33 +36,40 @@ sys.path.insert(0, str(HERE))  # this dir, for generator
 
 from tools.loglog_plot import loglog_plot  # noqa: E402
 
-from generator import load, mean_Y, params_from_json  # noqa: E402
+from generator import load_metadata, load_samples, mean_Y, params_from_json  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Plot Y_bar_i vs i (log-log) from generator.py's saved output.")
     parser.add_argument(
-        "-meta", "--meta", dest="meta", required=True, type=Path,
-        help="Metadata JSON written by generator.py; its paired <stem>.npz is loaded.",
+        "-data", "--data", dest="data", required=True, type=Path,
+        help="Data .npz written by generator.py (e.g. data/demo_run.npz).",
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,
-        help="Output PNG path; defaults to images/<meta-stem>.png",
+        help="Output PNG path; defaults to images/<data-stem>.png",
     )
     args = parser.parse_args(argv)
 
-    cfg = json.loads(args.meta.read_text())
-    params = params_from_json(cfg["params"])
     try:
-        samples = load(args.meta)
+        samples = load_samples(args.data)
     except FileNotFoundError as e:
         parser.error(str(e))
 
-    fig, ax = plt.subplots(figsize=(6, 4.5))
-    loglog_plot(samples, ax=ax, target_fn=lambda i: mean_Y(i, params), label=params.family)
-    ax.set_title(f"Synthetic log-log plot ({args.meta.stem})")
+    meta = load_metadata(args.data)
+    target_fn, label = None, None
+    if meta is not None:
+        params = params_from_json(meta["params"])
+        target_fn = lambda i: mean_Y(i, params)  # noqa: E731
+        label = params.family
+    else:
+        print(f"note: no metadata at {args.data.with_suffix('.json')} -- plotting data only, no reference curve")
 
-    out = args.out or (HERE / "images" / f"{args.meta.stem}.png")
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    loglog_plot(samples, ax=ax, target_fn=target_fn, label=label)
+    ax.set_title(f"Synthetic log-log plot ({args.data.stem})")
+
+    out = args.out or (HERE / "images" / f"{args.data.stem}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")

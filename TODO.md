@@ -19,9 +19,13 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       $(a_j,\omega_j)$ corrections, CLI (`-meta config.json`) + programmatic
       (`generate(out_dir=...)`) entry points, JSON reproducibility~~
 - [x] ~~Persist actual samples (`.npz`, not just metadata); stop rewriting the input
-      recipe -- output (data + metadata, same stem) goes to `data/` instead. `load()`
-      reads persisted data directly; `reproduce()` regenerates from the recipe as a
-      separate correctness check~~
+      recipe -- output (data + metadata, same stem) goes to `data/` instead.
+      `load_samples()` reads persisted data directly; `reproduce()` regenerates from
+      the recipe as a separate correctness check~~
+- [x] ~~`plot_loglog.py` takes a data path (`-data`, the `.npz`) instead of a JSON --
+      one recipe can produce many runs, so a JSON was ambiguous about which data was
+      meant; metadata for the reference-curve overlay is now optional (`load_metadata`
+      returns None rather than erroring if missing), never required just to plot~~
 - [x] ~~`tools/loglog_plot.py`: generic log-log plot of $\overline Y_i$ vs $i$ (any
       experiment's `{scale: samples}`), $\pm 1$ SE bars, optional known-$\mathbb{E} Y_i$
       overlay; `experiments/00_synthetic/plot_loglog.py` wires it to `generator.py`~~

@@ -32,12 +32,18 @@ regenerable, not source). CLI:
 
 ```
 python3 generator.py -meta example_config.json --tag demo_run
-python3 plot_loglog.py -meta data/demo_run.json
+python3 plot_loglog.py -data data/demo_run.npz
 ```
+
+`plot_loglog.py` takes a **data path** (`-data`, the `.npz`), not a JSON — one recipe can
+produce many different runs (different tags/seeds), so pointing it at a JSON would be
+ambiguous about which run's data you mean. Metadata (for the reference-curve overlay) is
+read from the same stem's `.json` if present, but isn't required — missing metadata just
+means no overlay, not a failure to plot.
 
 `generate(..., out_dir=..., tag=...)` is the equivalent programmatic entry point for batch
 use (content-hash filenames by default, so an identical rerun overwrites rather than
-accumulating). `load(path)` reads a `.npz` back directly (fast); `reproduce(path)`
+accumulating). `load_samples(path)` reads a `.npz` back directly (fast); `reproduce(path)`
 regenerates from the recorded recipe instead, as an independent correctness check that
 saved data matches what its recipe actually produces.
 

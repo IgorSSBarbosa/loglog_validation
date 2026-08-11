@@ -29,11 +29,16 @@ Two kinds of JSON file appear in this module, and they are NOT the same file:
     from scratch as a correctness check (see `reproduce`), or just to read
     what was run without loading numpy at all.
 
-`load(path)` reads the persisted .npz paired with a metadata/recipe path
-(same stem, .npz extension) directly -- fast, no recomputation.
-`reproduce(path)` instead regenerates from the recorded params/scales/n/seed
--- slower, but a genuine independent check that the saved data matches what
-the recipe actually produces.
+Downstream tools (e.g. plot_loglog.py) should take a **data path** (the .npz)
+as their input, not a JSON -- a single recipe can produce many different runs
+(different tags/seeds), so "give me a JSON" is ambiguous about which data you
+mean, while "give me this .npz" is not. `load_samples(npz_path)` reads it
+directly -- fast, no recomputation. `load_metadata(path)` reads the paired
+.json (same stem) if present, for context like the params used, but returns
+None rather than erroring if it's missing -- metadata is optional, never
+required just to plot data. `reproduce(json_path)` instead regenerates from
+the recorded params/scales/n/seed -- slower, but a genuine independent check
+that saved data matches what its recipe actually produces.
 
 CLI usage (recipe is read-only; writes <out_dir>/<tag>.npz + .json, default
 out_dir is ./data next to this script):
@@ -206,36 +211,31 @@ def save_samples(path: str | Path, samples: dict[int, np.ndarray]) -> Path:
 
 
 def load_samples(path: str | Path) -> dict[int, np.ndarray]:
-    """Load {scale: samples} back from a .npz written by `save_samples`."""
+    """Load {scale: samples} back from an .npz written by `save_samples`/`generate`.
+
+    Raises a clear FileNotFoundError (not a bare one from inside numpy) if `path`
+    doesn't exist -- e.g. because it's a recipe's stem, which never has data of
+    its own, rather than the .npz path an actual generated run produced.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no data at {path}.\n"
+            f"Generate some first: python3 generator.py -meta <recipe.json> --tag <name>\n"
+            f"then pass the printed 'data' path (data/<name>.npz) here."
+        )
     with np.load(path) as npz:
         return {int(k): npz[k] for k in npz.files}
 
 
-def load(metadata_or_recipe_path: str | Path) -> dict[int, np.ndarray]:
-    """Load the persisted .npz paired with a metadata/recipe JSON (same stem, .npz extension)."""
-    path = Path(metadata_or_recipe_path)
-    npz_path = path.with_suffix(".npz")
-    if not npz_path.exists():
-        meta = {}
-        if path.exists():
-            try:
-                meta = json.loads(path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-        if "created" in meta:
-            reason = f"{path} is generated metadata, but its paired data file is missing (moved or deleted?)."
-        else:
-            reason = (
-                f"{path} looks like a hand-authored recipe, not generated output -- "
-                f"recipes don't have data until you run the generator on them."
-            )
-        raise FileNotFoundError(
-            f"{reason}\n"
-            f"Expected data at: {npz_path}\n"
-            f"Generate it with: python3 generator.py -meta {path} --tag <name>\n"
-            f"then point this at the printed 'metadata' path (data/<name>.json), not the recipe."
-        )
-    return load_samples(npz_path)
+def load_metadata(data_or_metadata_path: str | Path) -> dict | None:
+    """Load the metadata dict paired with a data path (same stem, .json extension), or
+    a metadata path directly. Returns None (not an error) if there's no metadata file --
+    metadata is optional context (e.g. for a target_fn overlay), never required to plot data."""
+    json_path = Path(data_or_metadata_path).with_suffix(".json")
+    if not json_path.exists():
+        return None
+    return json.loads(json_path.read_text())
 
 
 def reproduce(metadata_path: str | Path) -> dict[int, np.ndarray]:
