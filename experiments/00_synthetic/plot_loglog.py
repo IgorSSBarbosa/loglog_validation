@@ -18,7 +18,7 @@ failure to plot or estimate.
 
 Writes two outputs, both named after the data file's stem: the plot to
 `images/<stem>.png`, and the method-comparison to `data/<stem>_results.json`
-(see tools/loglog.py's compare_methods for the three methods compared).
+(see tools/loglog.py's compare_methods for the four methods compared).
 
 Run (after generating some data, e.g. `generator.py -meta example_config.json
 --tag demo_run`):
@@ -84,8 +84,8 @@ def main(argv: list[str] | None = None) -> None:
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")
 
-    scales, y_bar, _se = loglog_points(samples)
-    results = compare_methods(scales, y_bar, true_gamma=true_gamma)
+    scales, y_bar, _se, n = loglog_points(samples)
+    results = compare_methods(scales, y_bar, n, true_gamma=true_gamma)
     results["source_npz"] = str(args.data)
     results_path = args.data.parent / f"{args.data.stem}_results.json"
     results_path.write_text(json.dumps(results, indent=2, sort_keys=True))
@@ -97,6 +97,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  two_point         : {['%.4f' % g for g in two_pt]}")
     drop = [e["gamma_hat"] for e in m["drop_leading"]["estimates"]]
     print(f"  drop_leading      : {['%.4f' % g for g in drop]}")
+    mle = m["mle"]
+    flag = "" if mle["trustworthy"] else "  ** NOT TRUSTWORTHY, see diagnostics in results.json **"
+    print(f"  mle               : {mle['gamma_hat']:.4f}{flag}")
     print(f"Results written to {results_path}")
 
 

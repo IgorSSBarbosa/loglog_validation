@@ -21,17 +21,20 @@ import numpy as np
 
 
 def loglog_points(samples: Mapping[int, Sequence[float]]):
-    """Reduce {i: samples} to sorted arrays (scales, y_bar, se).
+    """Reduce {i: samples} to sorted arrays (scales, y_bar, se, n).
 
     se is the standard error of the mean, std(samples[i], ddof=1) / sqrt(n_i).
+    n is the per-scale sample count -- needed by tools.loglog.gamma_mle, which
+    (unlike the OLS-based estimators) uses it directly in the model's variance.
     """
     scales = np.array(sorted(samples))
     y_bar = np.array([np.mean(samples[i]) for i in scales], dtype=np.float64)
+    n = np.array([len(samples[i]) for i in scales], dtype=np.int64)
     se = np.array(
         [np.std(samples[i], ddof=1) / np.sqrt(len(samples[i])) for i in scales],
         dtype=np.float64,
     )
-    return scales, y_bar, se
+    return scales, y_bar, se, n
 
 
 def loglog_plot(
@@ -60,7 +63,7 @@ def loglog_plot(
     if ax is None:
         _, ax = plt.subplots()
 
-    scales, y_bar, se = loglog_points(samples)
+    scales, y_bar, se, _n = loglog_points(samples)
 
     ax.errorbar(scales, y_bar, yerr=se, fmt="o", capsize=3, label=label or r"sample mean $\pm$ 1 SE")
 

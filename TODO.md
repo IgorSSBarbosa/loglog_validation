@@ -34,6 +34,16 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       $\log\overline Y_i$ vs $\log i$; `compare_methods` bundles them.
       `plot_loglog.py` writes `data/<stem>_results.json`. Verified: exact recovery
       on a noiseless planted power law, unsorted-input handling~~
+- [x] ~~4th estimator, `gamma_mle`: MLE under $\overline Y_k\sim\mathcal N(\mu_k,
+      \sigma^2\mu_k^2/n_k)$ (not the Hill estimator originally requested — see
+      below). Full derivation + second-order/concavity analysis in
+      `derivations/mle_gamma_estimator.tex`; direct joint optimization over
+      $(\gamma,\log a_0,\log\sigma^2)$, with `converged`/`region_ok`/`hessian_pd`/
+      `trustworthy` diagnostics that must be checked before trusting `gamma_hat`.
+      Verified: 200-replicate Monte Carlo matches the derivation's numbers exactly
+      (5/200 not-trustworthy, always via optimizer non-convergence rather than a
+      bad estimate); `compare_methods`/`loglog_points` updated to thread `n`
+      through~~
 - [ ] Decide how checkpoint acceptance criteria actually get verified going forward
       (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —
       unclear value, not the right shape; alternative not yet agreed)
@@ -42,10 +52,10 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       + algebraic-identity unit tests (eq. 542) — `tools/loglog.py`'s general OLS form
       is mathematically equivalent on a consecutive grid but the closed form itself
       isn't implemented/tested yet
-- [ ] Hill-estimator-style method for $\hat\gamma$ — requested, but the classical Hill
-      estimator targets a different problem (tail index from one heavy-tailed sample)
-      than ours (cross-scale exponent from many low-$n$ per-scale samples); flagged
-      back to the user for discussion rather than guessing a formula
+- [ ] Classical Hill estimator (tail-index from one heavy-tailed sample) -- the
+      thing originally requested under this name turned out to target a different
+      problem than ours; resolved instead via the MLE above. True Hill estimator
+      still not implemented/discussed further
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
 - [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage

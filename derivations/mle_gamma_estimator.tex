@@ -34,15 +34,23 @@ instead take $\overline{Y}_i$ itself as (approximately) Gaussian, motivated
 directly by the classical CLT applied to a sample mean, and derive the MLE for
 $\gamma$ under that model. The two estimators are different objects, both
 CLT-motivated, and this note also records exactly how they differ
-(Remark~\ref{rmk:vs-ols}). \textbf{Revision:} the first version of this note
-derived only first-order (stationarity) conditions and did not check that the
-stationary point found is actually a maximum. Section~\ref{sec:second-order}
+(Remark~\ref{rmk:vs-ols}). \textbf{Revision 1:} the first version of this
+note derived only first-order (stationarity) conditions and did not check
+that the stationary point found is actually a maximum. Section~\ref{sec:second-order}
 fixes that: it proves concavity of the likelihood at fixed $\sigma^2$, shows
 by explicit counterexample that this does \emph{not} extend to the profiled
-objective $\Phi$ of \eqref{eq:objective}, and replaces the naive "just
-minimize $\Phi$" recipe with a coordinate-ascent algorithm that only ever
-solves the part that is provably well-posed. This is a derivation to be
-checked, not yet implemented.
+objective $\Phi$ of \eqref{eq:objective}, and derives a coordinate-ascent
+algorithm that only ever solves the part that is provably well-posed.
+\textbf{Revision 2:} Section~\ref{sec:direct} reconsiders whether that
+complexity is warranted --- direct joint optimization over all three
+parameters has exactly the same \emph{unproven} global-optimality status as
+coordinate ascent (neither the joint likelihood nor its profile is
+established to be globally concave), so the extra machinery buys a
+structural guarantee that turns out not to be the thing doing the actual
+work; the same post-hoc diagnostics are required either way. Section~\ref{sec:implementation}
+now describes the direct approach, \textbf{implemented in
+\texttt{tools/loglog.py}'s \texttt{gamma\_mle}} and validated as described
+there.
 \end{abstract}
 
 \section{Setup and assumptions}
@@ -398,35 +406,77 @@ budget-allocation regime the article's own Theorem~CLT and optimal-allocation
 results are about) --- an empirical comparison worth running once this is
 implemented, via \texttt{compare\_methods}.
 
+\section{Reconsidering: is coordinate ascent actually necessary?}
+\label{sec:direct}
+
+Coordinate ascent (Section~\ref{sec:second-order}.3) was motivated by
+$\Phi$'s convexity being unproven and empirically often false. But observe:
+if the \emph{joint} log-likelihood $\ell(\gamma,\beta,\sigma^2)$ were jointly
+concave, its profile $\Phi$ would necessarily be concave too (partial
+maximization preserves concavity). Contrapositive: since $\Phi$ is not
+concave, $\ell$ is \emph{not} jointly concave either. So directly maximizing
+$\ell$ over all three parameters at once carries exactly the same
+\emph{unproven global optimality} as minimizing $\Phi$ directly --- eliminating
+$\sigma^2$ algebraically first, versus leaving it in and optimizing jointly,
+does not change the shape of the underlying surface. What coordinate ascent
+actually bought was narrower than it looked: only step~(a) of each iteration
+is individually provably well-posed; the overall iteration's convergence to
+the \emph{global} optimum was never guaranteed either.
+
+Given that, the two approaches' honest guarantees are closer than they first
+appear, and it is worth checking whether the simpler one --- a single generic
+optimizer call over $(\gamma,\beta,\log\sigma^2)$ jointly, from the
+OLS-on-log starting point --- behaves comparably in practice, carrying the
+\emph{same} post-hoc diagnostics either way (since neither algorithm's output
+should be trusted without them).
+
+Checked on the same 200-replicate, $K=4$ setup, with \texttt{scipy}'s
+L-BFGS-B: the recovered $\hat\gamma$ matched coordinate ascent's bias and
+RMSE to six decimal places. The optimizer's own convergence flag reported
+failure in 5 of 200 runs (2.5\%) --- in every one of those, $\hat\gamma$ was
+still close to the truth, and both \eqref{eq:goodregion} and the (now full
+three-parameter) Hessian check still passed; only the optimizer's internal
+stopping criterion was unsatisfied. So: simpler, and empirically no worse
+here, \emph{provided} the diagnostics are checked and any non-convergence is
+surfaced rather than silently ignored --- which is what
+Section~\ref{sec:implementation} now does, in place of coordinate ascent.
+Coordinate ascent remains available (Section~\ref{sec:second-order}.3) as a
+more conservative fallback if direct optimization's diagnostics ever fail in
+practice on real (non-synthetic) data.
+
 \section{Summary for implementation}
 \label{sec:implementation}
 
-Given $(i_k, n_k, \overline{Y}_k)_{k=1}^K$, run coordinate ascent, \emph{not}
-a direct minimization of $\Phi$:
+Given $(i_k, n_k, \overline{Y}_k)_{k=1}^K$ (implemented in
+\texttt{tools/loglog.py}'s \texttt{gamma\_mle}):
 \begin{enumerate}
-\item Initialize $(\gamma,\beta)$ from the existing OLS-on-log estimate
-      (\texttt{tools/loglog.py}'s \texttt{gamma\_all\_points}; take
-      $\beta = \log \hat a_0$ from its intercept), and $\sigma^2$ from
-      \eqref{eq:sigmahat} at that point.
-\item Repeat until $(\gamma,\beta)$ stop changing (to tolerance):
-      \begin{enumerate}
-      \item[(a)] maximize $\ell(\gamma,\beta;\sigma^2)$ over $(\gamma,\beta)$
-            at the current $\sigma^2$ (e.g.\ Newton's method using
-            \eqref{eq:hessian-outer}, or any convex solver);
-      \item[(b)] update $\sigma^2 \leftarrow \hat\sigma^2(\gamma,\beta)$ via
-            \eqref{eq:sigmahat} at the new $(\gamma,\beta)$.
-      \end{enumerate}
-\item Report $\hat\gamma$, $\hat a_0 = e^{\hat\beta}$, $\hat\sigma^2$.
-\item Sanity checks on the reported solution:
+\item Reparametrize $a_0 = e^\beta$, $\sigma^2 = e^{\log\sigma^2}$ (removes
+      both positivity constraints); initialize $(\gamma,\beta)$ from the
+      existing OLS-on-log estimate (\texttt{gamma\_all\_points}), and
+      $\log\sigma^2 = 0$.
+\item Minimize $-\ell(\gamma,\beta,\log\sigma^2)$ of \eqref{eq:loglik} directly
+      over all three parameters jointly (\texttt{scipy.optimize.minimize},
+      L-BFGS-B).
+\item Report $\hat\gamma$, $\hat a_0=e^{\hat\beta}$,
+      $\hat\sigma^2=e^{\widehat{\log\sigma^2}}$, \textbf{together with}:
       \begin{itemize}
-      \item \eqref{eq:score-a0-clean}: $\sum_k n_k(\overline{Y}_k-\hat\mu_k)/\hat\mu_k \approx 0$;
-      \item \eqref{eq:goodregion}: $\hat\mu_k < 2\overline{Y}_k$ for every $k$
-            (confirms step (a) was solving a genuinely concave problem
-            throughout);
-      \item the Hessian \eqref{eq:hessian-outer} at the reported solution is
-            negative definite (confirms a strict local maximum, not a
-            saddle).
+      \item \texttt{converged}: the optimizer's own success flag;
+      \item \texttt{region\_ok}: \eqref{eq:goodregion},
+            $\hat\mu_k < 2\overline{Y}_k$ for every $k$;
+      \item \texttt{hessian\_pd}: the numerical Hessian of $-\ell$ at the
+            solution, over all three parameters, is positive definite
+            (confirms a genuine local maximum of $\ell$, not a saddle);
+      \item \texttt{trustworthy} := all three of the above.
       \end{itemize}
 \end{enumerate}
+\textbf{\texttt{gamma\_hat} should not be used without checking
+\texttt{trustworthy}} --- this is not decorative, per
+Section~\ref{sec:direct}. Validated (200 synthetic replicates,
+$i_k=2^{10},2^{13},2^{16},2^{19}$, $n_k\equiv5000$, true
+$\gamma=0.5,a_0=1,\sigma^2=0.04$): \texttt{trustworthy} was \texttt{False} in
+exactly the same 5/200 trials found in Section~\ref{sec:direct} (via
+\texttt{converged} only; \texttt{region\_ok} and \texttt{hessian\_pd} held in
+every trial), and bias/RMSE matched \texttt{gamma\_all\_points} in this
+(equal-$n_k$) design, as expected (Section~\ref{sec:second-order}.3).
 
 \end{document}

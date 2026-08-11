@@ -14,11 +14,20 @@ not every experiment's scales are on such a grid (e.g. the current
 The exact closed-form weights (eq. 526) and their algebraic identities (eq. 542)
 are checkpoint 0.2's own acceptance criterion and are a separate, still-open
 item (see PLAN.md / TODO.md) -- not implemented here.
+
+`gamma_mle` is a 4th, genuinely different estimator: the maximum-likelihood
+estimate under Y_bar_k ~ N(mu_k, sigma^2 mu_k^2/n_k) (a CLT approximation of
+the per-scale sample mean itself, not of its log). See
+derivations/mle_gamma_estimator.tex for the full derivation, including a
+second-order analysis showing the joint likelihood is not established to be
+globally concave -- gamma_mle's result carries diagnostics that should be
+checked, not just trusted.
 """
 
 from __future__ import annotations
 
 import numpy as np
+from scipy.optimize import minimize
 
 
 def ols_slope(x, y) -> tuple[float, float]:
@@ -84,8 +93,92 @@ def gamma_drop_leading(scales, y_bar) -> list[dict]:
     return estimates
 
 
-def compare_methods(scales, y_bar, *, true_gamma: float | None = None) -> dict:
-    """Bundle methods 1-3 into one JSON-serializable comparison dict."""
+def _neg_loglik(params, log_i, n, y_bar):
+    """-log-likelihood (additive constants dropped), eq. (loglik) of the derivation.
+
+    params = (gamma, beta, log_sigma2), with a0 = exp(beta), sigma2 = exp(log_sigma2)
+    (unconstrained reparametrization, so a0, sigma2 > 0 automatically).
+    """
+    gamma, beta, log_sigma2 = params
+    sigma2 = np.exp(log_sigma2)
+    mu = np.exp(beta + gamma * log_i)
+    K = len(log_i)
+    return K / 2 * log_sigma2 + np.sum(np.log(mu)) + np.sum(n * (y_bar - mu) ** 2 / mu**2) / (2 * sigma2)
+
+
+def _numerical_hessian(f, x0, eps: float = 1e-6) -> np.ndarray:
+    """Central finite-difference Hessian of scalar f at x0 (d-dimensional)."""
+    x0 = np.asarray(x0, dtype=np.float64)
+    d = len(x0)
+    H = np.zeros((d, d))
+    for a in range(d):
+        for b in range(d):
+            x1, x2, x3, x4 = (x0.copy() for _ in range(4))
+            x1[a] += eps
+            x1[b] += eps
+            x2[a] += eps
+            x2[b] -= eps
+            x3[a] -= eps
+            x3[b] += eps
+            x4[a] -= eps
+            x4[b] -= eps
+            H[a, b] = (f(x1) - f(x2) - f(x3) + f(x4)) / (4 * eps * eps)
+    return H
+
+
+def gamma_mle(scales, y_bar, n) -> dict:
+    """Method 4: maximum-likelihood estimate of gamma (see module docstring).
+
+    Direct joint optimization over (gamma, log a0, log sigma2) from the
+    OLS-on-log estimate as a starting point (derivations/mle_gamma_estimator.tex,
+    Section "Second-order conditions": the joint likelihood is not established
+    to be globally concave, so this can in principle converge to a spurious
+    point -- the returned dict's diagnostics are not decorative:
+
+    - converged: the optimizer's own convergence flag.
+    - region_ok: mu_hat_k < 2*Ybar_k for every k (the condition under which the
+      likelihood, at fixed sigma2, is provably concave -- see the derivation).
+    - hessian_pd: the numerical Hessian of -log-likelihood at the solution,
+      over all three parameters, is positive definite (confirms a genuine
+      local maximum of the likelihood, not a saddle).
+    - trustworthy: all three of the above.
+
+    Empirically (see the derivation): from a good starting point this recovers
+    gamma about as well as gamma_all_points, but non-convergence and Hessian
+    failures do occur (order a few percent of runs in testing) and should not
+    be silently ignored.
+    """
+    scales = np.asarray(scales, dtype=np.float64)
+    y_bar = np.asarray(y_bar, dtype=np.float64)
+    n = np.asarray(n, dtype=np.float64)
+    log_i = np.log(scales)
+
+    gamma0, beta0 = ols_slope(log_i, np.log(y_bar))
+    x0 = np.array([gamma0, beta0, 0.0])  # log_sigma2=0 -> sigma2=1, a generic starting scale
+
+    res = minimize(_neg_loglik, x0, args=(log_i, n, y_bar), method="L-BFGS-B")
+    gamma_hat, beta_hat, log_sigma2_hat = res.x
+    a0_hat = float(np.exp(beta_hat))
+    sigma2_hat = float(np.exp(log_sigma2_hat))
+    mu_hat = a0_hat * scales**gamma_hat
+
+    region_ok = bool(np.all(mu_hat < 2 * y_bar))
+    H = _numerical_hessian(lambda p: _neg_loglik(p, log_i, n, y_bar), res.x)
+    hessian_pd = bool(np.all(np.linalg.eigvalsh(H) > 0))
+
+    return {
+        "gamma_hat": float(gamma_hat),
+        "a0_hat": a0_hat,
+        "sigma2_hat": sigma2_hat,
+        "converged": bool(res.success),
+        "region_ok": region_ok,
+        "hessian_pd": hessian_pd,
+        "trustworthy": bool(res.success and region_ok and hessian_pd),
+    }
+
+
+def compare_methods(scales, y_bar, n, *, true_gamma: float | None = None) -> dict:
+    """Bundle methods 1-4 into one JSON-serializable comparison dict."""
     result = {
         "scales": [int(s) for s in np.sort(np.asarray(scales))],
         "methods": {
@@ -102,6 +195,12 @@ def compare_methods(scales, y_bar, *, true_gamma: float | None = None) -> dict:
                 "description": "OLS slope over all remaining scales after dropping the "
                 "first m0 (m0 = 0..len(scales)-2)",
                 "estimates": gamma_drop_leading(scales, y_bar),
+            },
+            "mle": {
+                "description": "Maximum-likelihood estimate under Y_bar_k ~ N(mu_k, "
+                "sigma^2 mu_k^2/n_k); see derivations/mle_gamma_estimator.tex. Check "
+                "'trustworthy' before using -- see gamma_mle's docstring.",
+                **gamma_mle(scales, y_bar, n),
             },
         },
     }

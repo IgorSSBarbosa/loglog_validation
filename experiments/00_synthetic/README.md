@@ -40,10 +40,11 @@ produce many different runs (different tags/seeds), so pointing it at a JSON wou
 ambiguous about which run's data you mean. Metadata (for the reference-curve overlay and
 `true_gamma`) is read from the same stem's `.json` if present, but isn't required — missing
 metadata just means no overlay, not a failure to plot. It also writes
-`data/<stem>_results.json`, comparing three $\hat\gamma$ estimators from `tools/loglog.py`
-over the same data (all-points OLS, two-point/$m{=}2$, drop-leading-$m_0$ sweep) — see
-`tools/README.md` for what's implemented and what's still open (the article's exact
-closed-form estimator; a Hill-estimator-style method, pending discussion).
+`data/<stem>_results.json`, comparing four $\hat\gamma$ estimators from `tools/loglog.py`
+over the same data (all-points OLS, two-point/$m{=}2$, drop-leading-$m_0$ sweep, and a
+maximum-likelihood estimator — see `derivations/mle_gamma_estimator.tex` for its derivation)
+— see `tools/README.md` for what's implemented and what's still open (the article's exact
+closed-form estimator).
 
 `generate(..., out_dir=..., tag=...)` is the equivalent programmatic entry point for batch
 use (content-hash filenames by default, so an identical rerun overwrites rather than
