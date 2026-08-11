@@ -18,6 +18,10 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [x] ~~Planted generator (`generator.py`): pluggable noise family, arbitrary-length
       $(a_j,\omega_j)$ corrections, CLI (`-meta config.json`) + programmatic
       (`generate(out_dir=...)`) entry points, JSON reproducibility~~
+- [x] ~~Persist actual samples (`.npz`, not just metadata); stop rewriting the input
+      recipe -- output (data + metadata, same stem) goes to `data/` instead. `load()`
+      reads persisted data directly; `reproduce()` regenerates from the recipe as a
+      separate correctness check~~
 - [x] ~~`tools/loglog_plot.py`: generic log-log plot of $\overline Y_i$ vs $i$ (any
       experiment's `{scale: samples}`), $\pm 1$ SE bars, optional known-$\mathbb{E} Y_i$
       overlay; `experiments/00_synthetic/plot_loglog.py` wires it to `generator.py`~~

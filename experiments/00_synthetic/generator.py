@@ -14,17 +14,32 @@ family can be added later (e.g. an additive-Gaussian comparison) without
 touching the sampling or reproducibility plumbing below. Only "lognormal" is
 implemented so far, per current sign-off.
 
-Reproducibility: every metadata JSON this module writes or reads has the same
-shape -- {"params": {...}, "scales": [...], "n": [...], "seed": <int or null>,
-"created": "..."} -- and fully determines its samples: same params + scales +
-n + seed always regenerates bit-identical data (see `reproduce`). Raw sample
-arrays are intentionally never persisted: they're cheap to regenerate exactly
-from the JSON, and not saving them avoids data sprawl (PLAN.md ground rule 6).
+Two kinds of JSON file appear in this module, and they are NOT the same file:
 
-CLI usage (reads a config, generates, writes the resolved seed back so the
-same file becomes a reproducible record -- see example_config.json):
+  - a "recipe": authored by hand (or by any tool), holding {"params": {...},
+    "scales": [...], "n": ..., "seed": <int or null>}. The CLI's `-meta`
+    argument takes a recipe and never modifies it -- rewriting a file the
+    caller authored, out from under them, doesn't make sense.
+  - "output metadata": written by `generate(..., out_dir=..., tag=...)` (and
+    by the CLI) to `<out_dir>/<tag>.json`, alongside the actual samples at
+    `<out_dir>/<tag>.npz` (numpy's compressed format -- no new dependency).
+    The metadata has the same shape as a recipe but with `seed` always
+    resolved to a concrete int, so the pair (.npz, .json) is self-contained:
+    the .npz is the data, the .json is everything needed to regenerate it
+    from scratch as a correctness check (see `reproduce`), or just to read
+    what was run without loading numpy at all.
+
+`load(path)` reads the persisted .npz paired with a metadata/recipe path
+(same stem, .npz extension) directly -- fast, no recomputation.
+`reproduce(path)` instead regenerates from the recorded params/scales/n/seed
+-- slower, but a genuine independent check that the saved data matches what
+the recipe actually produces.
+
+CLI usage (recipe is read-only; writes <out_dir>/<tag>.npz + .json, default
+out_dir is ./data next to this script):
 
     python3 generator.py -meta example_config.json
+    python3 generator.py -meta example_config.json --tag my_run -o data
 """
 
 from __future__ import annotations
@@ -38,6 +53,8 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+
+HERE = Path(__file__).resolve().parent
 
 
 def _lognormal_xi(rng: np.random.Generator, size: tuple[int, ...], sigma_inf2: float) -> np.ndarray:
@@ -108,6 +125,17 @@ def mean_Y(i, params: SyntheticParams) -> np.ndarray:
     return params.a0 * i**params.gamma * np.exp(correction)
 
 
+def _normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:
+    scales_arr = np.atleast_1d(np.asarray(scales, dtype=np.int64))
+    if np.ndim(n) == 0:
+        n_arr = np.full(scales_arr.shape, int(n), dtype=np.int64)
+    else:
+        n_arr = np.asarray(n, dtype=np.int64)
+        if n_arr.shape != scales_arr.shape:
+            raise ValueError("n must be a scalar or match scales in length")
+    return scales_arr.tolist(), n_arr.tolist()
+
+
 def generate(
     scales,
     n,
@@ -129,27 +157,22 @@ def generate(
     params : SyntheticParams
         Planted constants and noise family (see NOISE_FAMILIES).
     seed : int, optional
-        RNG seed. If omitted, fresh OS entropy is drawn and recorded in the
-        metadata, so the run is still exactly reproducible from the JSON.
+        RNG seed. If omitted, fresh OS entropy is drawn (but not recorded
+        anywhere unless out_dir is given -- pass an explicit seed, or use the
+        CLI / read the returned metadata path, if you need to know it).
     out_dir : path, optional
-        If given, a metadata JSON sidecar is written here (see module docstring).
+        If given, the samples are saved to `<out_dir>/<tag>.npz` and their
+        metadata to `<out_dir>/<tag>.json` (see module docstring).
     tag : str, optional
-        Filename (without extension) for the metadata file. Defaults to a
-        hash of the run's content, so identical reruns overwrite rather than
-        accumulate.
+        Filename stem for both output files. Defaults to a hash of the run's
+        content, so identical reruns overwrite rather than accumulate.
 
     Returns
     -------
     dict[int, np.ndarray]
         Maps each requested scale to its array of `n` i.i.d. samples of Y_i.
     """
-    scales_arr = np.atleast_1d(np.asarray(scales, dtype=np.int64))
-    if np.ndim(n) == 0:
-        n_per_scale = np.full(scales_arr.shape, int(n), dtype=np.int64)
-    else:
-        n_per_scale = np.asarray(n, dtype=np.int64)
-        if n_per_scale.shape != scales_arr.shape:
-            raise ValueError("n must be a scalar or match scales in length")
+    scales_list, n_list = _normalize_scales_n(scales, n)
 
     draw_xi = NOISE_FAMILIES[params.family]
 
@@ -157,26 +180,46 @@ def generate(
     rng = np.random.default_rng(seed_seq)
 
     samples: dict[int, np.ndarray] = {}
-    for i, n_i in zip(scales_arr.tolist(), n_per_scale.tolist()):
+    for i, n_i in zip(scales_list, n_list):
         xi = draw_xi(rng, (n_i,), params.sigma_inf2)
         y = mean_Y(i, params) * xi
         assert np.all(y > 0), f"Assumption 2 (Y_i > 0) violated at scale i={i} for family={params.family!r}"
         samples[i] = y
 
     if out_dir is not None:
+        stem = tag or _content_id(params, scales_list, n_list, seed_seq.entropy)
+        base = Path(out_dir) / stem
+        save_samples(base.with_suffix(".npz"), samples)
         _write_metadata(
-            path=Path(out_dir) / f"{tag or _content_id(params, scales_arr.tolist(), n_per_scale.tolist(), seed_seq.entropy)}.json",
-            params=params,
-            scales=scales_arr.tolist(),
-            n=n_per_scale.tolist(),
-            seed=seed_seq.entropy,
+            path=base.with_suffix(".json"), params=params, scales=scales_list, n=n_list, seed=seed_seq.entropy
         )
 
     return samples
 
 
+def save_samples(path: str | Path, samples: dict[int, np.ndarray]) -> Path:
+    """Save {scale: samples} to a compressed .npz (one array per scale, keyed by str(scale))."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **{str(i): arr for i, arr in samples.items()})
+    return path
+
+
+def load_samples(path: str | Path) -> dict[int, np.ndarray]:
+    """Load {scale: samples} back from a .npz written by `save_samples`."""
+    with np.load(path) as npz:
+        return {int(k): npz[k] for k in npz.files}
+
+
+def load(metadata_or_recipe_path: str | Path) -> dict[int, np.ndarray]:
+    """Load the persisted .npz paired with a metadata/recipe JSON (same stem, .npz extension)."""
+    return load_samples(Path(metadata_or_recipe_path).with_suffix(".npz"))
+
+
 def reproduce(metadata_path: str | Path) -> dict[int, np.ndarray]:
-    """Regenerate the exact samples described by a metadata JSON written by `generate` or the CLI."""
+    """Regenerate the exact samples described by a metadata JSON, from scratch (no I/O on the
+    paired .npz) -- an independent check that saved data matches what the recorded recipe
+    actually produces. Use `load` instead if you just want the already-computed samples."""
     meta = json.loads(Path(metadata_path).read_text())
     params = SyntheticParams(**meta["params"])
     return generate(meta["scales"], meta["n"], params, seed=meta["seed"])
@@ -213,10 +256,9 @@ def params_from_json(d: dict) -> SyntheticParams:
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Draw synthetic Y_i samples from a JSON experiment config, and write the "
-            "config back to the same file with the RNG seed resolved -- so re-running "
-            "the same file reproduces the exact same data instead of drawing fresh. "
-            "See example_config.json for the expected shape."
+            "Draw synthetic Y_i samples from a JSON recipe. The recipe is never modified; "
+            "output (samples as .npz + reproducibility metadata as .json, same stem) is "
+            "written to --out-dir. See example_config.json for the recipe shape."
         )
     )
     parser.add_argument(
@@ -225,39 +267,52 @@ def _main(argv: list[str] | None = None) -> None:
         dest="meta",
         required=True,
         type=Path,
-        help='JSON config: {"params": {"gamma": ..., "a0": ..., "corrections": [[a1, omega1], ...], '
-        '"sigma_inf2": ..., "family": "lognormal"}, "scales": [...], "n": ..., "seed": null}',
+        help='Recipe JSON (read-only): {"params": {"gamma": ..., "a0": ..., "corrections": '
+        '[[a1, omega1], ...], "sigma_inf2": ..., "family": "lognormal"}, "scales": [...], '
+        '"n": ..., "seed": null}',
+    )
+    parser.add_argument(
+        "-o",
+        "--out-dir",
+        dest="out_dir",
+        type=Path,
+        default=None,
+        help="Output directory for <tag>.npz + <tag>.json. Defaults to ./data next to this script.",
+    )
+    parser.add_argument(
+        "--tag",
+        dest="tag",
+        type=str,
+        default=None,
+        help="Output filename stem. Defaults to a content hash, so an identical rerun overwrites "
+        "rather than accumulating; pass a fixed --tag for a predictable path to chain into other tools.",
     )
     args = parser.parse_args(argv)
 
     cfg = json.loads(args.meta.read_text())
     params = params_from_json(cfg["params"])
-    scales = cfg["scales"]
-    n = cfg["n"]
+    scales_list, n_list = _normalize_scales_n(cfg["scales"], cfg["n"])
 
-    # Resolve the seed up front (drawing fresh entropy if the config had none)
-    # so we know what to write back before generating.
     seed_seq = np.random.SeedSequence(cfg.get("seed"))
     resolved_seed = seed_seq.entropy
-    samples = generate(scales, n, params, seed=resolved_seed)
 
-    scales_arr = np.atleast_1d(np.asarray(scales, dtype=np.int64))
-    n_arr = np.full(scales_arr.shape, int(n), dtype=np.int64) if np.ndim(n) == 0 else np.asarray(n, dtype=np.int64)
-    _write_metadata(
-        path=args.meta,
-        params=params,
-        scales=scales_arr.tolist(),
-        n=n_arr.tolist(),
-        seed=resolved_seed,
+    out_dir = args.out_dir or (HERE / "data")
+    samples = generate(scales_list, n_list, params, seed=resolved_seed, out_dir=out_dir, tag=args.tag)
+
+    stem = args.tag or _content_id(params, scales_list, n_list, resolved_seed)
+
+    print(
+        f"family={params.family!r}  gamma={params.gamma}  corrections={params.corrections}  "
+        f"sigma_inf2={params.sigma_inf2}"
     )
-
-    print(f"family={params.family!r}  gamma={params.gamma}  corrections={params.corrections}  sigma_inf2={params.sigma_inf2}")
     print(f"{'i':>12} {'n':>8} {'target':>14} {'sample_mean':>14}")
-    for i in np.atleast_1d(scales):
-        i = int(i)
+    for i in scales_list:
         y = samples[i]
         print(f"{i:>12} {len(y):>8} {mean_Y(i, params).item():>14.4f} {y.mean():>14.4f}")
-    print(f"\nResolved seed written back to {args.meta}")
+    print(f"\nseed     = {resolved_seed}")
+    print(f"data     = {out_dir / (stem + '.npz')}")
+    print(f"metadata = {out_dir / (stem + '.json')}")
+    print(f"(recipe {args.meta} was not modified)")
 
 
 if __name__ == "__main__":

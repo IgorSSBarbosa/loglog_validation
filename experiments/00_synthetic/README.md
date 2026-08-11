@@ -21,17 +21,24 @@ this rung tests only the *statistical* machinery, not model fidelity.
 
 `generator.py` — pluggable-noise-family generator (`NOISE_FAMILIES`; only `lognormal`
 implemented so far). `SyntheticParams.corrections` holds an arbitrary-length sequence of
-$(a_j,\omega_j)$ pairs, not just a single term. CLI:
+$(a_j,\omega_j)$ pairs, not just a single term.
+
+Two kinds of JSON, not to be confused: a hand-authored **recipe** (see `example_config.json`
+for the agreed Phase-0 defaults: $\gamma=0.5$, $a_0=1$, one correction term
+$a_1=1,\omega_1=1$, $\sigma_\infty^2=0.04$, lognormal) is read-only and never modified by
+anything here; running it produces **output** — samples as `<tag>.npz` (compressed) plus
+their reproducibility metadata as `<tag>.json`, same stem, written to `data/` (gitignored —
+regenerable, not source). CLI:
 
 ```
-python3 generator.py -meta example_config.json
+python3 generator.py -meta example_config.json --tag demo_run
+python3 plot_loglog.py -meta data/demo_run.json
 ```
 
-reads a JSON config (see `example_config.json` for the agreed Phase-0 defaults: $\gamma=0.5$,
-$a_0=1$, one correction term $a_1=1,\omega_1=1$, $\sigma_\infty^2=0.04$, lognormal),
-generates the samples, and writes the config back with the RNG seed resolved — so
-re-running the same file reproduces bit-identical data. `generate(..., out_dir=..., tag=...)`
-is the equivalent programmatic entry point for batch use (content-hash filenames, no
-sprawl on rerun); `reproduce(path)` regenerates samples from either kind of file.
+`generate(..., out_dir=..., tag=...)` is the equivalent programmatic entry point for batch
+use (content-hash filenames by default, so an identical rerun overwrites rather than
+accumulating). `load(path)` reads a `.npz` back directly (fast); `reproduce(path)`
+regenerates from the recorded recipe instead, as an independent correctness check that
+saved data matches what its recipe actually produces.
 
 Checkpoint 0.2 (estimator) is next, once we've agreed how checkpoints get verified.

@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Generated run output (samples .npz + metadata .json) -- regenerable from a
+# recipe JSON, not source. images/ is NOT ignored: figures are committed
+# deliberately as evidence, one at a time (see PLAN.md ground rule 6).
+experiments/*/data/
