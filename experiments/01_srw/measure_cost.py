@@ -14,10 +14,13 @@ uses min, not mean, across repeats (standard microbenchmark practice, e.g.
 Python's own timeit) -- the one place this experiment departs from the
 sample-mean framing used elsewhere in this codebase for Y_i.
 
+This module only measures and saves -- it never plots (mirrors the
+generate.py/plot_loglog.py split elsewhere in this repo). See plot_cost.py
+for the log-log plot of this data.
+
 CLI:
     python3 measure_cost.py                       # default scales/repeats
     python3 measure_cost.py -meta cost_config.json --tag my_run
-    python3 measure_cost.py --plot                # also save images/<tag>.png
 """
 
 from __future__ import annotations
@@ -84,13 +87,6 @@ def _main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("-o", "--out-dir", dest="out_dir", type=Path, default=None)
     parser.add_argument("--tag", dest="tag", type=str, default="cost_probe")
-    parser.add_argument(
-        "--plot", dest="plot", action="store_true",
-        help="Also save a supplementary log-log plot of elapsed time vs scale to "
-        "images/<tag>.png (ground rule 1: supplements the numeric check above, never "
-        "replaces it). Off by default so routine reruns don't overwrite the committed "
-        "evidence figure.",
-    )
     args = parser.parse_args(argv)
 
     if args.meta is not None:
@@ -124,32 +120,7 @@ def _main(argv: list[str] | None = None) -> None:
     passed = lo <= result["d_hat"] <= hi
     print(f"\n{'PASS' if passed else 'FAIL'}: d_hat={result['d_hat']:.4f} vs acceptance range [{lo}, {hi}]")
     print(f"\noutput = {out_path}")
-
-    if args.plot:
-        image_path = _save_plot(result, out_dir=HERE / "images", tag=args.tag)
-        print(f"image  = {image_path}")
-
-
-def _save_plot(result: dict, *, out_dir: Path, tag: str) -> Path:
-    """Supplementary log-log plot of elapsed time vs scale (ground rule 1:
-    a figure supplements the numeric check above, never replaces it). Deferred
-    matplotlib import/backend selection: `measure()` itself (used by
-    test_cost_probe.py) has no matplotlib dependency."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    from tools.loglog_plot import loglog_plot
-
-    samples = {int(k): np.asarray(v) for k, v in result["elapsed_all"].items()}
-    ax = loglog_plot(samples, label="elapsed time (all repeats)")
-    ax.set_xlabel("k")
-    ax.set_ylabel("elapsed time (s)")
-    ax.set_title(f"srw() cost probe: d_hat={result['d_hat']:.3f}")
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{tag}.png"
-    ax.figure.savefig(out_path, dpi=150, bbox_inches="tight")
-    return out_path
+    print(f"plot   = python3 plot_cost.py -data {out_path}")
 
 
 if __name__ == "__main__":

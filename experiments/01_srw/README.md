@@ -48,10 +48,17 @@ procedure* against, before ever pointing it at a real (and expensive) simulator.
   experiments/01_srw/` passes; `images/cost_probe.png` (committed, per ground rule 1 —
   supplement to the numeric check, not a replacement for it) shows a clean log-log line
   once past the small-$k$ overhead-dominated points.
+- `plot_cost.py` — separate from `measure_cost.py` (previously bundled behind a
+  `--plot` flag; split out for consistency with `generate.py`/`plot_loglog.py`
+  elsewhere in this repo, where generation and plotting are always distinct scripts).
+  Reads `measure_cost.py`'s saved JSON directly (`elapsed_all` is already
+  `{scale: array}`, `tools/loglog_plot.py`'s exact required shape) and hands it to the
+  same generic `loglog_plot`.
 
-Run directly: `python3 measure_cost.py` (writes `data/<tag>.json`, gitignored). Pass
-`--plot` to also save the log-log plot to `images/<tag>.png` -- off by default so a
-routine rerun doesn't silently overwrite the committed evidence figure.
+Run: `python3 measure_cost.py` (writes `data/<tag>.json`, gitignored), then
+`python3 plot_cost.py -data data/<tag>.json` to save `images/<tag>.png` -- a separate,
+deliberate step so a routine `measure_cost.py` rerun doesn't silently overwrite the
+committed evidence figure.
 
 **Not done here:** `tools/allocation.py` (Definition `def:alloc`'s $n$, $m_0$ formulas)
 and checkpoint 0.5 itself — separate future work, once $d$-measurement is trusted on a
