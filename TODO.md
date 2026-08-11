@@ -112,8 +112,24 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       dominated scales are dropped, comfortably inside the $[0.8,1.2]$ acceptance band
       around the known ground truth $d=1$. This SRW use is separate from -- and does not
       unblock -- Phase 1's still-blocked gamma-estimation ladder (see `experiments/01_srw/README.md`)~~
-- [ ] `tools/allocation.py` — budget allocation rule + cost accounting (now unblocked
-      from a "how do we get $d$" standpoint, but not started)
+- [x] ~~`tools/allocation.py` — budget allocation rule + cost accounting (now unblocked
+      from a "how do we get $d$" standpoint, but not started)~~ — `optimal_allocation`
+      (Proposition `prop:opt`, eq. 945-946) and `total_cost` (Lemma `lem:budget`'s
+      closed-form geometric-sum cost). Discretization (the theorem treats $n$, $m_0$ as
+      continuous; an experiment needs integers) is not addressed by the article, so this
+      was a real design decision, not a formula lookup: flooring both is provably safe
+      (`total_cost` increasing in both $\Rightarrow$ cost $\le B$) whenever the continuous
+      $n_{\mathrm{exact}}\ge1$; testing that invariant caught a real edge case -- at small
+      $B$, $n_{\mathrm{exact}}<1$ and forcing $n=1$ would silently overspend the budget
+      (e.g. $B=10$ costing 28). Fixed via an `integer_feasible` diagnostic flag
+      (`n`/`m0`/`cost` are `None` when `False`), the same "diagnostic the caller must
+      check, not a raise" pattern `gamma_mle`'s `trustworthy` already uses -- the
+      continuous quantities ($\theta_1,\theta_2,\kappa$, $n_{\mathrm{exact}}$,
+      $m_{0,\mathrm{exact}}$) stay well-defined and returned either way. Verified:
+      `tools/tests/test_allocation.py` (15 cases) -- $\theta_1+d\theta_2=1$ exactly at the
+      optimum, continuous allocation costs exactly $B$, discretized allocation never
+      exceeds $B$ when feasible, the small-$B$ infeasibility case itself, parameter
+      validation ($d,\omega_1>0$, $\rho>1$, $m\ge1$, $B\ge1$)
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

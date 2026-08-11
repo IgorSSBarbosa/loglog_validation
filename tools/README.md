@@ -58,5 +58,40 @@ Lemma "Elementary identities" for a spread of $(m,m_0)$, exact recovery on
 noiseless data, agreement with `gamma_all_points` on a consecutive grid, and
 the rejection path.
 
+`persistence.py` — sample+metadata save/load shared across experiments
+(`save_samples`/`load_samples` for `{scale: array}` as compressed `.npz`,
+`write_metadata`/`load_metadata` for the paired JSON sidecar, `content_id` for
+deterministic hash-based filenames, `normalize_scales_n` for scalar-or-sequence
+`n`). Extracted from `experiments/00_synthetic/generator.py` once a second
+experiment (`experiments/01_srw/generate.py`) needed the identical pattern.
+Named `persistence.py`, not `io.py` — that name would shadow the stdlib `io`
+module once `tools/` is on `sys.path`, as every file in `tools/tests/` already
+puts it. Verified: `tools/tests/test_persistence.py` (8 cases — save/load
+roundtrip, content-hash determinism, missing-file handling).
+
+`cost_model.py` — `estimate_cost_exponent`, recovering the cost-model exponent
+$d$ from Assumption `cost_is_power_law` ($\mathrm{cost}(i)=i^d$), which has the
+same log-log-linear form as $\mathbb{E} Y_i=a_0 i^\gamma$ (eq. 232) — reuses
+`loglog.py`'s `gamma_all_points` internally, behind a name-keyed registry
+(`COST_ESTIMATORS`) so a different estimation approach can be swapped in later.
+Verified: `tools/tests/test_cost_model.py` on synthetic noiseless cost curves;
+empirically validated against a real $\Theta(k)$ simulator in
+`experiments/01_srw/` (recovers $\hat d\approx0.90$–$1.09$ against ground truth
+$d=1$).
+
+`allocation.py` — `optimal_allocation` (Proposition `prop:opt`, eq. 945-946)
+and `total_cost` (Lemma `lem:budget`'s closed-form cost). Given a budget $B$
+and $(d,\omega_1,\rho,m)$, returns the rate-optimal exponents
+$\theta_1,\theta_2$ and the sample count/scale-offset $n$, $m_0$ an experiment
+can actually run. The theorem treats $n$, $m_0$ as continuous; this module
+floors both to integers, which is provably safe (cost stays $\le B$) whenever
+the continuous $n_{\mathrm{exact}}\ge1$ — when it isn't (budget too small for
+this configuration), `n`/`m0`/`cost` come back `None` and `integer_feasible`
+is `False` rather than silently overspending, the same "diagnostic the caller
+must check" pattern `gamma_mle`'s `trustworthy` uses. Verified:
+`tools/tests/test_allocation.py` (15 cases — $\theta_1+d\theta_2=1$ exactly,
+continuous allocation costs exactly $B$, discretized allocation never exceeds
+$B$ when feasible, the small-$B$ infeasibility case, parameter validation).
+
 Not started yet — planned modules (see `PLAN.md` repo layout): `wilson.py`,
-`allocation.py`, `bootstrap.py`, `rng.py`, `io.py`.
+`bootstrap.py`, `rng.py`.
