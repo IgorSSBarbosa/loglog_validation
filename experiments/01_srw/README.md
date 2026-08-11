@@ -23,8 +23,12 @@ whose cost genuinely grows with $k$: generating $k$ i.i.d. $\pm1$ steps and summ
 is $\Theta(k)$, i.e. $d=1$ — a known ground truth to validate the *measurement
 procedure* against, before ever pointing it at a real (and expensive) simulator.
 
-- `srw.py` — the simulator, `srw(k, q=0.5, rng=None)`, returning one realization of
-  $|S_k|$.
+- `srw.py` — the simulator, `srw(k, n=1, q=0.5, rng=None)`, returning `n` i.i.d.
+  realizations of $|S_k|$ as an array (vectorized: one $(n,k)$ matrix of $\pm1$ steps,
+  summed along the $k$ axis). `measure_cost.py` calls it at the default `n=1` --
+  Assumption `cost_is_power_law` defines $\mathrm{cost}(i)$ as the cost of simulating
+  *one* sample -- but `n>1` is available for anything that wants real per-scale sample
+  arrays (e.g. eventually feeding `tools/loglog_plot.py`, once Phase 1 is unblocked).
 - `tools/cost_model.py` — generic, experiment-agnostic estimator: `cost(i)=c\cdot i^d`
   has the same log-log-linear form as $\mathbb{E} Y_i=a_0 i^\gamma$ (eq. 232), so
   `estimate_cost_exponent` reuses `tools/loglog.py`'s OLS-slope machinery, behind a
