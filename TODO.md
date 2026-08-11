@@ -81,9 +81,26 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] `tools/rng.py` — independent-stream seeding (ground rule 2); not yet needed since
       0.1 only draws one replicate per call — will extract once 0.3 needs many fresh
       independent replicates
-- [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths;
+- [x] ~~`tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths;
       kept local to `experiments/00_synthetic/generator.py` for now (one consumer so
-      far) — extract to `tools/` once a second experiment needs the same pattern
+      far) — extract to `tools/` once a second experiment needs the same pattern~~ —
+      extracted as `tools/persistence.py` (not `tools/io.py`: that name would shadow
+      the stdlib `io` module once `tools/` is on `sys.path`, breaking anything else
+      imported afterward in the same process). `save_samples`/`load_samples`/
+      `load_metadata`/`write_metadata`/`content_id`/`normalize_scales_n`, generic over
+      any JSON-serializable `params` dict. `generator.py` refactored to import these
+      instead of its own local copies (re-exports the names, so `plot_loglog.py`'s
+      `from generator import load_metadata, load_samples, ...` needed no changes;
+      content-hash payload shape kept byte-identical, so existing hash-named committed
+      images stay valid). Second consumer: `experiments/01_srw/generate.py` (new) draws
+      $n$ i.i.d. $|S_k|$ samples per scale via `srw()`, same recipe/output shape as
+      `generator.py`; its own `experiments/01_srw/plot_loglog.py` (new) reuses
+      `tools/loglog_plot.py` directly, deliberately *without* running
+      `tools/loglog.py`'s $\hat\gamma$ estimators or a reference-curve overlay (no
+      article-sanctioned closed form for SRW yet -- see `experiments/01_srw/README.md`
+      "Sample generation" section). Verified: `tools/tests/test_persistence.py` (8
+      cases), `experiments/01_srw/test_generate.py` (shape + `reproduce()` exact-match),
+      full suite + both experiments' CLIs run end-to-end
 - [x] ~~`tools/cost_model.py` — cost-model exponent $d$ estimator (article Assumption
       `cost_is_power_law`, $\mathrm{cost}(i)=i^d$); reuses `tools/loglog.py`'s OLS-slope
       machinery (same log-log-linear form as $\gamma$) behind a name-keyed registry

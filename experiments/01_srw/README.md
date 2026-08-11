@@ -1,6 +1,6 @@
 # 01_srw — Simple Random Walk
 
-This folder holds two separate, independent uses of the same `srw()` simulator. Don't
+This folder holds three separate, independent uses of the same `srw()` simulator. Don't
 conflate them.
 
 ## Gamma-estimation ladder — blocked on design
@@ -27,8 +27,7 @@ procedure* against, before ever pointing it at a real (and expensive) simulator.
   realizations of $|S_k|$ as an array (vectorized: one $(n,k)$ matrix of $\pm1$ steps,
   summed along the $k$ axis). `measure_cost.py` calls it at the default `n=1` --
   Assumption `cost_is_power_law` defines $\mathrm{cost}(i)$ as the cost of simulating
-  *one* sample -- but `n>1` is available for anything that wants real per-scale sample
-  arrays (e.g. eventually feeding `tools/loglog_plot.py`, once Phase 1 is unblocked).
+  *one* sample -- `n>1` is what "Sample generation" below uses.
 - `tools/cost_model.py` — generic, experiment-agnostic estimator: `cost(i)=c\cdot i^d`
   has the same log-log-linear form as $\mathbb{E} Y_i=a_0 i^\gamma$ (eq. 232), so
   `estimate_cost_exponent` reuses `tools/loglog.py`'s OLS-slope machinery, behind a
@@ -57,3 +56,33 @@ routine rerun doesn't silently overwrite the committed evidence figure.
 **Not done here:** `tools/allocation.py` (Definition `def:alloc`'s $n$, $m_0$ formulas)
 and checkpoint 0.5 itself — separate future work, once $d$-measurement is trusted on a
 real (not toy) simulator.
+
+## Sample generation — not blocked, exploratory (not Phase 1)
+
+`generate.py` is the second consumer of `tools/persistence.py` (the sample+metadata
+save/load pattern extracted from `experiments/00_synthetic/generator.py` once this
+became a real second use case): draws $n$ i.i.d. $|S_k|$ samples per scale $k$ via
+`srw(k, n, q, rng)`, seeded and timed the same way, to the identical `.npz`+`.json`
+output shape. Recipe shape mirrors `generator.py`'s exactly, with `"params": {"q":
+0.5}` standing in for `SyntheticParams`:
+
+```
+python3 generate.py -meta example_config.json --tag demo_run
+python3 plot_loglog.py -data data/demo_run.npz
+```
+
+`plot_loglog.py` hands the saved samples straight to `tools/loglog_plot.py`'s generic
+`loglog_plot` — same tool 00_synthetic uses. **Deliberately does not** run
+`tools/loglog.py`'s $\hat\gamma$ estimators or overlay a reference curve, unlike
+00_synthetic's version: there is still no article-sanctioned closed-form
+$\mathbb{E} Y_i$/$\gamma$/$\omega_1$ for SRW (see "Gamma-estimation ladder" above,
+still blocked), so any $\hat\gamma$ computed from this data would be an unvalidated
+number, not a checkpoint result — don't mistake this for Phase 1 progress. What this
+*does* establish: the log-log plot of $\overline{|S_k|}$ vs $k$ is visibly a clean
+straight line (slope $\approx 0.5$, consistent with the classical $\mathbb{E}|S_k|
+\sim \sqrt{2k/\pi}$ asymptotic) — useful groundwork for whenever Phase 1's design
+question is resolved, but not itself a validated result.
+
+`test_generate.py` checks output shapes match the recipe and that `reproduce()`
+(regenerate from recorded metadata) matches a saved run exactly, the same
+independent correctness check `generator.py`'s `reproduce` provides.

@@ -43,6 +43,13 @@ required just to plot data. `reproduce(json_path)` instead regenerates from
 the recorded params/scales/n/seed -- slower, but a genuine independent check
 that saved data matches what its recipe actually produces.
 
+`save_samples`/`load_samples`/`load_metadata`/`write_metadata`/`content_id`/
+`normalize_scales_n` (re-exported here) live in `tools/persistence.py` --
+shared with `experiments/01_srw/generate.py`, which uses the identical
+.npz+.json shape for SRW samples. What stays local to this module is
+everything specific to the closed-form synthetic model itself: `SyntheticParams`,
+`NOISE_FAMILIES`, `mean_Y`, and `generate`'s sampling loop.
+
 CLI usage (recipe is read-only; writes <out_dir>/<tag>.npz + .json, default
 out_dir is ./data next to this script):
 
@@ -53,7 +60,6 @@ out_dir is ./data next to this script):
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -64,6 +70,16 @@ from typing import Callable
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1]))  # repo root, for tools/
+
+from tools.persistence import (  # noqa: E402
+    content_id,
+    load_metadata,
+    load_samples,
+    normalize_scales_n,
+    save_samples,
+    write_metadata,
+)
 
 
 def _lognormal_xi(rng: np.random.Generator, size: tuple[int, ...], sigma_inf2: float) -> np.ndarray:
@@ -134,17 +150,6 @@ def mean_Y(i, params: SyntheticParams) -> np.ndarray:
     return params.a0 * i**params.gamma * np.exp(correction)
 
 
-def _normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:
-    scales_arr = np.atleast_1d(np.asarray(scales, dtype=np.int64))
-    if np.ndim(n) == 0:
-        n_arr = np.full(scales_arr.shape, int(n), dtype=np.int64)
-    else:
-        n_arr = np.asarray(n, dtype=np.int64)
-        if n_arr.shape != scales_arr.shape:
-            raise ValueError("n must be a scalar or match scales in length")
-    return scales_arr.tolist(), n_arr.tolist()
-
-
 def generate(
     scales,
     n,
@@ -190,7 +195,7 @@ def generate(
     dict[int, np.ndarray]
         Maps each requested scale to its array of `n` i.i.d. samples of Y_i.
     """
-    scales_list, n_list = _normalize_scales_n(scales, n)
+    scales_list, n_list = normalize_scales_n(scales, n)
 
     draw_xi = NOISE_FAMILIES[params.family]
 
@@ -218,12 +223,12 @@ def generate(
         print(file=sys.stderr)
 
     if out_dir is not None:
-        stem = tag or _content_id(params, scales_list, n_list, seed_seq.entropy)
+        stem = tag or content_id(asdict(params), scales_list, n_list, seed_seq.entropy)
         base = Path(out_dir) / stem
         save_samples(base.with_suffix(".npz"), samples)
-        _write_metadata(
+        write_metadata(
             path=base.with_suffix(".json"),
-            params=params,
+            params=asdict(params),
             scales=scales_list,
             n=n_list,
             seed=seed_seq.entropy,
@@ -233,77 +238,13 @@ def generate(
     return samples
 
 
-def save_samples(path: str | Path, samples: dict[int, np.ndarray]) -> Path:
-    """Save {scale: samples} to a compressed .npz (one array per scale, keyed by str(scale))."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(path, **{str(i): arr for i, arr in samples.items()})
-    return path
-
-
-def load_samples(path: str | Path) -> dict[int, np.ndarray]:
-    """Load {scale: samples} back from an .npz written by `save_samples`/`generate`.
-
-    Raises a clear FileNotFoundError (not a bare one from inside numpy) if `path`
-    doesn't exist -- e.g. because it's a recipe's stem, which never has data of
-    its own, rather than the .npz path an actual generated run produced.
-    """
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(
-            f"no data at {path}.\n"
-            f"Generate some first: python3 generator.py -meta <recipe.json> --tag <name>\n"
-            f"then pass the printed 'data' path (data/<name>.npz) here."
-        )
-    with np.load(path) as npz:
-        return {int(k): npz[k] for k in npz.files}
-
-
-def load_metadata(data_or_metadata_path: str | Path) -> dict | None:
-    """Load the metadata dict paired with a data path (same stem, .json extension), or
-    a metadata path directly. Returns None (not an error) if there's no metadata file --
-    metadata is optional context (e.g. for a target_fn overlay), never required to plot data."""
-    json_path = Path(data_or_metadata_path).with_suffix(".json")
-    if not json_path.exists():
-        return None
-    return json.loads(json_path.read_text())
-
-
 def reproduce(metadata_path: str | Path) -> dict[int, np.ndarray]:
     """Regenerate the exact samples described by a metadata JSON, from scratch (no I/O on the
     paired .npz) -- an independent check that saved data matches what the recorded recipe
-    actually produces. Use `load` instead if you just want the already-computed samples."""
+    actually produces. Use `load_samples` instead if you just want the already-computed samples."""
     meta = json.loads(Path(metadata_path).read_text())
     params = SyntheticParams(**meta["params"])
     return generate(meta["scales"], meta["n"], params, seed=meta["seed"])
-
-
-def _content_id(params: SyntheticParams, scales: list[int], n: list[int], seed) -> str:
-    payload = json.dumps({"params": asdict(params), "scales": scales, "n": n, "seed": seed}, sort_keys=True)
-    return hashlib.sha256(payload.encode()).hexdigest()[:12]
-
-
-def _write_metadata(
-    *,
-    path: Path,
-    params: SyntheticParams,
-    scales: list[int],
-    n: list[int],
-    seed,
-    timing_seconds: dict[int, float] | None = None,
-) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "params": asdict(params),
-        "scales": scales,
-        "n": n,
-        "seed": seed,
-        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-    }
-    if timing_seconds is not None:
-        meta["timing_seconds"] = {str(i): t for i, t in timing_seconds.items()}
-    path.write_text(json.dumps(meta, indent=2, sort_keys=True))
-    return path
 
 
 def params_from_json(d: dict) -> SyntheticParams:
@@ -354,7 +295,7 @@ def _main(argv: list[str] | None = None) -> None:
 
     cfg = json.loads(args.meta.read_text())
     params = params_from_json(cfg["params"])
-    scales_list, n_list = _normalize_scales_n(cfg["scales"], cfg["n"])
+    scales_list, n_list = normalize_scales_n(cfg["scales"], cfg["n"])
 
     seed_seq = np.random.SeedSequence(cfg.get("seed"))
     resolved_seed = seed_seq.entropy
@@ -364,7 +305,7 @@ def _main(argv: list[str] | None = None) -> None:
         scales_list, n_list, params, seed=resolved_seed, out_dir=out_dir, tag=args.tag, progress=True
     )
 
-    stem = args.tag or _content_id(params, scales_list, n_list, resolved_seed)
+    stem = args.tag or content_id(asdict(params), scales_list, n_list, resolved_seed)
     timing = load_metadata(out_dir / stem)["timing_seconds"]
 
     print(
