@@ -46,8 +46,9 @@ procedure* against, before ever pointing it at a real (and expensive) simulator.
   supplement to the numeric check, not a replacement for it) shows a clean log-log line
   once past the small-$k$ overhead-dominated points.
 
-Run directly: `python3 measure_cost.py` (writes `data/<tag>.json`, gitignored, and
-`images/<tag>.png`).
+Run directly: `python3 measure_cost.py` (writes `data/<tag>.json`, gitignored). Pass
+`--plot` to also save the log-log plot to `images/<tag>.png` -- off by default so a
+routine rerun doesn't silently overwrite the committed evidence figure.
 
 **Not done here:** `tools/allocation.py` (Definition `def:alloc`'s $n$, $m_0$ formulas)
 and checkpoint 0.5 itself — separate future work, once $d$-measurement is trusted on a
