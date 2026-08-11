@@ -16,9 +16,10 @@ overlay and true_gamma) is read from the same stem's .json if present, but
 isn't required -- missing metadata just means no overlay/true_gamma, not a
 failure to plot or estimate.
 
-Writes two outputs, both named after the data file's stem: the plot to
-`images/<stem>.png`, and the method-comparison to `data/<stem>_results.json`
-(see tools/loglog.py's compare_methods for the four methods compared).
+Writes three outputs, all named after the data file's stem: the raw-data plot
+to `images/<stem>.png`, a comparison of the four gamma-hat estimators (see
+tools/loglog.py's compare_methods) to `images/<stem>_estimates.png`, and the
+underlying numbers for the latter to `data/<stem>_results.json`.
 
 Run (after generating some data, e.g. `generator.py -meta example_config.json
 --tag demo_run`):
@@ -43,7 +44,7 @@ sys.path.insert(0, str(HERE.parent.parent))  # repo root, for tools/
 sys.path.insert(0, str(HERE))  # this dir, for generator
 
 from tools.loglog import compare_methods  # noqa: E402
-from tools.loglog_plot import loglog_plot, loglog_points  # noqa: E402
+from tools.loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402
 
 from generator import load_metadata, load_samples, mean_Y, params_from_json  # noqa: E402
 
@@ -89,6 +90,13 @@ def main(argv: list[str] | None = None) -> None:
     results["source_npz"] = str(args.data)
     results_path = args.data.parent / f"{args.data.stem}_results.json"
     results_path.write_text(json.dumps(results, indent=2, sort_keys=True))
+
+    fig2, ax2 = plt.subplots(figsize=(6, 4.5))
+    estimates_plot(results, ax=ax2)
+    ax2.set_title(f"$\\hat\\gamma$ estimator comparison ({args.data.stem})")
+    out2 = out.parent / f"{args.data.stem}_estimates.png"
+    fig2.savefig(out2, dpi=150, bbox_inches="tight")
+    print(f"Saved {out2}")
 
     m = results["methods"]
     print(f"\ngamma estimates (true_gamma={true_gamma}):")

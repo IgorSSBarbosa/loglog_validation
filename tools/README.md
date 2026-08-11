@@ -4,10 +4,21 @@ Shared, experiment-agnostic utilities. May not import from `experiments/`. Every
 function here needs a passing unit test in `tools/tests/` (checked against a closed
 form, not just "runs") before any experiment is allowed to depend on it.
 
-`loglog_plot.py` — generic log-log plot of $\overline Y_i$ vs $i$ (any `{scale:
-samples}` dict, from any experiment) with $\pm 1$ SE error bars and an optional
-overlay of a known $\mathbb{E} Y_i$ curve. No unit test yet (it's a plot, not a
-numeric claim) — visually verified against `experiments/00_synthetic/`.
+`loglog_plot.py` — two charts. `loglog_plot`: generic log-log plot of
+$\overline Y_i$ vs $i$ (any `{scale: samples}` dict, from any experiment) with
+$\pm 1$ SE error bars and an optional overlay of a known $\mathbb{E} Y_i$
+curve. `estimates_plot`: compares the four $\hat\gamma$ estimators from
+`loglog.py`'s `compare_methods` — `two_point`/`drop_leading` (each a sequence
+of estimates) plotted against the smallest scale in their window, so the
+chart shows convergence as small, more finite-size-biased scales are dropped;
+`all_points`/`mle` (single estimates, no window) as horizontal reference
+lines; `true_gamma` (if known) as a muted dashed reference. Colors follow the
+dataviz skill's validated default palette — categorical slots 1-3, `mle`'s
+untrustworthy state uses the reserved status-critical color instead of a 4th
+competing hue (the palette's series-count ladder caps an all-pairs-visible
+chart at three). Neither chart has a unit test yet (they're plots, not
+numeric claims) — visually verified against `experiments/00_synthetic/`,
+including the untrustworthy-MLE styling path.
 
 `loglog.py` — four $\hat\gamma$ estimators. Three as the general OLS slope of
 $\log\overline Y_i$ vs $\log i$ (equivalent to the article's closed-form

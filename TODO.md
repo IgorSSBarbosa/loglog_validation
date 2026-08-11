@@ -44,6 +44,12 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       (5/200 not-trustworthy, always via optimizer non-convergence rather than a
       bad estimate); `compare_methods`/`loglog_points` updated to thread `n`
       through~~
+- [x] ~~`tools/loglog_plot.py`'s `estimates_plot`: visualizes `compare_methods`'
+      four estimators (dataviz-skill palette; two_point/drop_leading vs smallest
+      scale in window, all_points/mle as reference lines, mle styled by its
+      `trustworthy` status color rather than a 4th hue); `plot_loglog.py` writes
+      `images/<stem>_estimates.png`. Verified against both a 3-scale and a dense
+      10-scale synthetic run, and the untrustworthy-MLE styling path~~
 - [ ] Decide how checkpoint acceptance criteria actually get verified going forward
       (the first attempt, a standalone `run_checkpoint_0_1.py` script, was removed —
       unclear value, not the right shape; alternative not yet agreed)
