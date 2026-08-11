@@ -1,0 +1,281 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{geometry}
+\geometry{a4paper, margin=25mm}
+
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\dto}{\xrightarrow{d}}
+
+\title{A Gaussian Maximum-Likelihood Estimator for $\gamma$\\
+\large from per-scale sample means}
+\author{\texttt{loglog\_validation} project notes}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This note derives a maximum-likelihood estimator (MLE) for the critical
+exponent $\gamma$ that is \emph{not} the log-log OLS estimator already
+implemented in \texttt{tools/loglog.py}. That estimator works by taking
+$\log \overline{Y}_i$ as (approximately) Gaussian and fitting a line. Here we
+instead take $\overline{Y}_i$ itself as (approximately) Gaussian, motivated
+directly by the classical CLT applied to a sample mean, and derive the MLE for
+$\gamma$ under that model. The two estimators are different objects, both
+CLT-motivated, and this note also records exactly how they differ
+(Remark~\ref{rmk:vs-ols}). This is a derivation to be checked, not yet
+implemented.
+\end{abstract}
+
+\section{Setup and assumptions}
+
+We are given data at $K$ distinct scales $i_1 < i_2 < \cdots < i_K$. At scale
+$i_k$, we have $n_k$ i.i.d.\ samples $Y_k^{(1)}, \dots, Y_k^{(n_k)}$ of the
+observable $Y_{i_k}$, and we write their sample mean as
+\[
+  \overline{Y}_k := \frac{1}{n_k}\sum_{\ell=1}^{n_k} Y_k^{(\ell)}.
+\]
+Samples at different scales are drawn independently (the project's
+independence rule), so $\overline{Y}_1, \dots, \overline{Y}_K$ are independent
+random variables.
+
+\begin{assumption}[Relative variance, constant across scales]
+\label{ass:relvar}
+Write $\mu_k := \E\, Y_{i_k}$ for the (unknown) population mean at scale
+$i_k$. We assume
+\[
+  \Var(Y_{i_k}) = \sigma^2 \mu_k^2
+\]
+for a single unknown constant $\sigma^2 > 0$, the same at every scale used.
+This is the constant-variance regime of the article's Assumption~6
+($\sigma_k^2 \to \sigma_\infty^2$; here we take $\sigma_k^2 \equiv \sigma^2$
+exactly, consistent with $\xi_k := Y_{i_k}/\mu_k$ having $\Var(\xi_k) =
+\sigma^2$ for every $k$ used).
+\end{assumption}
+
+\begin{assumption}[Leading-order power law]
+\label{ass:powerlaw}
+\[
+  \mu_k = a_0\, i_k^{\gamma}
+\]
+for unknown constants $a_0 > 0$, $\gamma \in \mathbb{R}$ (the article's
+eq.~232 with no finite-size correction term; see
+Remark~\ref{rmk:corrections} for the extension).
+\end{assumption}
+
+\begin{assumption}[Gaussian approximation of the sample mean]
+\label{ass:clt}
+By the classical CLT (i.i.d., finite variance),
+\[
+  \sqrt{n_k}\,(\overline{Y}_k - \mu_k) \dto \mathcal{N}(0, \Var(Y_{i_k}))
+  = \mathcal{N}(0, \sigma^2 \mu_k^2) \qquad \text{as } n_k \to \infty,
+\]
+and for the finite (but large) $n_k$ actually used we treat this as an
+approximate equality in distribution:
+\[
+  \overline{Y}_k \ \approx\ \mathcal{N}\!\left(\mu_k,\ \frac{\sigma^2 \mu_k^2}{n_k}\right).
+\]
+\end{assumption}
+
+The unknowns are $(\gamma, a_0, \sigma^2)$; the data are
+$(i_k, n_k, \overline{Y}_k)_{k=1}^K$, all observed/known.
+
+\section{The likelihood}
+
+Under Assumption~\ref{ass:clt} and independence across $k$, the (approximate)
+joint density of $(\overline{Y}_1,\dots,\overline{Y}_K)$ is
+\[
+  L(\gamma, a_0, \sigma^2)
+  = \prod_{k=1}^K
+    \left(2\pi\,\frac{\sigma^2\mu_k^2}{n_k}\right)^{-1/2}
+    \exp\!\left[-\,\frac{n_k(\overline{Y}_k - \mu_k)^2}{2\sigma^2 \mu_k^2}\right],
+  \qquad \mu_k = a_0 i_k^\gamma.
+\]
+Taking logarithms,
+\begin{equation}
+\label{eq:loglik}
+  \ell(\gamma, a_0, \sigma^2)
+  = -\frac{K}{2}\log(2\pi) - \frac{K}{2}\log\sigma^2
+    - \sum_{k=1}^K \log \mu_k + \frac{1}{2}\sum_{k=1}^K \log n_k
+    - \frac{1}{2\sigma^2}\sum_{k=1}^K \frac{n_k(\overline{Y}_k-\mu_k)^2}{\mu_k^2}.
+\end{equation}
+
+\section{Score equations}
+
+We maximize \eqref{eq:loglik} over $(\gamma, a_0, \sigma^2)$ by setting its
+partial derivatives to zero.
+
+\subsection{With respect to $\sigma^2$}
+
+\[
+  \frac{\partial \ell}{\partial \sigma^2}
+  = -\frac{K}{2\sigma^2} + \frac{1}{2\sigma^4}\sum_{k=1}^K \frac{n_k(\overline{Y}_k-\mu_k)^2}{\mu_k^2}
+  = 0
+\]
+gives, in closed form,
+\begin{equation}
+\label{eq:sigmahat}
+  \hat\sigma^2(\gamma, a_0) = \frac{1}{K}\sum_{k=1}^K \frac{n_k(\overline{Y}_k-\mu_k)^2}{\mu_k^2}.
+\end{equation}
+
+\subsection{With respect to $\mu_k$, then $\gamma$ and $a_0$}
+
+Write $r_k := (\overline{Y}_k - \mu_k)/\mu_k$ for the relative residual at
+scale $k$ (so $\overline{Y}_k = \mu_k(1+r_k)$). Differentiating the $k$-th
+term of \eqref{eq:loglik} with respect to $\mu_k$ (holding $\sigma^2$ fixed),
+using the quotient rule on $(\overline{Y}_k-\mu_k)^2/\mu_k^2$:
+\[
+  \frac{\partial}{\partial \mu_k}
+  \left[\frac{(\overline{Y}_k-\mu_k)^2}{\mu_k^2}\right]
+  = \frac{-2(\overline{Y}_k-\mu_k)\mu_k^2 - (\overline{Y}_k-\mu_k)^2 \cdot 2\mu_k}{\mu_k^4}
+  = -\frac{2\overline{Y}_k(\overline{Y}_k-\mu_k)}{\mu_k^3},
+\]
+where the last equality uses $\mu_k + (\overline{Y}_k - \mu_k) = \overline{Y}_k$. Hence
+\[
+  \frac{\partial \ell}{\partial \mu_k}
+  = -\frac{1}{\mu_k}
+    + \frac{n_k\,\overline{Y}_k(\overline{Y}_k-\mu_k)}{\sigma^2 \mu_k^3}
+  = \frac{1}{\mu_k}\left[\frac{n_k(1+r_k)r_k}{\sigma^2} - 1\right],
+\]
+using $\overline{Y}_k(\overline{Y}_k-\mu_k)/\mu_k^2 = (1+r_k)r_k$.
+
+Since $\mu_k = a_0 i_k^\gamma$, we have
+\[
+  \frac{\partial \mu_k}{\partial \gamma} = \mu_k \log i_k,
+  \qquad
+  \frac{\partial \mu_k}{\partial a_0} = \frac{\mu_k}{a_0}.
+\]
+By the chain rule,
+\begin{align}
+  \frac{\partial \ell}{\partial \gamma}
+  &= \sum_{k=1}^K \frac{\partial \ell}{\partial \mu_k}\cdot \mu_k \log i_k
+   = \sum_{k=1}^K \log i_k
+     \left[\frac{n_k(1+r_k)r_k}{\sigma^2} - 1\right] = 0,
+   \label{eq:score-gamma}\\[4pt]
+  \frac{\partial \ell}{\partial a_0}
+  &= \frac{1}{a_0}\sum_{k=1}^K
+     \left[\frac{n_k(1+r_k)r_k}{\sigma^2} - 1\right] = 0
+   \ \Longleftrightarrow\
+   \sum_{k=1}^K \left[\frac{n_k(1+r_k)r_k}{\sigma^2} - 1\right] = 0.
+   \label{eq:score-a0}
+\end{align}
+
+\begin{remark}[A clean form for the $a_0$ equation]
+Write $w_k := n_k r_k^2 = n_k(\overline{Y}_k-\mu_k)^2/\mu_k^2$, so that
+\eqref{eq:sigmahat} reads $\sum_k w_k = K\hat\sigma^2$. Expanding
+$n_k(1+r_k)r_k = n_k r_k + w_k$, equation~\eqref{eq:score-a0} becomes
+$\sum_k (n_k r_k + w_k)/\sigma^2 = K$. At the joint stationary point
+$\sigma^2=\hat\sigma^2$, so $\sum_k w_k/\hat\sigma^2 = K$ and this reduces to
+\begin{equation}
+\label{eq:score-a0-clean}
+  \sum_{k=1}^K n_k\,\frac{\overline{Y}_k - \mu_k}{\mu_k} = 0,
+\end{equation}
+a weighted normal equation with no $\sigma^2$ dependence left --- useful as an
+exact identity to check any numerical solution against. The $\gamma$
+equation~\eqref{eq:score-gamma} does \emph{not} simplify the same way (the
+extra $\log i_k$ weight blocks the same cancellation), so it must be kept in
+its $\sigma^2$-dependent form, or solved jointly with
+\eqref{eq:sigmahat}--\eqref{eq:score-a0-clean}.
+\end{remark}
+
+\section{Reduced form for implementation: the profile log-likelihood}
+
+Equations \eqref{eq:sigmahat}, \eqref{eq:score-gamma}, \eqref{eq:score-a0} are
+three equations in three unknowns with no closed-form solution for
+$(\gamma, a_0)$ in general. The standard and most practical way to solve them
+numerically is to \emph{profile out} $\sigma^2$: substitute
+$\hat\sigma^2(\gamma,a_0)$ from \eqref{eq:sigmahat} back into
+\eqref{eq:loglik}, which by construction removes $\sigma^2$ as a free
+variable and leaves an objective in $(\gamma, a_0)$ alone.
+
+Substituting \eqref{eq:sigmahat} into the last term of \eqref{eq:loglik}:
+\[
+  \frac{1}{2\hat\sigma^2}\sum_{k=1}^K \frac{n_k(\overline{Y}_k-\mu_k)^2}{\mu_k^2}
+  = \frac{1}{2\hat\sigma^2}\cdot K\hat\sigma^2 = \frac{K}{2},
+\]
+so
+\[
+  \ell\big(\gamma, a_0, \hat\sigma^2(\gamma,a_0)\big)
+  = -\frac{K}{2}\log(2\pi) - \frac{K}{2}\log\hat\sigma^2(\gamma,a_0)
+    - \sum_{k=1}^K \log \mu_k + \frac{1}{2}\sum_{k=1}^K \log n_k - \frac{K}{2}.
+\]
+Dropping the additive constants that do not depend on $(\gamma, a_0)$,
+maximizing the profile log-likelihood is equivalent to \emph{minimizing}
+\begin{equation}
+\label{eq:objective}
+  \boxed{\
+  \Phi(\gamma, a_0) \;:=\; K \log \hat\sigma^2(\gamma, a_0) \;+\; 2\sum_{k=1}^K \log \mu_k(\gamma, a_0),
+  \qquad \mu_k = a_0 i_k^\gamma,\ \ \hat\sigma^2 \text{ as in \eqref{eq:sigmahat}}.
+  \ }
+\end{equation}
+This is a plain function of two real variables $(\gamma, a_0)$ and is what
+should actually be handed to a numerical optimizer (e.g.\
+\texttt{scipy.optimize.minimize}), starting from the existing OLS-on-log
+estimate (\texttt{tools/loglog.py}'s \texttt{gamma\_all\_points}) as an
+initial guess for $\gamma$, and e.g.\ $\overline{Y}_{k_{\min}}/i_{k_{\min}}^{\hat\gamma_0}$
+as an initial guess for $a_0$.
+
+\begin{remark}[Consistency check]
+By the envelope theorem, $\partial \Phi/\partial\gamma = 0$ and
+$\partial\Phi/\partial a_0 = 0$ are exactly equations \eqref{eq:score-gamma}
+and \eqref{eq:score-a0} evaluated at $\sigma^2 = \hat\sigma^2(\gamma,a_0)$ ---
+minimizing \eqref{eq:objective} and solving the original score equations are
+the same problem. A numerical minimizer's solution should therefore also
+satisfy the clean identity~\eqref{eq:score-a0-clean}; checking that is a
+cheap correctness test on any implementation.
+\end{remark}
+
+\begin{remark}[Extension to the $J$-order expansion]
+\label{rmk:corrections}
+If instead $\mu_k = a_0 i_k^\gamma \exp\!\big(\sum_j a_j i_k^{-\omega_j}\big)$
+(the article's full eq.~232, correction exponents $\omega_j$ treated as
+known), every derivative above goes through unchanged: the correction factor
+does not depend on $\gamma$ or $a_0$, so $\partial \mu_k/\partial\gamma =
+\mu_k \log i_k$ and $\partial\mu_k/\partial a_0 = \mu_k/a_0$ still hold
+exactly. Equations \eqref{eq:score-gamma}--\eqref{eq:objective} are therefore
+unchanged in form; only the definition of $\mu_k$ changes.
+\end{remark}
+
+\begin{remark}[How this differs from the OLS-on-log estimator]
+\label{rmk:vs-ols}
+\texttt{tools/loglog.py}'s existing estimators work by treating
+$\log\overline{Y}_k$ as approximately Gaussian around $\log\mu_k$ (a
+delta-method consequence of Assumption~\ref{ass:clt}, valid when the relative
+fluctuation $\sigma/\sqrt{n_k}$ is small) and fitting an \emph{unweighted}
+OLS line to $(\log i_k, \log \overline{Y}_k)$. The estimator derived here
+instead applies the CLT directly to $\overline{Y}_k$, without a log
+transform, and consequently weighs each scale by $n_k/\mu_k^2$ (visible in
+\eqref{eq:score-a0-clean} and in $\hat\sigma^2$) rather than uniformly. The
+two coincide asymptotically as $n_k \to \infty$ (delta method), but are
+different estimators at finite $n_k$, and comparing them empirically was the
+point of building \texttt{compare\_methods} in the first place.
+\end{remark}
+
+\section{Summary for implementation}
+
+Given $(i_k, n_k, \overline{Y}_k)_{k=1}^K$:
+\begin{enumerate}
+\item Compute $\mu_k(\gamma,a_0) = a_0 i_k^\gamma$ and $\hat\sigma^2(\gamma,a_0)$
+      via \eqref{eq:sigmahat}.
+\item Minimize $\Phi(\gamma,a_0)$ of \eqref{eq:objective} numerically over
+      $(\gamma, a_0)$, e.g.\ with \texttt{scipy.optimize.minimize}, starting
+      from the OLS-on-log estimate.
+\item Report $(\hat\gamma, \hat a_0)$ at the minimizer, and
+      $\hat\sigma^2 = \hat\sigma^2(\hat\gamma,\hat a_0)$ from
+      \eqref{eq:sigmahat}.
+\item Sanity check: \eqref{eq:score-a0-clean},
+      $\sum_k n_k(\overline{Y}_k-\hat\mu_k)/\hat\mu_k \approx 0$, should hold
+      at the reported solution to floating-point/optimizer tolerance.
+\end{enumerate}
+
+\end{document}
