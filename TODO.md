@@ -84,7 +84,19 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] `tools/io.py` — metadata sidecar (seed, config, timing), fixed deterministic paths;
       kept local to `experiments/00_synthetic/generator.py` for now (one consumer so
       far) — extract to `tools/` once a second experiment needs the same pattern
-- [ ] `tools/allocation.py` — budget allocation rule + cost accounting
+- [x] ~~`tools/cost_model.py` — cost-model exponent $d$ estimator (article Assumption
+      `cost_is_power_law`, $\mathrm{cost}(i)=i^d$); reuses `tools/loglog.py`'s OLS-slope
+      machinery (same log-log-linear form as $\gamma$) behind a name-keyed registry
+      (`COST_ESTIMATORS`) so alternative approaches can be added later. Validated two
+      ways: `tools/tests/test_cost_model.py` on synthetic noiseless cost curves for a
+      spread of $d$, and `experiments/01_srw/` (new `srw.py` + `measure_cost.py` +
+      `test_cost_probe.py`) timing a genuinely $\Theta(k)$ simple-random-walk simulator
+      -- recovers $\hat d\approx 0.90$--$1.09$ depending on how many small, overhead-
+      dominated scales are dropped, comfortably inside the $[0.8,1.2]$ acceptance band
+      around the known ground truth $d=1$. This SRW use is separate from -- and does not
+      unblock -- Phase 1's still-blocked gamma-estimation ladder (see `experiments/01_srw/README.md`)~~
+- [ ] `tools/allocation.py` — budget allocation rule + cost accounting (now unblocked
+      from a "how do we get $d$" standpoint, but not started)
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 
