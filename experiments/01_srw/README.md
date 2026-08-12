@@ -60,11 +60,13 @@ simulator.
 
 Numeric acceptance criterion (`tools/tests/test_measure_cost.py`, local-only — see
 `tools/README.md`): $\hat d \in [0.8, 1.2]$ over the default grid/repeats.
-`images/cost_probe.png` (committed, per ground rule 1 — supplement to the numeric
-check, not a replacement for it) shows a clean log-log line once past the small-$k$
-overhead-dominated points.
+`images/cost_probe.png` (committed snapshot, per ground rule 1 — supplement to the
+numeric check, not a replacement for it; copied in manually from a
+`data/cost_probe/plot.png` run, since `plot_cost.py`'s default output now lives
+alongside the data, not auto-written to `images/`) shows a clean log-log line once
+past the small-$k$ overhead-dominated points.
 
-Run (from `tools/`):
+Run (from `src/`):
 ```
 python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag cost_probe
 python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe

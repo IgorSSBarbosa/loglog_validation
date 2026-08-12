@@ -12,6 +12,12 @@ self-contained file). "elapsed_all" inside it is already {scale: array of
 repeat times}, tools/loglog_plot.py's exact required shape, so no
 reformatting is needed.
 
+Writes `<run_dir>/plot.png` -- the same folder as `result.json` -- matching
+plot_loglog.py's convention: everything about one run lives in one place,
+and since `data/` is gitignored, nothing here is auto-committed. Copy a
+specific plot into the experiment's `images/` folder when you want to keep
+it as evidence (ground rule 1/6 -- committed deliberately, one at a time).
+
 Run (after measuring, e.g. `measure_cost.py -meta cost_probe_config.json
 --tag demo_run`):
 
@@ -43,7 +49,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,
-        help="Output PNG path; defaults to images/<tag>.png next to the run's experiment folder.",
+        help="Output PNG path; defaults to <run_dir>/plot.png (same folder as result.json).",
     )
     args = parser.parse_args(argv)
 
@@ -70,7 +76,7 @@ def main(argv: list[str] | None = None) -> None:
     ax.set_ylabel("elapsed time (s)")
     ax.set_title(f"{result['model']}() cost probe ({tag}): d_hat={result['d_hat']:.3f}")
 
-    out = args.out or (args.data.resolve().parents[1] / "images" / f"{tag}.png")
+    out = args.out or (args.data / "plot.png")
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")

@@ -50,8 +50,10 @@ plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
 meaningful for models whose cost genuinely grows with scale (e.g. `"srw"`); pointed
 at `"synthetic"` it will just measure $d\approx0$, an expected, uninteresting
-result. Verified: `tools/tests/test_measure_cost.py` (real-timing acceptance check,
-$\hat d\in[0.8,1.2]$ for `srw`).
+result. `plot_cost.py` writes `<run_dir>/plot.png` next to `result.json`, same
+one-run-one-folder convention as `plot_loglog.py`. Verified:
+`tools/tests/test_measure_cost.py` (real-timing acceptance check, $\hat
+d\in[0.8,1.2]$ for `srw`).
 
 Each of the four inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
