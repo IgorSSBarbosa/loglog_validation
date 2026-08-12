@@ -20,10 +20,14 @@ run's data you mean. Metadata is read from `<run_dir>/metadata.json` if
 present, but isn't required -- missing metadata just means no overlay/model
 dispatch, not a failure to plot.
 
-Writes the raw-data plot to `images/<tag>.png` next to the run's experiment
-folder (i.e. sibling to `data/`), and, only when a target_fn is known, also
-the four-estimator comparison to `images/<tag>_estimates.png` plus the
-underlying numbers to `<run_dir>/results.json`.
+Writes the raw-data plot to `<run_dir>/plot.png` -- the same folder as
+samples.npz/metadata.json -- and, only when a target_fn is known, also the
+four-estimator comparison to `<run_dir>/estimates.png` plus the underlying
+numbers to `<run_dir>/results.json`. Everything about one run lives in one
+place. `data/` is gitignored, so none of this is committed by default; copy
+a specific plot into the experiment's `images/` folder when you want to keep
+it as evidence (ground rule 1/6 -- committed deliberately, one at a time,
+not auto-populated by every run).
 
 Run (after generating some data, e.g. `generate.py -meta
 ../experiments/00_synthetic/example_config.json --tag demo_run`):
@@ -57,7 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,
-        help="Output PNG path; defaults to images/<tag>.png next to the run's experiment folder.",
+        help="Output PNG path; defaults to <run_dir>/plot.png (same folder as samples.npz).",
     )
     args = parser.parse_args(argv)
 
@@ -85,7 +89,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         print(f"note: no metadata at {args.data / 'metadata.json'} -- plotting data only, no reference curve")
 
-    out = args.out or (args.data.resolve().parents[1] / "images" / f"{tag}.png")
+    out = args.out or (args.data / "plot.png")
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
     loglog_plot(samples, ax=ax, target_fn=target_fn, label=label)
@@ -109,7 +113,7 @@ def main(argv: list[str] | None = None) -> None:
     fig2, ax2 = plt.subplots(figsize=(6, 4.5))
     estimates_plot(results, ax=ax2)
     ax2.set_title(f"$\\hat\\gamma$ estimator comparison ({tag})")
-    out2 = out.parent / f"{tag}_estimates.png"
+    out2 = args.data / "estimates.png"
     fig2.savefig(out2, dpi=150, bbox_inches="tight")
     print(f"Saved {out2}")
 

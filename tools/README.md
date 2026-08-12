@@ -111,8 +111,12 @@ exact-match, both parametrized across every registered model).
 curve / runs `loglog.py`'s four $\hat\gamma$ estimators when that model has a
 `target_fn` (currently only `"synthetic"`) — computing a $\hat\gamma$ with nothing
 known to validate it against would be an unvalidated number, easy to mistake for a
-checked result (see `experiments/01_srw/README.md`). Default image path is
-`images/<tag>.png` next to the run's experiment folder (sibling to its `data/`).
+checked result (see `experiments/01_srw/README.md`). Writes `<run_dir>/plot.png`
+(+ `estimates.png`, `results.json` when a target_fn is known) into the same folder
+as `samples.npz`/`metadata.json` — everything about one run in one place, and since
+`data/` is gitignored, nothing here is auto-committed. Copy a specific plot into the
+experiment's `images/` folder when you want to keep it as evidence (ground rule 1/6
+— committed deliberately, one at a time).
 
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times

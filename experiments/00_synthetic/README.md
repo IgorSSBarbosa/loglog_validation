@@ -47,7 +47,9 @@ python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
 recipe can produce many different runs (different tags/seeds), so pointing it at the
 recipe would be ambiguous about which run's data you mean. Since this model has a known
 closed form (`MODELS["synthetic"].target_fn`), `plot_loglog.py` overlays the reference
-curve and additionally writes `images/<tag>_estimates.png` + `data/<tag>/results.json`,
+curve and additionally writes `data/<tag>/estimates.png` + `data/<tag>/results.json`
+(same folder as `samples.npz`/`metadata.json`/`plot.png` — everything about one run in
+one place; `data/` is gitignored, copy a plot into `images/` to keep it as evidence),
 comparing four $\hat\gamma$ estimators from `tools/loglog.py` (all-points OLS, two-point/
 $m{=}2$, drop-leading-$m_0$ sweep, and a maximum-likelihood estimator — see
 `derivations/mle_gamma_estimator.tex` for its derivation) — see `tools/README.md` for
