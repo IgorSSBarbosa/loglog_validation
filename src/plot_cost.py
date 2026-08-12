@@ -1,11 +1,11 @@
 """Single, shared log-log plot of a cost-model probe's persisted timing data
-(tools/measure_cost.py) -- one script, reused across every model, rather
+(src/measure_cost.py) -- one script, reused across every model, rather
 than a per-experiment copy.
 
 Thin glue, mirroring generate.py/plot_loglog.py's split: measure_cost.py
 only measures and saves, this script only loads and plots.
 
-Takes a **run directory** (`<out_dir>/<tag>/`, as tools/measure_cost.py
+Takes a **run directory** (`<out_dir>/<tag>/`, as src/measure_cost.py
 writes -- holding `result.json`, not the samples.npz+metadata.json pair
 generate.py's runs use, since a cost probe's own output is already one
 self-contained file). "elapsed_all" inside it is already {scale: array of
@@ -28,18 +28,18 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # this dir, for bare imports below
+sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 
 from loglog_plot import loglog_plot  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Plot elapsed time vs scale (log-log) from a run directory tools/measure_cost.py wrote."
+        description="Plot elapsed time vs scale (log-log) from a run directory src/measure_cost.py wrote."
     )
     parser.add_argument(
         "-data", "--data", dest="data", required=True, type=Path,
-        help="Run directory written by tools/measure_cost.py (e.g. ../experiments/01_srw/data/cost_probe).",
+        help="Run directory written by src/measure_cost.py (e.g. ../experiments/01_srw/data/cost_probe).",
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,

@@ -3,7 +3,7 @@
 NOT Phase 1's gamma-estimation testbed. That remains blocked pending a
 closed-form E[Y_i]/gamma/omega1 for the article's appendix-SimpleRandomWalk
 (see PLAN.md "Open questions before Phase 1") -- MODELS["srw"] has no
-target_fn/true_gamma_key for exactly this reason, so tools/plot_loglog.py
+target_fn/true_gamma_key for exactly this reason, so src/plot_loglog.py
 never runs tools/loglog.py's gamma-hat estimators on this data (see that
 module's docstring). Here `srw` is used as a simulator whose per-call cost
 genuinely grows with scale -- unlike MODELS["synthetic"]'s draws, whose cost
@@ -25,7 +25,7 @@ def srw(k: int, n: int = 1, q: float = 0.5, rng: np.random.Generator | None = No
     (rather than looping n times), returning an array of n entries.
 
     `rng` defaults to a fresh, unseeded Generator if omitted; pass an
-    explicit seeded one for reproducible runs. tools/measure_cost.py calls
+    explicit seeded one for reproducible runs. src/measure_cost.py calls
     this with n=1 -- Assumption cost_is_power_law defines cost(i) as the
     cost of simulating *one* sample.
     """

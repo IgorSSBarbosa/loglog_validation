@@ -1,0 +1,58 @@
+# src
+
+The scripts a human runs directly (`python3 src/generate.py ...`) — as opposed to
+`tools/`, which holds the functions those scripts (and each other) call (user's own
+framing, 2026-08-12). One shared copy of each action, used by every experiment via a
+recipe's `"model"` field (dispatched through `tools/models.py`'s registry), instead
+of each experiment keeping its own copy.
+
+```bash
+cd src
+
+# 1. Generate samples
+python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
+python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
+
+# 2. Plot them (log-log)
+python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
+python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run
+
+# 3. Measure the cost-model exponent d (only meaningful for models whose cost
+#    genuinely grows with scale, e.g. srw)
+python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag cost_probe
+
+# 4. Plot that timing data
+python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
+```
+
+`generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
+Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.
+Default output directory is `data/` next to the recipe file itself (not this
+script's own location, since it's shared across experiments), so each experiment's
+runs still land under that experiment's own `data/`. Verified:
+`tools/tests/test_generate.py` (shapes match the recipe, `reproduce()` exact-match,
+both parametrized across every registered model).
+
+`plot_loglog.py` — the shared log-log plotter, reading a run directory's own
+`metadata.json` to look up its model in `tools/models.py`'s registry. Only overlays
+a reference curve / runs `tools/loglog.py`'s four $\hat\gamma$ estimators when that
+model has a `target_fn` (currently only `"synthetic"`) — computing a $\hat\gamma$
+with nothing known to validate it against would be an unvalidated number, easy to
+mistake for a checked result (see `experiments/01_srw/README.md`). Writes
+`<run_dir>/plot.png` (+ `estimates.png`, `results.json` when a target_fn is known)
+into the same folder as `samples.npz`/`metadata.json` — everything about one run in
+one place, and since `data/` is gitignored, nothing here is auto-committed. Copy a
+specific plot into the experiment's `images/` folder when you want to keep it as
+evidence (ground rule 1/6 — committed deliberately, one at a time).
+
+`measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
+plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
+`MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
+meaningful for models whose cost genuinely grows with scale (e.g. `"srw"`); pointed
+at `"synthetic"` it will just measure $d\approx0$, an expected, uninteresting
+result. Verified: `tools/tests/test_measure_cost.py` (real-timing acceptance check,
+$\hat d\in[0.8,1.2]$ for `srw`).
+
+Each of the four inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
+`tools/*.py` helper modules work regardless of where they're invoked from.

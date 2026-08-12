@@ -14,7 +14,7 @@ $Var(\xi_i)=\sigma_i^2 \to \sigma_\infty^2$ by construction (e.g. lognormal nois
 Ground truth $(\gamma, a_0, (a_j,\omega_j)_j, \sigma_\infty^2)$ is planted and known, so
 this rung tests only the *statistical* machinery, not model fidelity. Registered as
 `MODELS["synthetic"]` in `tools/models.py`; the actual formula/noise-family code lives in
-`tools/model_synthetic.py`, not in this folder — see `tools/README.md`.
+`models/synthetic.py`, not in this folder — see `models/README.md`.
 
 | # | Checkpoint | Acceptance criterion |
 |---|---|---|
@@ -26,9 +26,9 @@ this rung tests only the *statistical* machinery, not model fidelity. Registered
 
 ## Running this experiment
 
-This experiment has no scripts of its own any more — `tools/generate.py` and
-`tools/plot_loglog.py` are single, shared drivers used by every experiment (see
-`tools/README.md`), dispatching on `example_config.json`'s `"model": "synthetic"` field.
+This experiment has no scripts of its own any more — `src/generate.py` and
+`src/plot_loglog.py` are single, shared drivers used by every experiment (see
+`src/README.md`), dispatching on `example_config.json`'s `"model": "synthetic"` field.
 Two kinds of JSON, not to be confused: the hand-authored **recipe**
 (`example_config.json`, holding the agreed Phase-0 defaults: $\gamma=0.5$, $a_0=1$, one
 correction term $a_1=1,\omega_1=1$, $\sigma_\infty^2=0.04$, lognormal) is read-only and
@@ -38,7 +38,7 @@ directory per run (gitignored — regenerable, not source), holding `samples.npz
 future meta-log-log plot of $\mathrm{cost}(i)$ vs $i$; see `tools/cost_model.py`).
 
 ```
-cd tools
+cd src   # repo root -> src/, see src/README.md
 python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
 python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
 ```

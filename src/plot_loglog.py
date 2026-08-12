@@ -2,7 +2,7 @@
 the run's own metadata to dispatch, instead of each experiment keeping its
 own copy of this driver.
 
-Thin glue: loads the samples tools/generate.py already saved, and hands
+Thin glue: loads the samples src/generate.py already saved, and hands
 them to the generic tools/loglog_plot.py / tools/loglog.py (neither of which
 knows about any specific model). When the run's model (tools/models.py) has
 a known closed form (`target_fn`/`true_gamma_key` -- currently only
@@ -13,7 +13,7 @@ experiments/01_srw/README.md), this script **deliberately** only plots the
 raw data: computing a gamma_hat with nothing to validate it against would be
 an unvalidated number, easy to mistake for a checked result.
 
-Takes a **run directory** (`<out_dir>/<tag>/`, as tools/generate.py writes),
+Takes a **run directory** (`<out_dir>/<tag>/`, as src/generate.py writes),
 not a recipe -- a single recipe can produce many different runs (different
 tags/seeds), so pointing this at a recipe would be ambiguous about which
 run's data you mean. Metadata is read from `<run_dir>/metadata.json` if
@@ -43,7 +43,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # this dir, for bare imports below
+sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 
 from loglog import compare_methods  # noqa: E402
 from loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402
@@ -53,11 +53,11 @@ from persistence import load_metadata, load_samples  # noqa: E402
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Plot Y_bar_i vs i (log-log) from a run directory tools/generate.py wrote."
+        description="Plot Y_bar_i vs i (log-log) from a run directory src/generate.py wrote."
     )
     parser.add_argument(
         "-data", "--data", dest="data", required=True, type=Path,
-        help="Run directory written by tools/generate.py (e.g. ../experiments/00_synthetic/data/demo_run).",
+        help="Run directory written by src/generate.py (e.g. ../experiments/00_synthetic/data/demo_run).",
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,

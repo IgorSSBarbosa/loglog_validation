@@ -154,6 +154,27 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `test_measure_cost.py`, plus new `test_models.py`). Verified: full local suite (49
       cases) passing, both experiments' generate/plot/measure_cost/plot_cost CLIs run
       end-to-end producing identical numbers to before the consolidation
+- [x] ~~Three-way split, `tools`/`src`/`models` (user request, 2026-08-12): pulled the
+      CLI drivers (`generate.py`, `plot_loglog.py`, `measure_cost.py`, `plot_cost.py`)
+      out of `tools/` into a new `src/` -- "code called by other code" (`tools/`) vs.
+      "code called directly" (`src/`), the user's own framing. Then pulled
+      `tools/model_synthetic.py`/`tools/model_srw.py` out into their own new `models/`
+      (`models/synthetic.py`/`models/srw.py`), with `tools/models.py` left behind as a
+      pure importer/registry. That last move had a real self-collision risk: the new
+      top-level package is named `models`, the same name as the file `tools/models.py`
+      that needs to import from it -- `from models.srw import ...` from inside
+      `tools/models.py` would resolve back to itself (already bound in
+      `sys.modules["models"]` by whichever caller reached it via a bare `from models
+      import ...`), not the sibling directory. Fixed by never importing the literal
+      name `models` from within `tools/models.py`: it adds `models/` itself to
+      `sys.path` and imports `srw`/`synthetic` as bare top-level names instead. Also
+      caught and fixed a real pre-existing bug while touching this: `test_measure_cost.py`
+      inserted the wrong directory onto `sys.path` (`Path(__file__).resolve().parent`,
+      i.e. `tools/tests/` itself) and only passed when run as part of the full suite,
+      because an earlier-collected test file happened to have already fixed `sys.path`
+      as a side effect -- failed when run in isolation. Verified: full local suite (49
+      cases) passing both together and with `test_measure_cost.py`/`test_srw.py` run in
+      isolation; all four `src/` CLIs re-run end-to-end producing identical numbers
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

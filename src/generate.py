@@ -16,7 +16,7 @@ Two kinds of JSON file appear here, and they are NOT the same file:
     material for a future meta-log-log plot of cost(i) vs i (article
     Assumption cost_is_power_law, cost(i) = i**d; see tools/cost_model.py).
 
-Downstream tools (tools/plot_loglog.py) take a **run directory**
+Downstream tools (src/plot_loglog.py) take a **run directory**
 (`<out_dir>/<tag>/`), not a recipe -- a single recipe run with different
 tags/seeds produces many different run directories, so "give me a recipe"
 would be ambiguous about which run you mean.
@@ -40,7 +40,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # this dir, for models/persistence as bare imports too
+sys.path.insert(0, str(HERE.parent / "tools"))  # models/persistence live there, as bare imports
 
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402

@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # this dir, for bare imports below
+sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 
 from cost_model import estimate_cost_exponent  # noqa: E402
 from loglog import gamma_drop_leading  # noqa: E402

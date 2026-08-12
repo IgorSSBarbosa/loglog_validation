@@ -1,17 +1,19 @@
 # tools
 
-Shared, experiment-agnostic utilities. May not import from `experiments/`. Every
-function here needs a passing unit test in `tools/tests/` (checked against a closed
-form, not just "runs") before any experiment is allowed to depend on it.
-`tools/tests/` is gitignored (local verification only, not tracked in git — user
-request, 2026-08-12): the files are kept on disk and run normally via
-`python3 -m pytest`, but a fresh checkout or `EnterWorktree` won't have them.
+Helper functions: code meant to be *called by other code*, not run directly (user's
+own framing, 2026-08-12) — `src/` holds the scripts a human runs
+(`python3 src/generate.py ...`); everything here is imported by those scripts, or by
+each other, or by tests. May not import from `experiments/`. Every function here
+needs a passing unit test in `tools/tests/` (checked against a closed form, not just
+"runs") before any experiment is allowed to depend on it. `tools/tests/` is
+gitignored (local verification only, not tracked in git — user request,
+2026-08-12): the files are kept on disk and run normally via `python3 -m pytest`, but
+a fresh checkout or `EnterWorktree` won't have them.
 
-This directory also holds the single, shared CLI drivers (`generate.py`,
-`plot_loglog.py`, `measure_cost.py`, `plot_cost.py`) — one copy each, used by every
-experiment, instead of each experiment keeping its own. What's model-specific lives
-in `tools/model_<name>.py` + one entry in `tools/models.py`'s registry, not in the
-drivers themselves.
+Model-specific simulation code lives in `models/<name>.py` (a sibling of `tools/`,
+not a subfolder of it — see `models/README.md`) + one entry in `tools/models.py`'s
+registry; `tools/models.py` itself is purely an importer/registry module, not where
+the simulation logic lives.
 
 `loglog_plot.py` — two charts. `loglog_plot`: generic log-log plot of
 $\overline Y_i$ vs $i$ (any `{scale: samples}` dict, from any experiment) with
@@ -81,50 +83,29 @@ Verified: `tools/tests/test_persistence.py` (10 cases — save/load roundtrip,
 content-hash determinism, missing-file handling, the one-run-one-folder shape).
 
 `models.py` — the `MODELS` registry (`ModelSpec`: `simulate(i, n, params, rng)`,
-optional `target_fn(i, params)` and `true_gamma_key`) that `generate.py`,
-`measure_cost.py`, and `plot_loglog.py` dispatch through via a run's `"model"`
-name, instead of each experiment hardcoding its own simulator. Each entry's actual
-logic lives in its own `tools/model_<name>.py`:
-- `model_synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`,
+optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate.py`,
+`src/measure_cost.py`, and `src/plot_loglog.py` dispatch through via a run's
+`"model"` name, instead of each experiment hardcoding its own simulator. This file
+is purely an importer: it adds the sibling `models/` directory to `sys.path` and
+imports each `models/<name>.py` as a bare top-level name (`srw`, `synthetic`) --
+deliberately never through the literal name `models`, since this file is itself
+`tools/models.py` and would otherwise self-referentially collide with its own
+module identity (see its docstring). The actual per-model logic lives in
+`models/<name>.py`, one level up — see `models/README.md`:
+- `synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`,
   `mean_Y`, article eq. 232). Has both `target_fn` and `true_gamma_key="gamma"`,
   since the ground truth is planted and known — the only model that currently does.
-- `model_srw.py` — `srw(k, n, q, rng)`, $n$ i.i.d. realizations of $|S_k|$
+- `srw.py` — `srw(k, n, q, rng)`, $n$ i.i.d. realizations of $|S_k|$
   (vectorized $(n,k)$ step matrix). No `target_fn`/`true_gamma_key`: no
   article-sanctioned closed form for SRW yet (see `experiments/01_srw/README.md`),
-  which is exactly what keeps `plot_loglog.py` from running gamma-hat estimators
+  which is exactly what keeps `src/plot_loglog.py` from running gamma-hat estimators
   against it — not a special case in the driver, just an absence in the registry.
 
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
-`tools/tests/test_model_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
-\sim\sqrt{2k/\pi}$ asymptotic).
-
-`generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
-Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.
-Default output directory is `data/` next to the recipe file itself (not the
-script's own location, since this script is no longer inside any one experiment
-folder), so each experiment's runs still land under that experiment's own `data/`.
-Verified: `tools/tests/test_generate.py` (shapes match the recipe, `reproduce()`
-exact-match, both parametrized across every registered model).
-
-`plot_loglog.py` — the shared log-log plotter, reading a run directory's own
-`metadata.json` to look up its model in the registry. Only overlays a reference
-curve / runs `loglog.py`'s four $\hat\gamma$ estimators when that model has a
-`target_fn` (currently only `"synthetic"`) — computing a $\hat\gamma$ with nothing
-known to validate it against would be an unvalidated number, easy to mistake for a
-checked result (see `experiments/01_srw/README.md`). Writes `<run_dir>/plot.png`
-(+ `estimates.png`, `results.json` when a target_fn is known) into the same folder
-as `samples.npz`/`metadata.json` — everything about one run in one place, and since
-`data/` is gitignored, nothing here is auto-committed. Copy a specific plot into the
-experiment's `images/` folder when you want to keep it as evidence (ground rule 1/6
-— committed deliberately, one at a time).
-
-`measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
-plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
-`MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
-meaningful for models whose cost genuinely grows with scale (e.g. `"srw"`);
-pointed at `"synthetic"` it will just measure $d\approx0$, an expected,
-uninteresting result. Verified: `tools/tests/test_measure_cost.py` (real-timing
-acceptance check, $\hat d\in[0.8,1.2]$ for `srw`).
+`tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
+\sim\sqrt{2k/\pi}$ asymptotic). The four scripts that dispatch through this
+registry (`generate.py`, `plot_loglog.py`, `measure_cost.py`, `plot_cost.py`) live
+in `src/`, not here — see `src/README.md`.
 
 `cost_model.py` — `estimate_cost_exponent`, recovering the cost-model exponent
 $d$ from Assumption `cost_is_power_law` ($\mathrm{cost}(i)=i^d$), which has the

@@ -72,14 +72,33 @@ $\sigma_k^2 = Var(\xi_k)$, $\xi_k = Y_{\rho^k}/\mathbb{E} Y_{\rho^k}$ (notation 
 ```
 loglog_validation/
   PLAN.md  TODO.md  README.md  requirements.txt
-  tools/                        <- shared, experiment-agnostic. May not import
-                                    from experiments/. Every function here has a
-                                    unit test in tools/tests/ before it is used
-                                    by any experiment. tools/tests/ is gitignored
-                                    (local verification only, not tracked -- user
-                                    request 2026-08-12; kept on disk, run via
-                                    `python3 -m pytest`, but absent from a fresh
-                                    checkout/worktree).
+  src/                          <- the scripts a human runs directly (user's own
+                                    framing, 2026-08-12): `python3 src/generate.py
+                                    ...`. tools/ holds what these call, not the
+                                    other way around -- src/ may import tools/,
+                                    tools/ may not import src/.
+    generate.py                  single shared sample-generator CLI/API, dispatches
+                                  on a recipe's "model" field into tools/models.py's
+                                  MODELS registry instead of each experiment
+                                  keeping its own copy
+    plot_loglog.py                single shared log-log plotter; only runs
+                                  tools/loglog.py's gamma-hat estimators when the
+                                  run's model has a known target_fn (currently only
+                                  "synthetic" -- SRW's gamma-estimation ladder is
+                                  still blocked, see experiments/01_srw/README.md)
+    measure_cost.py               single shared cost-model-exponent probe, same
+                                  MODELS-registry dispatch as generate.py
+    plot_cost.py                  single shared plot of measure_cost.py's output
+  tools/                        <- shared, experiment-agnostic *helper* functions:
+                                    called by src/'s scripts, or by each other, or
+                                    by tests -- never run directly. May not import
+                                    from experiments/ or src/. Every function here
+                                    has a unit test in tools/tests/ before it is
+                                    used by any experiment. tools/tests/ is
+                                    gitignored (local verification only, not
+                                    tracked -- user request 2026-08-12; kept on
+                                    disk, run via `python3 -m pytest`, but absent
+                                    from a fresh checkout/worktree).
     loglog.py                    weighted OLS estimator (eq. 523-531)
     wilson.py                    Wilson CI (eq. 720)
     allocation.py                budget allocation rule (eq. 945-946) + cost accounting
@@ -92,22 +111,26 @@ loglog_validation/
                                   + metadata.json (not `io.py`: that name would shadow
                                   the stdlib `io` module once tools/ is on sys.path)
     models.py                    MODELS registry (name -> ModelSpec: simulate, optional
-                                  target_fn/true_gamma_key) -- one entry per
-                                  tools/model_<name>.py, e.g. model_synthetic.py,
-                                  model_srw.py
-    generate.py                  single shared sample-generator CLI/API, dispatches on
-                                  a recipe's "model" field into the MODELS registry
-                                  instead of each experiment keeping its own copy
-    plot_loglog.py                single shared log-log plotter; only runs
-                                  tools/loglog.py's gamma-hat estimators when the run's
-                                  model has a known target_fn (currently only
-                                  "synthetic" -- SRW's gamma-estimation ladder is still
-                                  blocked, see experiments/01_srw/README.md)
-    measure_cost.py               single shared cost-model-exponent probe, same
-                                  MODELS-registry dispatch as generate.py
-    plot_cost.py                  single shared plot of measure_cost.py's output
+                                  target_fn/true_gamma_key) -- purely an importer;
+                                  one entry per models/<name>.py (see below), which
+                                  it reaches by adding models/ to sys.path and
+                                  importing "srw"/"synthetic" as bare names, never
+                                  through the literal name "models" (self-collision
+                                  with this file's own identity as tools/models.py
+                                  -- see its docstring)
     tests/                       pytest unit tests, run against closed forms (see note
                                   above -- gitignored)
+  models/                       <- per-model simulation logic, one file per
+                                    registered model (user's own framing,
+                                    2026-08-12), kept separate from both tools/ and
+                                    src/. Each exposes simulate(i, n, params, rng)
+                                    and, only when the article gives a known closed
+                                    form, target_fn(i, params).
+    synthetic.py                  the closed-form model (SyntheticParams,
+                                  NOISE_FAMILIES, mean_Y, eq. 232) -- has a
+                                  target_fn, currently the only one that does
+    srw.py                        srw(k, n, q, rng) -- no target_fn (no
+                                  article-sanctioned closed form yet)
   experiments/
     00_synthetic/                planted-truth model, cheap — start here
     01_srw/                      simple random walk (needs closed-form target for its
@@ -120,12 +143,12 @@ loglog_validation/
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
                                   current status (not started / in progress / passing)
-      example_config.json         recipe(s) for tools/generate.py (and, where relevant,
-                                  tools/measure_cost.py) -- the model-specific simulator
-                                  itself lives in tools/model_<name>.py, not here
+      example_config.json         recipe(s) for src/generate.py (and, where relevant,
+                                  src/measure_cost.py) -- the model-specific simulator
+                                  itself lives in models/<name>.py, not here
       data/                      this experiment's runs (gitignored), one `<tag>/`
-                                  folder per run, written by tools/generate.py /
-                                  tools/measure_cost.py -- never shared with another
+                                  folder per run, written by src/generate.py /
+                                  src/measure_cost.py -- never shared with another
                                   experiment
       images/                    this experiment's figures only (committed evidence,
                                   ground rule 1), never shared
