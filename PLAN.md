@@ -75,7 +75,11 @@ loglog_validation/
   tools/                        <- shared, experiment-agnostic. May not import
                                     from experiments/. Every function here has a
                                     unit test in tools/tests/ before it is used
-                                    by any experiment.
+                                    by any experiment. tools/tests/ is gitignored
+                                    (local verification only, not tracked -- user
+                                    request 2026-08-12; kept on disk, run via
+                                    `python3 -m pytest`, but absent from a fresh
+                                    checkout/worktree).
     loglog.py                    weighted OLS estimator (eq. 523-531)
     wilson.py                    Wilson CI (eq. 720)
     allocation.py                budget allocation rule (eq. 945-946) + cost accounting
@@ -83,21 +87,48 @@ loglog_validation/
     rng.py                       independent-stream seeding (SeedSequence.spawn keyed by
                                   (experiment, config_id, replicate_index)) — enforces
                                   ground rule 2
-    io.py                        metadata-sidecar writer/reader (seed, config, timing)
-    tests/                       pytest unit tests, run against closed forms
+    persistence.py                sample+metadata save/load, shared by every model: one
+                                  run = one `<out_dir>/<tag>/` folder holding samples.npz
+                                  + metadata.json (not `io.py`: that name would shadow
+                                  the stdlib `io` module once tools/ is on sys.path)
+    models.py                    MODELS registry (name -> ModelSpec: simulate, optional
+                                  target_fn/true_gamma_key) -- one entry per
+                                  tools/model_<name>.py, e.g. model_synthetic.py,
+                                  model_srw.py
+    generate.py                  single shared sample-generator CLI/API, dispatches on
+                                  a recipe's "model" field into the MODELS registry
+                                  instead of each experiment keeping its own copy
+    plot_loglog.py                single shared log-log plotter; only runs
+                                  tools/loglog.py's gamma-hat estimators when the run's
+                                  model has a known target_fn (currently only
+                                  "synthetic" -- SRW's gamma-estimation ladder is still
+                                  blocked, see experiments/01_srw/README.md)
+    measure_cost.py               single shared cost-model-exponent probe, same
+                                  MODELS-registry dispatch as generate.py
+    plot_cost.py                  single shared plot of measure_cost.py's output
+    tests/                       pytest unit tests, run against closed forms (see note
+                                  above -- gitignored)
   experiments/
     00_synthetic/                planted-truth model, cheap — start here
-    01_srw/                      simple random walk (needs closed-form target — open)
+    01_srw/                      simple random walk (needs closed-form target for its
+                                  gamma-estimation ladder — open; its srw() simulator is
+                                  usable now for cost-model + sample-generation purposes,
+                                  see its README)
     02_rwre/                     random walk in random environment
     03_percolation_zd/           site percolation, Z^d, d = 2..6/7
     04_percolation_hierarchical/ Bethe lattice / hierarchical graphs
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
                                   current status (not started / in progress / passing)
-      model.py / generator.py    the simulator or generator, nothing else
-      run_<checkpoint>.py        one script per checkpoint, not one monolith
-      data/                      this experiment's data only, never shared
-      images/                    this experiment's figures only, never shared
+      example_config.json         recipe(s) for tools/generate.py (and, where relevant,
+                                  tools/measure_cost.py) -- the model-specific simulator
+                                  itself lives in tools/model_<name>.py, not here
+      data/                      this experiment's runs (gitignored), one `<tag>/`
+                                  folder per run, written by tools/generate.py /
+                                  tools/measure_cost.py -- never shared with another
+                                  experiment
+      images/                    this experiment's figures only (committed evidence,
+                                  ground rule 1), never shared
 ```
 
 ## Experiment ladder

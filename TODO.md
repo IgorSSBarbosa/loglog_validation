@@ -130,6 +130,30 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       optimum, continuous allocation costs exactly $B$, discretized allocation never
       exceeds $B$ when feasible, the small-$B$ infeasibility case itself, parameter
       validation ($d,\omega_1>0$, $\rho>1$, $m\ge1$, $B\ge1$)
+- [x] ~~Consolidate per-experiment scripts (user request, 2026-08-12): each experiment
+      had grown its own `generate.py`/`measure_cost.py`/`plot_cost.py`/`plot_loglog.py`
+      -- replaced with one shared copy of each in `tools/`, dispatching on a recipe's
+      new `"model"` field via a `tools/models.py` registry (`ModelSpec`: `simulate`,
+      optional `target_fn`/`true_gamma_key`). Model-specific code moved out of
+      `experiments/*/`: `tools/model_synthetic.py` (was `generator.py`'s
+      `SyntheticParams`/`NOISE_FAMILIES`/`mean_Y`), `tools/model_srw.py` (was
+      `experiments/01_srw/srw.py`). `tools/plot_loglog.py` only runs `loglog.py`'s
+      gamma-hat estimators when the dispatched model has a `target_fn` -- currently
+      only `"synthetic"` -- preserving the deliberate SRW behavior without a special
+      case in the driver. `tools/persistence.py` now nests each run under
+      `<out_dir>/<tag>/{samples.npz,metadata.json}` (was flat `<tag>.npz`+`<tag>.json`)
+      so `data/` stays navigable with dozens of runs; `write_metadata` also records
+      `model`. Default `out_dir` for both `generate.py` and `measure_cost.py` is derived
+      from the recipe file's own location (`<meta>.parent/data`), not the (no longer
+      experiment-specific) script's location, so each experiment's runs still land
+      under that experiment's own `data/`. Also (same request): `tools/tests/` is now
+      gitignored -- kept on disk, run locally via `python3 -m pytest`, but not tracked
+      in git and therefore absent from a fresh checkout or `EnterWorktree` worktree; all
+      test files were consolidated there (`experiments/01_srw/test_*.py` deleted,
+      content ported to `tools/tests/test_model_srw.py`/`test_generate.py`/
+      `test_measure_cost.py`, plus new `test_models.py`). Verified: full local suite (49
+      cases) passing, both experiments' generate/plot/measure_cost/plot_cost CLIs run
+      end-to-end producing identical numbers to before the consolidation
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

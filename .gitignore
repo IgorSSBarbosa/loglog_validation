@@ -7,3 +7,9 @@ __pycache__/
 # recipe JSON, not source. images/ is NOT ignored: figures are committed
 # deliberately as evidence, one at a time (see PLAN.md ground rule 6).
 experiments/*/data/
+
+# Local verification only, not tracked (user request, 2026-08-12): every
+# test_*.py lives under tools/tests/. Kept on disk and run locally
+# (python3 -m pytest); a fresh `git clone`/EnterWorktree checkout of this
+# repo will not have them -- see TODO.md's note on this tradeoff.
+tools/tests/
