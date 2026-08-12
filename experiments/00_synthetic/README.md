@@ -40,22 +40,25 @@ future meta-log-log plot of $\mathrm{cost}(i)$ vs $i$; see `tools/cost_model.py`
 ```
 cd src   # repo root -> src/, see src/README.md
 python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
-python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
+python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
 ```
 
 `plot_loglog.py` takes a **run directory** (`-data`), not a recipe or a bare file — one
 recipe can produce many different runs (different tags/seeds), so pointing it at the
-recipe would be ambiguous about which run's data you mean. Since this model has a known
-closed form (`MODELS["synthetic"].target_fn`), `plot_loglog.py` overlays the reference
-curve and additionally writes `data/<tag>/estimates.png` + `data/<tag>/results.json`
-(same folder as `samples.npz`/`metadata.json`/`plot.png` — everything about one run in
-one place; `data/` is gitignored, copy a plot into `images/` to keep it as evidence),
-comparing four $\hat\gamma$ estimators from `tools/loglog.py` (all-points OLS, two-point/
-$m{=}2$, drop-leading-$m_0$ sweep, and a maximum-likelihood estimator — see
-`derivations/mle_gamma_estimator.tex` for its derivation) — see `tools/README.md` for
-what's implemented (as of checkpoint 0.2, also the article's own closed-form weighted
-estimator, not currently wired into `compare_methods` since it requires scales on a
-consecutive $\rho^k$ grid) and what's still open.
+recipe would be ambiguous about which run's data you mean. `data/<tag>/plot.png` always
+overlays the all-points OLS fit (solid line, needs no known truth) and, since this
+model has a known closed form (`MODELS["synthetic"].target_fn`), also the reference
+$\mathbb{E} Y_i$ curve (dashed) for comparison. `data/<tag>/results.json` (four
+$\hat\gamma$ estimators from `tools/loglog.py`: all-points OLS, two-point/$m{=}2$,
+drop-leading-$m_0$ sweep, and a maximum-likelihood estimator — see
+`derivations/mle_gamma_estimator.tex` for its derivation) is always written; the
+`--estimates` flag additionally saves `data/<tag>/estimates.png`, the four-estimator
+comparison chart (same folder as `samples.npz`/`metadata.json`/`plot.png` — everything
+about one run in one place; `data/` is gitignored, copy a plot into `images/` to keep
+it as evidence) — see `tools/README.md` for what's implemented (as of checkpoint 0.2,
+also the article's own closed-form weighted estimator, not currently wired into
+`compare_methods` since it requires scales on a consecutive $\rho^k$ grid) and what's
+still open.
 
 `tools.generate.generate(..., out_dir=..., tag=...)` is the equivalent programmatic entry
 point for batch use (content-hash tags by default, so an identical rerun overwrites

@@ -87,21 +87,26 @@ the same run-directory shape every model uses. Recipe (`example_config.json`) mi
 for `SyntheticParams`:
 
 ```
-cd ../../tools    # or wherever tools/ is relative to your cwd
+cd ../../src    # or wherever src/ is relative to your cwd
 python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
-python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run
+python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run --estimates
 ```
 
-`plot_loglog.py` hands the saved samples straight to `tools/loglog_plot.py`'s generic
-`loglog_plot` — same tool 00_synthetic uses. **Deliberately does not** run
-`tools/loglog.py`'s $\hat\gamma$ estimators or overlay a reference curve, unlike
-00_synthetic's data: `MODELS["srw"]` has no `target_fn` (see "Gamma-estimation ladder"
-above, still blocked), so any $\hat\gamma$ computed from this data would be an
-unvalidated number, not a checkpoint result — don't mistake this for Phase 1 progress.
-What this *does* establish: the log-log plot of $\overline{|S_k|}$ vs $k$ is visibly a
-clean straight line (slope $\approx 0.5$, consistent with the classical
-$\mathbb{E}|S_k| \sim \sqrt{2k/\pi}$ asymptotic) — useful groundwork for whenever
-Phase 1's design question is resolved, but not itself a validated result.
+`plot_loglog.py` hands the saved samples to `tools/loglog_plot.py`'s generic
+`loglog_plot` (same tool 00_synthetic uses) and always runs `tools/loglog.py`'s
+four $\hat\gamma$ estimators (`compare_methods`), writing `results.json` --
+comparing estimators against each other doesn't need a known ground truth, only
+comparing against one does. What it does **not** do: overlay a reference curve, or
+claim any of these numbers are checked against a known target -- `MODELS["srw"]`
+has no `target_fn` (see "Gamma-estimation ladder" above, still blocked), so
+`plot_loglog.py` prints an explicit note that the $\hat\gamma$ values are
+exploratory, not a checkpoint result. Don't mistake this for Phase 1 progress: the
+numbers are real estimates, just not yet validated against an article-sanctioned
+closed form. What this *does* establish: the log-log plot of $\overline{|S_k|}$ vs
+$k$ is visibly a clean straight line, and all four estimators agree closely around
+$\hat\gamma\approx0.5$ — consistent with the classical $\mathbb{E}|S_k| \sim
+\sqrt{2k/\pi}$ asymptotic — useful groundwork for whenever Phase 1's design
+question is resolved, but not itself a validated result.
 
 `tools/tests/test_generate.py` checks output shapes match the recipe and that
 `reproduce()` (regenerate from recorded metadata) matches a saved run exactly, for

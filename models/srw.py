@@ -4,8 +4,10 @@ NOT Phase 1's gamma-estimation testbed. That remains blocked pending a
 closed-form E[Y_i]/gamma/omega1 for the article's appendix-SimpleRandomWalk
 (see PLAN.md "Open questions before Phase 1") -- MODELS["srw"] has no
 target_fn/true_gamma_key for exactly this reason, so src/plot_loglog.py
-never runs tools/loglog.py's gamma-hat estimators on this data (see that
-module's docstring). Here `srw` is used as a simulator whose per-call cost
+never overlays a reference curve or reports a true_gamma for this model's
+data, and prints an explicit "exploratory, not validated" note alongside
+any gamma-hat it does compute (see that module's docstring). Here `srw` is
+used as a simulator whose per-call cost
 genuinely grows with scale -- unlike MODELS["synthetic"]'s draws, whose cost
 is ~constant in i -- a fixture for validating tools/cost_model.py's
 estimator against a known ground truth: generating k i.i.d. +-1 steps and

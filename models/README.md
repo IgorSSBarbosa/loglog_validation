@@ -8,9 +8,10 @@ registry). Each file exposes:
 - `simulate(i, n, params, rng) -> np.ndarray` — required, `n` i.i.d. samples at scale `i`.
 - `target_fn(i, params) -> np.ndarray` — optional, the article's known closed-form
   $\mathbb{E} Y_i$. Only present when there actually is an article-sanctioned closed
-  form; its *absence* is what keeps `src/plot_loglog.py` from running
-  `tools/loglog.py`'s $\hat\gamma$ estimators against a model, not a special case
-  coded into any driver.
+  form; its *absence* is what keeps `src/plot_loglog.py` from overlaying a
+  reference curve or reporting a `true_gamma` for a model (the $\hat\gamma$
+  estimators themselves still run either way, flagged exploratory when there's
+  nothing known to check them against) — not a special case coded into any driver.
 - `true_gamma_key` (declared in `tools/models.py`'s registry entry, not here) —
   which key in `params` holds the true $\gamma$, when known.
 

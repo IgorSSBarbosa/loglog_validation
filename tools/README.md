@@ -17,8 +17,11 @@ the simulation logic lives.
 
 `loglog_plot.py` — two charts. `loglog_plot`: generic log-log plot of
 $\overline Y_i$ vs $i$ (any `{scale: samples}` dict, from any experiment) with
-$\pm 1$ SE error bars and an optional overlay of a known $\mathbb{E} Y_i$
-curve. `estimates_plot`: compares the four $\hat\gamma$ estimators from
+$\pm 1$ SE error bars, an optional overlay of a known $\mathbb{E} Y_i$ curve
+(`target_fn`, dashed gray, only when ground truth is known), and an optional
+overlay of an arbitrary fitted curve (`fit_fn`, solid colored -- e.g. the
+all-points OLS fit, which needs no known ground truth, just the data itself;
+`src/plot_loglog.py` always passes one). `estimates_plot`: compares the four $\hat\gamma$ estimators from
 `loglog.py`'s `compare_methods` — `two_point`/`drop_leading` (each a sequence
 of estimates) plotted against the smallest scale in their window, so the
 chart shows convergence as small, more finite-size-biased scales are dropped;
@@ -56,10 +59,17 @@ noiseless synthetic run) makes $\hat\sigma^2\to0$ and is numerically
 degenerate — not a bug, a structural feature of this particular MLE (the OLS
 methods don't have it, since they never divide by an estimated variance).
 
-`compare_methods` bundles all four into one JSON-serializable dict (now takes
-`n`, the per-scale sample counts, in addition to `scales`/`y_bar`, since
-`gamma_mle` needs it). Not wired into `compare_methods` (which is deliberately
-grid-agnostic): the article's exact closed-form $w_{k,m}$ weights,
+`compare_methods` bundles all four into one JSON-serializable dict (takes `n`,
+the per-scale sample counts, in addition to `scales`/`y_bar`, since
+`gamma_mle` needs it; `true_gamma` is genuinely optional -- comparing
+estimators against each other doesn't require a known ground truth, only
+comparing against one does). `all_points` also carries `a0_hat` (the OLS
+fit's intercept, exp'd) alongside `gamma_hat` -- needed to actually draw the
+fitted line (`src/plot_loglog.py`'s `fit_fn`), not just report its slope.
+`src/plot_loglog.py` runs this, and writes its output to `results.json`, for
+every model unconditionally, not just ones with a known closed form -- see
+that script's module docstring for why. Not wired into `compare_methods`
+(which is deliberately grid-agnostic): the article's exact closed-form $w_{k,m}$ weights,
 `closed_form_weights`/`gamma_closed_form` — checkpoint 0.2's acceptance
 criterion. Unlike the other four, this one requires `scales` to be exactly the
 consecutive grid $\rho^k$, $k=m_0+1,\dots,m_0+m$ (raises otherwise), so it
@@ -98,8 +108,11 @@ module identity (see its docstring). The actual per-model logic lives in
 - `srw.py` — `srw(k, n, q, rng)`, $n$ i.i.d. realizations of $|S_k|$
   (vectorized $(n,k)$ step matrix). No `target_fn`/`true_gamma_key`: no
   article-sanctioned closed form for SRW yet (see `experiments/01_srw/README.md`),
-  which is exactly what keeps `src/plot_loglog.py` from running gamma-hat estimators
-  against it — not a special case in the driver, just an absence in the registry.
+  which is exactly what keeps `src/plot_loglog.py` from overlaying a reference
+  curve or reporting a `true_gamma` for this model — not a special case in the
+  driver, just an absence in the registry. The gamma-hat estimators still run
+  (comparing estimators against each other doesn't need a known truth); an
+  explicit "exploratory" note is printed instead.
 
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
 `tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|

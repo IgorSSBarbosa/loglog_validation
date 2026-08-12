@@ -215,12 +215,15 @@ def gamma_mle(scales, y_bar, n) -> dict:
 
 def compare_methods(scales, y_bar, n, *, true_gamma: float | None = None) -> dict:
     """Bundle methods 1-4 into one JSON-serializable comparison dict."""
+    log_i, log_y = _sorted_log(scales, y_bar)
+    all_points_slope, all_points_intercept = ols_slope(log_i, log_y)
     result = {
         "scales": [int(s) for s in np.sort(np.asarray(scales))],
         "methods": {
             "all_points": {
                 "description": "OLS slope of log(Y_bar_i) vs log(i), using every scale",
-                "gamma_hat": gamma_all_points(scales, y_bar),
+                "gamma_hat": float(all_points_slope),
+                "a0_hat": float(np.exp(all_points_intercept)),
                 "n_points": int(len(scales)),
             },
             "two_point": {

@@ -52,9 +52,11 @@ MODELS: dict[str, ModelSpec] = {
         simulate=model_srw.simulate,
         # No target_fn/true_gamma_key: no article-sanctioned closed form for
         # SRW yet (see models/srw.py, experiments/01_srw/README.md). This is
-        # what keeps src/plot_loglog.py from running gamma-hat estimators
-        # against this model -- not a special case in the driver, just the
-        # absence of a target_fn here.
+        # what keeps src/plot_loglog.py from overlaying a reference curve or
+        # reporting a true_gamma for this model -- not a special case in the
+        # driver, just the absence of a target_fn here. The gamma-hat
+        # estimators themselves still run (comparing estimators against each
+        # other doesn't need a known truth), flagged as exploratory instead.
     ),
 }
 

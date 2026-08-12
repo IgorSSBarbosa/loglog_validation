@@ -62,6 +62,8 @@ def loglog_plot(
     *,
     ax=None,
     target_fn: Callable[[np.ndarray], np.ndarray] | None = None,
+    fit_fn: Callable[[np.ndarray], np.ndarray] | None = None,
+    fit_label: str | None = None,
     label: str | None = None,
 ):
     """Plot Y_bar_i vs i on log-log axes, with +-1 SE error bars.
@@ -71,7 +73,11 @@ def loglog_plot(
     samples : {i: array of n_i i.i.d. draws of Y_i}
     ax : matplotlib Axes, optional. A new figure/axes is created if omitted.
     target_fn : optional callable i (array) -> E[Y_i], overlaid as a dashed
-        reference curve when ground truth is known (e.g. synthetic data).
+        gray reference curve when ground truth is known (e.g. synthetic data).
+    fit_fn : optional callable i (array) -> fitted value, overlaid as a solid
+        colored line -- e.g. an OLS fit computed from this same data, distinct
+        from target_fn (a known truth) even when both are present at once.
+    fit_label : legend label for fit_fn; ignored if fit_fn is None.
     label : optional legend label for the sample-mean series.
 
     Returns
@@ -90,6 +96,10 @@ def loglog_plot(
     if target_fn is not None:
         fine = np.geomspace(scales.min(), scales.max(), 200)
         ax.plot(fine, target_fn(fine), "--", color="gray", label=r"$\mathbb{E}\,Y_i$ (known)")
+
+    if fit_fn is not None:
+        fine = np.geomspace(scales.min(), scales.max(), 200)
+        ax.plot(fine, fit_fn(fine), "-", color=_ORANGE, linewidth=2, label=fit_label or "OLS fit")
 
     ax.set_xscale("log")
     ax.set_yscale("log")

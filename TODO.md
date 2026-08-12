@@ -175,6 +175,25 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       as a side effect -- failed when run in isolation. Verified: full local suite (49
       cases) passing both together and with `test_measure_cost.py`/`test_srw.py` run in
       isolation; all four `src/` CLIs re-run end-to-end producing identical numbers
+- [x] ~~Generalize the estimator comparison to every model, not just `"synthetic"`
+      (user request, 2026-08-12): `src/plot_loglog.py`'s raw-data `plot.png` now always
+      overlays the all-points OLS fit (solid line, $\hat\gamma$ in the legend) — needs
+      no known ground truth, just the data itself — in addition to the known
+      $\mathbb{E} Y_i$ curve (dashed) when a `target_fn` exists. `tools/loglog.py`'s
+      `compare_methods` (all four estimators) now runs and writes `results.json`
+      unconditionally, for every model, not gated on `target_fn` — comparing estimators
+      against each other doesn't need a known truth, only comparing against one does;
+      when `true_gamma` is unknown, an explicit "exploratory, not validated" note is
+      printed instead of skipping the computation. The four-estimator comparison
+      *chart* (`estimates.png`) is opt-in via a new `--estimates` flag, since unlike
+      `results.json` it's a supplementary figure (ground rule 1). Also added
+      `all_points.a0_hat` to `compare_methods`'s output (the OLS fit's intercept,
+      exp'd) — needed to actually draw the fitted line, previously discarded. Verified:
+      `tools/tests/test_loglog.py` (+2 cases — `a0_hat` recovery, `true_gamma`
+      genuinely optional), both models' `plot_loglog.py --estimates` re-run end-to-end
+      (SRW's four estimators agree closely around $\hat\gamma\approx0.5$, consistent
+      with the classical $\sqrt{2k/\pi}$ asymptotic, without any `target_fn` being
+      registered for it)
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

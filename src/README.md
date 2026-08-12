@@ -13,9 +13,9 @@ cd src
 python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
 python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
 
-# 2. Plot them (log-log)
+# 2. Plot them (log-log) -- add --estimates for the 4-estimator comparison chart
 python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
-python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run
+python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run --estimates
 
 # 3. Measure the cost-model exponent d (only meaningful for models whose cost
 #    genuinely grows with scale, e.g. srw)
@@ -34,16 +34,23 @@ runs still land under that experiment's own `data/`. Verified:
 both parametrized across every registered model).
 
 `plot_loglog.py` — the shared log-log plotter, reading a run directory's own
-`metadata.json` to look up its model in `tools/models.py`'s registry. Only overlays
-a reference curve / runs `tools/loglog.py`'s four $\hat\gamma$ estimators when that
-model has a `target_fn` (currently only `"synthetic"`) — computing a $\hat\gamma$
-with nothing known to validate it against would be an unvalidated number, easy to
-mistake for a checked result (see `experiments/01_srw/README.md`). Writes
-`<run_dir>/plot.png` (+ `estimates.png`, `results.json` when a target_fn is known)
-into the same folder as `samples.npz`/`metadata.json` — everything about one run in
-one place, and since `data/` is gitignored, nothing here is auto-committed. Copy a
-specific plot into the experiment's `images/` folder when you want to keep it as
-evidence (ground rule 1/6 — committed deliberately, one at a time).
+`metadata.json` to look up its model in `tools/models.py`'s registry. The raw-data
+plot (`<run_dir>/plot.png`) always overlays the all-points OLS fit (solid line,
+$\hat\gamma$ in the legend) — needs no known ground truth, it's computed from the
+data itself — and additionally overlays the known $\mathbb{E} Y_i$ curve (dashed)
+when the model has a `target_fn` (currently only `"synthetic"`).
+`tools/loglog.py`'s four-estimator comparison (`compare_methods`) always runs and
+is always written to `<run_dir>/results.json`, for every model — comparing
+estimators against each other doesn't need a known truth, only comparing against
+one does; when `true_gamma` is unknown, a printed note makes clear the numbers are
+exploratory, not a validated checkpoint result (see
+`experiments/01_srw/README.md`). The four-estimator comparison *chart*
+(`estimates.png`) is opt-in via `--estimates`, since unlike `results.json` it's a
+supplementary figure (ground rule 1), not the numeric result itself. Everything
+about one run lives in the same folder as `samples.npz`/`metadata.json`, and since
+`data/` is gitignored, nothing here is auto-committed — copy a specific plot into
+the experiment's `images/` folder when you want to keep it as evidence (ground
+rule 1/6 — committed deliberately, one at a time).
 
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
