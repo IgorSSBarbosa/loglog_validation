@@ -9,6 +9,11 @@ created) -- one run, one self-contained folder, rather than a flat
 runs (different tags, different models) this keeps `data/` from turning into
 an unsorted pile of same-prefixed files.
 
+For runs too large to build entirely in RAM, `open_scale_writer` gives an
+alternative: `<out_dir>/<tag>/samples/<scale>.npy`, one real on-disk array per
+scale, written into in slices via a memmap instead of assembled in memory and
+saved all at once. `load_samples` reads either layout transparently.
+
 Two kinds of JSON file, not to be confused: a hand-authored **recipe**
 (read-only, never modified by anything here) vs. **output metadata** written
 alongside generated data, with `seed` always resolved to a concrete int so
@@ -59,22 +64,47 @@ def save_samples(run_dir: str | Path, samples: dict[int, np.ndarray]) -> Path:
     return path
 
 
+def open_scale_writer(run_dir: str | Path, scale: int, n: int, dtype) -> np.memmap:
+    """Create <run_dir>/samples/<scale>.npy as a writable on-disk array of
+    length n, for streaming a scale's samples in via slices instead of
+    holding all n of them in RAM at once. Creates run_dir/samples/ if
+    needed. Caller is responsible for filling every slot and, once done,
+    dropping the returned memmap (this flushes it to disk)."""
+    samples_dir = Path(run_dir) / "samples"
+    samples_dir.mkdir(parents=True, exist_ok=True)
+    path = samples_dir / f"{scale}.npy"
+    return np.lib.format.open_memmap(path, mode="w+", dtype=dtype, shape=(n,))
+
+
 def load_samples(run_dir: str | Path) -> dict[int, np.ndarray]:
-    """Load {scale: samples} back from <run_dir>/samples.npz.
+    """Load {scale: samples} back from a run directory, whichever of the two
+    layouts it was written in: a single <run_dir>/samples.npz (the common
+    case, everything fit comfortably in RAM), or <run_dir>/samples/*.npy
+    (one memmapped file per scale, for runs streamed via open_scale_writer
+    -- loaded with mmap_mode="r" so callers only pull in the pages they
+    actually touch).
 
     Raises a clear FileNotFoundError (not a bare one from inside numpy) if
-    there's no samples.npz there -- e.g. `run_dir` names a recipe's tag that
-    was never actually generated.
+    neither is present -- e.g. `run_dir` names a recipe's tag that was
+    never actually generated.
     """
-    path = Path(run_dir) / "samples.npz"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"no data at {path}.\n"
-            f"Generate some first (src/generate.py -meta <recipe.json> --tag <name>), "
-            f"then pass the printed run directory here."
-        )
-    with np.load(path) as npz:
-        return {int(k): npz[k] for k in npz.files}
+    run_dir = Path(run_dir)
+    npz_path = run_dir / "samples.npz"
+    if npz_path.exists():
+        with np.load(npz_path) as npz:
+            return {int(k): npz[k] for k in npz.files}
+
+    samples_dir = run_dir / "samples"
+    if samples_dir.exists():
+        npy_paths = sorted(samples_dir.glob("*.npy"))
+        if npy_paths:
+            return {int(p.stem): np.load(p, mmap_mode="r") for p in npy_paths}
+
+    raise FileNotFoundError(
+        f"no data at {npz_path} or {samples_dir}/.\n"
+        f"Generate some first (src/generate.py -meta <recipe.json> --tag <name>), "
+        f"then pass the printed run directory here."
+    )
 
 
 def load_metadata(run_dir: str | Path) -> dict | None:

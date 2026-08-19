@@ -92,6 +92,17 @@ flat files) so `data/` stays navigable once there are dozens of runs. Named
 Verified: `tools/tests/test_persistence.py` (10 cases — save/load roundtrip,
 content-hash determinism, missing-file handling, the one-run-one-folder shape).
 
+`open_scale_writer(run_dir, scale, n, dtype)` is the alternative for runs too large to
+build entirely in RAM: returns a writable on-disk memmap at
+`<run_dir>/samples/<scale>.npy`, filled in slices by the caller instead of assembled in
+memory and saved all at once. `load_samples` reads either layout transparently (flat
+`samples.npz` first, falling back to `samples/*.npy` loaded with `mmap_mode="r"`) — see
+`src/generate.py`'s chunked path below and `experiments/01_srw/README.md`'s
+"Fixed-memory generation" section for why this exists (fixes the OOM on
+`Huge_test.json`-sized runs). Verified: 2 more cases in `test_persistence.py`
+(round-trip through `open_scale_writer`, and that a stray `samples/` dir never
+shadows an existing flat `samples.npz`).
+
 `models.py` — the `MODELS` registry (`ModelSpec`: `simulate(i, n, params, rng)`,
 optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate.py`,
 `src/measure_cost.py`, and `src/plot_loglog.py` dispatch through via a run's
@@ -105,8 +116,15 @@ module identity (see its docstring). The actual per-model logic lives in
 - `synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`,
   `mean_Y`, article eq. 232). Has both `target_fn` and `true_gamma_key="gamma"`,
   since the ground truth is planted and known — the only model that currently does.
-- `srw.py` — `srw(k, n, q, rng)`, $n$ i.i.d. realizations of $|S_k|$
-  (vectorized $(n,k)$ step matrix). No `target_fn`/`true_gamma_key`: no
+- `srw.py` — `srw(k, n, q, rng, block_n=None)`, $n$ i.i.d. realizations of $|S_k|$.
+  Draws $\pm1$ steps in `(block_n, k)` int8 blocks over the $n$ axis and accumulates
+  row sums, rather than one $(n,k)$ matrix — bounds peak transient memory to a fixed
+  byte budget regardless of how large $n$ gets (the old unblocked, `int64` version
+  needed 819 GiB at $n=10^8,\,k=1024$). Blocking over $n$, not $k$, is deliberate:
+  splitting the leading axis into sequential row ranges consumes numpy's row-major RNG
+  stream in the same order a single unblocked call would, so results are bit-identical
+  for the same seed at any block size (splitting over $k$ would not have this
+  property — see the module's own docstring). No `target_fn`/`true_gamma_key`: no
   article-sanctioned closed form for SRW yet (see `experiments/01_srw/README.md`),
   which is exactly what keeps `src/plot_loglog.py` from overlaying a reference
   curve or reporting a `true_gamma` for this model — not a special case in the
@@ -116,7 +134,9 @@ module identity (see its docstring). The actual per-model logic lives in
 
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
 `tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
-\sim\sqrt{2k/\pi}$ asymptotic). The four scripts that dispatch through this
+\sim\sqrt{2k/\pi}$ asymptotic, `block_n` exact-equivalence with the unblocked
+path, and a large-$(n,k)$ case that would be gigabytes unblocked). The four
+scripts that dispatch through this
 registry (`generate.py`, `plot_loglog.py`, `measure_cost.py`, `plot_cost.py`) live
 in `src/`, not here — see `src/README.md`.
 

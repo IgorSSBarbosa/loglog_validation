@@ -15,12 +15,21 @@ registry). Each file exposes:
 - `true_gamma_key` (declared in `tools/models.py`'s registry entry, not here) —
   which key in `params` holds the true $\gamma$, when known.
 
-`srw.py` — `srw(k, n=1, q=0.5, rng=None)`, $n$ i.i.d. realizations of $|S_k|$
-(vectorized: one $(n,k)$ matrix of $\pm1$ steps, summed along the $k$ axis). No
-`target_fn`: no article-sanctioned closed form for SRW yet (`appendix-SimpleRandomWalk`
-is still an empty stub — see `experiments/01_srw/README.md`, PLAN.md "Open questions
-before Phase 1"). Verified: `tools/tests/test_srw.py` (shape/bounds/parity, classical
-$\mathbb E|S_k|\sim\sqrt{2k/\pi}$ asymptotic).
+`srw.py` — `srw(k, n=1, q=0.5, rng=None, block_n=None)`, $n$ i.i.d. realizations of
+$|S_k|$. Draws $\pm1$ steps as `(block_n, k)` int8 blocks over the $n$ axis and
+accumulates row sums, instead of one $(n,k)$ matrix — bounds peak transient memory to
+a fixed byte budget (`_DEFAULT_WORKING_SET_BYTES`) regardless of how large $n$ gets
+(the old unblocked, `int64` version needed 819 GiB at $n=10^8,\,k=1024$ —
+`experiments/01_srw/Huge_test.json`, fixed 2026-08-19). Blocking is over $n$, not $k$,
+deliberately: splitting the leading axis into sequential row ranges consumes numpy's
+row-major RNG stream in the same order a single unblocked call would, so results are
+bit-identical for the same seed at any block size — splitting over $k$ would not have
+this property (see the module's own docstring for the full argument). No `target_fn`:
+no article-sanctioned closed form for SRW yet (`appendix-SimpleRandomWalk` is still an
+empty stub — see `experiments/01_srw/README.md`, PLAN.md "Open questions before Phase
+1"). Verified: `tools/tests/test_srw.py` (shape/bounds/parity, classical
+$\mathbb E|S_k|\sim\sqrt{2k/\pi}$ asymptotic, `block_n` exact-equivalence with the
+unblocked path, and a large-$(n,k)$ case that would be gigabytes unblocked).
 
 `synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`, `mean_Y`,
 article eq. 232: $\mathbb{E} Y_i = a_0 i^\gamma \exp(\sum_j a_j i^{-\omega_j})$). Ground

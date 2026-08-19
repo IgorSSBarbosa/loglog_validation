@@ -111,3 +111,20 @@ question is resolved, but not itself a validated result.
 `tools/tests/test_generate.py` checks output shapes match the recipe and that
 `reproduce()` (regenerate from recorded metadata) matches a saved run exactly, for
 every registered model including this one (see `tools/README.md`).
+
+### Fixed-memory generation for large `n`
+
+`Huge_test.json` (`n=100,000,000`, scales up to `1024`) used to have to be killed for
+exhausting memory: a single unblocked `srw(k, n, ...)` call built one `(n, k)` matrix
+in RAM (819 GiB at `k=1024, n=1e8` with the old `int64` dtype). Fixed at two layers
+(see `tools/README.md`'s `persistence.py`/`models.py` entries for the mechanics):
+`models/srw.py` now blocks its internal draw over `n` to a fixed byte budget, and
+`src/generate.py` streams any run whose total estimated size exceeds a byte budget
+straight to on-disk per-scale arrays instead of assembling everything in RAM first.
+Both are exact for any block/chunk size (bit-identical to the unblocked path, same
+seed — see `models/srw.py`'s module docstring for why), not just "close enough".
+Smoke-tested this session at `n=20,000,000` (20x `larger_test.json`, which already ran
+fine) — RSS stayed a few GiB throughout, no `psutil`-triggered flush warnings, and the
+chunked output matched the in-RAM path exactly. `Huge_test.json` itself is expected to
+run (slowly — ~100M samples x 10 scales) without OOM, but hasn't been run end-to-end
+in this session (would take a long time).

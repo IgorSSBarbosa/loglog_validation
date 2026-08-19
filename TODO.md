@@ -194,6 +194,33 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       (SRW's four estimators agree closely around $\hat\gamma\approx0.5$, consistent
       with the classical $\sqrt{2k/\pi}$ asymptotic, without any `target_fn` being
       registered for it)
+- [x] ~~Fix OOM on large-`n` SRW runs (user request, 2026-08-19): `experiments/01_srw/Huge_test.json`
+      ($n=10^8$, scales up to $1024$) had to be killed for exhausting memory. Root cause: a
+      single unblocked `srw(k, n, ...)` call drew one $(n,k)$ matrix (819 GiB at
+      $k=1024,n=10^8$ with the old `int64` dtype) before `generate.py`'s loop ever regained
+      control -- flushing already-*finished* scales at some memory threshold wouldn't have
+      helped, since the very first over-budget scale never finishes. Fixed at two
+      independent, complementary layers: `models/srw.py` now draws int8 steps in
+      `(block_n, k)` blocks over the $n$ axis (not $k$ -- splitting the leading axis
+      preserves numpy's row-major RNG draw order, so results are bit-identical to the
+      unblocked path for the same seed at any block size; splitting $k$ would not have this
+      property, see the module's docstring) bounded to a fixed byte budget regardless of how
+      large $n$ or $k$ get; `src/generate.py` streams any run whose total estimated size
+      exceeds a byte budget straight to on-disk per-scale arrays
+      (`tools/persistence.py`'s new `open_scale_writer`/`load_samples` fallback,
+      `<tag>/samples/<scale>.npy` instead of one `<tag>/samples.npz`) in chunks, with a
+      `psutil`-based backstop (new dependency) that shrinks the chunk size further if
+      system memory hits 90% mid-run. Ordinary-sized runs are completely unaffected (same
+      `samples.npz` output, unchanged code path). Verified: `tools/tests/test_srw.py` (+2
+      cases -- `block_n` exact-equivalence with the unblocked path, a large-$(n,k)$ case
+      that would be gigabytes unblocked), `tools/tests/test_persistence.py` (+2 cases --
+      `open_scale_writer` round-trip, flat `samples.npz` takes precedence over a stray
+      `samples/` dir), `tools/tests/test_generate.py` (+1 case -- chunked path matches the
+      in-RAM path exactly for the same seed); full suite (56 cases) passing. Smoke-tested
+      end-to-end at $n=2\times10^7$ (20x the already-working `larger_test.json`) -- RSS
+      stayed a few GiB throughout, no flush warnings triggered, chunked output matched the
+      in-RAM path exactly. `Huge_test.json` itself not re-run end-to-end this session (would
+      take a long time) but is expected to complete without OOM now~~
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

@@ -38,6 +38,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import psutil
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))  # models/persistence live there, as bare imports
@@ -47,6 +48,7 @@ from persistence import (  # noqa: E402
     content_id,
     load_metadata,
     normalize_scales_n,
+    open_scale_writer,
     run_dir as _run_dir,
     save_samples,
     write_metadata,
@@ -63,6 +65,8 @@ def generate(
     out_dir: str | Path | None = None,
     tag: str | None = None,
     progress: bool = False,
+    max_chunk_bytes: int = 1_000_000_000,
+    mem_flush_pct: float = 90.0,
 ) -> dict[int, np.ndarray]:
     """Draw i.i.d. samples at each requested scale, via MODELS[model].simulate.
 
@@ -92,11 +96,31 @@ def generate(
         proceeds. Off by default so library callers (e.g. a Monte Carlo loop
         calling `generate` hundreds of times) aren't spammed; the CLI turns
         it on.
+    max_chunk_bytes : int, optional
+        Working budget (bytes, conservatively assumed 8 bytes/sample) for
+        one generation step. Only matters when out_dir is given: if the
+        run's total estimated size (sum(n) * 8 bytes) exceeds this budget,
+        every scale is streamed straight to its own on-disk array
+        (tools.persistence.open_scale_writer, <out_dir>/<tag>/samples/<i>.npy)
+        in chunks of this size, instead of being assembled fully in RAM and
+        saved once at the end -- avoids OOM on very large `n` (e.g. a naive
+        single-shot n=1e8 SRW scale needed hundreds of GiB; see PLAN.md).
+        Runs under the budget use the original, simpler in-RAM path
+        unchanged, still producing a single samples.npz.
+    mem_flush_pct : float, optional
+        Only consulted in the chunked path: if system memory usage
+        (psutil.virtual_memory().percent) reaches this after a chunk, the
+        in-progress scale's memmap is flushed to disk immediately and the
+        chunk size is halved (floor 1000) for everything generated after
+        that -- a backstop for when max_chunk_bytes alone wasn't
+        conservative enough (e.g. other processes competing for RAM).
 
     Returns
     -------
     dict[int, np.ndarray]
-        Maps each requested scale to its array of `n` i.i.d. samples.
+        Maps each requested scale to its array of `n` i.i.d. samples. For a
+        chunked run, values are disk-backed memmaps rather than plain
+        in-RAM arrays (still valid np.ndarray for callers).
     """
     spec = get_model(model)
     scales_list, n_list = normalize_scales_n(scales, n)
@@ -104,11 +128,43 @@ def generate(
     seed_seq = np.random.SeedSequence(seed)
     rng = np.random.default_rng(seed_seq)
 
+    chunked = out_dir is not None and sum(n_list) * 8 > max_chunk_bytes
+    rd = None
+    if out_dir is not None:
+        stem = tag or content_id(params, scales_list, n_list, seed_seq.entropy)
+        rd = _run_dir(out_dir, stem)
+
+    chunk_state = {"chunk_n": max(1, max_chunk_bytes // 8)}
+
+    def _generate_scale_chunked(i: int, n_i: int) -> np.memmap:
+        mm = None
+        offset = 0
+        while offset < n_i:
+            take = min(chunk_state["chunk_n"], n_i - offset)
+            chunk = spec.simulate(i, take, params, rng)
+            if mm is None:
+                mm = open_scale_writer(rd, i, n_i, chunk.dtype)
+            mm[offset:offset + take] = chunk
+            offset += take
+            del chunk
+            pct = psutil.virtual_memory().percent
+            if pct >= mem_flush_pct:
+                mm.flush()
+                chunk_state["chunk_n"] = max(1000, chunk_state["chunk_n"] // 2)
+                print(
+                    f"[generate] memory at {pct:.1f}% -- flushed scale i={i} "
+                    f"({offset}/{n_i} samples), shrinking chunk size to "
+                    f"{chunk_state['chunk_n']}",
+                    file=sys.stderr,
+                )
+        mm.flush()
+        return mm
+
     samples: dict[int, np.ndarray] = {}
     timings: dict[int, float] = {}
     for idx, (i, n_i) in enumerate(zip(scales_list, n_list), start=1):
         t0 = time.perf_counter()
-        samples[i] = spec.simulate(i, n_i, params, rng)
+        samples[i] = _generate_scale_chunked(i, n_i) if chunked else spec.simulate(i, n_i, params, rng)
         timings[i] = time.perf_counter() - t0
         if progress:
             print(
@@ -122,9 +178,8 @@ def generate(
         print(file=sys.stderr)
 
     if out_dir is not None:
-        stem = tag or content_id(params, scales_list, n_list, seed_seq.entropy)
-        rd = _run_dir(out_dir, stem)
-        save_samples(rd, samples)
+        if not chunked:
+            save_samples(rd, samples)
         write_metadata(
             run_dir=rd,
             model=model,
@@ -202,9 +257,10 @@ def _main(argv: list[str] | None = None) -> None:
             row += f"{spec.target_fn(i, params).item():>14.4f} "
         row += f"{y.mean():>14.4f} {elapsed_ms:>12.2f}"
         print(row)
+    data_path = rd / "samples.npz" if (rd / "samples.npz").exists() else rd / "samples"
     print(f"\nseed     = {resolved_seed}")
     print(f"run_dir  = {rd}")
-    print(f"data     = {rd / 'samples.npz'}")
+    print(f"data     = {data_path}")
     print(f"metadata = {rd / 'metadata.json'}")
     print(f"(recipe {args.meta} was not modified)")
 

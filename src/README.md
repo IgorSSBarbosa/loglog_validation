@@ -29,9 +29,17 @@ python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
 Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.
 Default output directory is `data/` next to the recipe file itself (not this
 script's own location, since it's shared across experiments), so each experiment's
-runs still land under that experiment's own `data/`. Verified:
-`tools/tests/test_generate.py` (shapes match the recipe, `reproduce()` exact-match,
-both parametrized across every registered model).
+runs still land under that experiment's own `data/`. Runs whose total estimated size
+(`sum(n) * 8` bytes) exceeds `max_chunk_bytes` (default ~1 GiB) are streamed straight
+to on-disk per-scale arrays (`tools.persistence.open_scale_writer`) in chunks, instead
+of assembled fully in RAM and saved once at the end — the fix for OOM on very large
+`n` (see `experiments/01_srw/README.md`'s "Fixed-memory generation" section); a
+`psutil`-based backstop (`mem_flush_pct`, default 90%) shrinks the chunk size further
+if system memory gets tight mid-run. Ordinary-sized runs are unaffected — same
+`samples.npz` output as always. Verified: `tools/tests/test_generate.py` (shapes
+match the recipe, `reproduce()` exact-match — both parametrized across every
+registered model — plus the chunked path matching the in-RAM path exactly for the
+same seed).
 
 `plot_loglog.py` — the shared log-log plotter, reading a run directory's own
 `metadata.json` to look up its model in `tools/models.py`'s registry. The raw-data
