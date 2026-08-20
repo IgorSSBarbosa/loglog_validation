@@ -1,7 +1,16 @@
 # Plan — three-experiment ladder: measure $d$, then $\omega_1$, then $\gamma$
 
 Status: **decisions signed off 2026-08-20; §1 (shared prerequisites) and §3 (Experiment B)
-implemented, run and PASSED. Experiments A and C not started.**
+implemented, run and PASSED. §4 (Experiment C) implemented and run: the RATE claim
+passes, the POINT claim fails by a constant offset of ~3 in $m_0$ (~2.2-2.4x RMSE).
+Experiment A not started (and may be redundant — see §1c).**
+
+Experiment C result: measured error decay $-0.364$ against the predicted $-1/3$ (passes),
+but `prop:opt`'s $m_0$ is ~3 too high at every budget, costing $2.18$-$2.39\times$ in
+RMSE. At the empirical optimum $|\mathrm{bias}|/\mathrm{sd}\approx0.6$-$1.7$ as the
+theorem's own balancing argument implies; at the $m_0$ it names, $0.09$-$0.30$ -- it
+over-corrects for bias. Confirmed independently by an exact/analytic calculation that
+draws no samples. Full write-up in `experiments/01_srw/README.md`.
 
 Experiment B result: $\omega_1 = 1.0155 \pm 0.1050$, $\gamma = 0.5000 \pm 0.0003$,
 $a_1 = -0.2748 \pm 0.0597$, $a_0 = 0.7979 \pm 0.0017$ over 5 independent replicates --
@@ -286,20 +295,77 @@ $\approx0.995$) with the `snr` rule, rather than the wider, cheaper grid.
 - Independence rule (ground rule 2): the samples used here are a *separate draw* from
   Experiment C's — no reuse, no slicing.
 
-## 4. Experiment C — $\gamma$ at maximum accuracy under an optimal budget
+## 4. Experiment C — $\gamma$ at maximum accuracy under an optimal budget — DONE
+
+### The control arm, generalized: sweep $m_0$ instead of picking one alternative
+
+The original design pitted `prop:opt`'s allocation against a single flat-$n$ arm. That
+is weaker than it needs to be, because `prop:opt` *already* uses a uniform $n$ — the
+thing it chooses is $m_0$, the offset of the scale window. So the honest control is not
+"one other allocation" but **every other $m_0$ at the same budget**: sweep $m_0$, measure
+RMSE of $\hat\gamma$ at each, and ask whether the theorem's $m_0$ is the argmin.
+
+That also separates two claims which can come apart, and which a single-point
+measurement could never distinguish:
+
+- **RATE** — does the error fall like $B^{-\omega_1/(d+2\omega_1)}$?
+- **POINT** — is the specific $m_0$ the theorem names the RMSE-minimizing one at a given
+  finite $B$?
+
+A rate theorem is asymptotic up to constants, so POINT may fail while RATE holds.
+
+### Analytic prediction (before running anything)
+
+Computing the bias exactly (the article's closed-form $w_{k,m}$ weights applied to the
+*exact* $\mathbb{E}\lvert S_k\rvert$, no sampling) and the standard deviation
+analytically (from $n$ and the half-normal CV $\sqrt{\pi/2-1}\approx0.7555$) predicts
+that **`prop:opt` overshoots $m_0$ by 3–4 at every budget**:
+
+| $B$ | `prop:opt` $m_0$ | argmin RMSE $m_0$ | RMSE penalty |
+|---|---|---|---|
+| $10^8$ | 8 | 5 | $2.4\times$ |
+| $10^9$ | 9 | 6 | $2.3\times$ |
+| $10^{10}$ | 11 | 7 | $3.2\times$ |
+| $10^{11}$ | 12 | 8 | $3.0\times$ |
+| $10^{12}$ | 13 | 9 | $2.9\times$ |
+
+At the true optimum bias $\approx$ sd (e.g. $2.5\times10^{-4}$ vs $3.3\times10^{-4}$ at
+$B=10^{10}$), exactly as the balancing argument says it should be. At `prop:opt`'s
+$m_0$ the bias is ~80x *smaller* than the sd — it has over-corrected, buying far more
+bias reduction than the variance can pay for.
+
+But the **rate is right at both**: RMSE falls by a factor $0.46$–$0.47$ per decade of
+budget at the argmin, against the predicted $10^{-1/3}=0.464$. So `prop:opt` looks
+rate-correct with a suboptimal constant — which is precisely what a rate theorem
+promises and no more. Experiment C measures whether simulation agrees.
+
+### Implementation
 
 **Question:** with $(d,\omega_1)$ measured, does `tools/allocation.py`'s
 Proposition `prop:opt` allocation actually beat naive flat allocation at equal budget?
 
-- Feed $\hat d$ (Exp A) and $\hat\omega_1$ (Exp B) into `optimal_allocation(B, d, omega1, rho, m)`
-  to get $(n, m_0, \theta_1, \theta_2)$; run `generate.py` on the resulting ladder.
-- **Control arm:** the same total budget $B$ spent on a flat-$n$ ladder. Without this
-  the result is unfalsifiable — "we got a $\hat\gamma$" is not evidence the allocation
-  rule works.
-- Replicate both arms $R$ times (independent seeds, ground rule 2) and compare
-  RMSE of $\hat\gamma$ against the known $\gamma=1/2$.
-- **Acceptance:** optimal-allocation RMSE $<$ flat-allocation RMSE at equal $B$, with
-  the gap outside replicate noise. This is checkpoint 0.5.
+`src/allocation_experiment.py` + `experiments/01_srw/allocation_config.json`. For each
+$(B, m_0)$ cell it sets $n$ to the largest uniform per-scale count the budget affords,
+draws $R$ independent replicates (`SeedSequence.spawn`, ground rule 2), and estimates
+$\gamma$ with the article's own closed-form $w_{k,m}$ weights (`gamma_closed_form`) —
+the estimator `prop:opt` is stated for, and this ladder is exactly the consecutive
+$\rho^k$ grid it requires. Generic OLS (`gamma_all_points`) is recorded alongside as a
+cross-check. Samples are deliberately **not** persisted: the sweep draws far more than
+is worth storing, and the per-cell $\hat\gamma$ values are the result; the base seed
+is recorded and spawning is deterministic, so any cell regenerates exactly.
+
+`true_gamma` scores finished estimates only and is never passed to an estimator,
+consistent with decision D2.
+
+- **Acceptance (RATE):** measured $\mathrm d\log\mathrm{RMSE}/\mathrm d\log B$ within
+  $0.08$ of $-\omega_1/(d+2\omega_1) = -1/3$.
+- **Acceptance (POINT):** reported, not asserted — the analytic pre-study predicts this
+  one *fails* by 3–4 in $m_0$, so a test asserting it would be asserting the wrong
+  thing. The experiment measures the gap and its RMSE cost.
+- Verified: `tools/tests/test_allocation_experiment.py` (10 cases — the ladder is
+  `def:alloc`'s grid, budget arithmetic never overspends, replicate streams reproduce
+  and are independent across cells, unaffordable cells are marked skipped rather than
+  faked, summary/rate machinery on planted inputs).
 
 **Risk to flag now:** if Experiment A confirms $d\approx1$ and $\omega_1=1$, check
 whether `prop:opt` degenerates for this parameter combination before committing to a

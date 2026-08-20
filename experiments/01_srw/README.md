@@ -260,6 +260,83 @@ agrees with the direct fit on planted data in `tools/tests/test_correction.py`. 
 both estimators on one grid needs $\ge10$ scales, i.e. extending the window upward at
 $\Theta(i^3)$ cost — deferred, not attempted.
 
+## Experiment C — does the budget-allocation rule deliver?
+
+`plans/three_experiment_ladder.md` §4. Tests Proposition `prop:opt` (eq. 945-946) on a
+testbed where $\gamma=1/2$, $d=1$ and $\omega_1=1$ are all known.
+
+```bash
+cd src
+python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
+```
+
+The theorem makes two claims that can come apart, and they are tested separately:
+
+- **RATE** — the error falls like $B^{-\omega_1/(d+2\omega_1)}$, i.e. $B^{-1/3}$ here.
+- **POINT** — the specific $m_0=\theta_2\log_\rho B$ it names minimizes the error at a
+  given finite $B$.
+
+A rate theorem is asymptotic *up to constants*, so POINT can fail while RATE holds — and
+measuring only the allocation the theorem names, with no comparison, could never tell
+the difference. `prop:opt` already fixes $n$ uniform across scales, so what it really
+chooses is $m_0$; the honest control arm is therefore **every other $m_0$ at the same
+budget**, which is what the script sweeps.
+
+Estimator is the article's own closed-form $w_{k,m}$ weights (`gamma_closed_form`,
+eq. 523-526) — the one `prop:opt` is stated for, and this ladder is exactly the
+consecutive $\rho^k$ grid it requires. Generic OLS is recorded alongside. Every
+$(B,m_0,\text{replicate})$ cell draws fresh independent randomness
+(`SeedSequence.spawn`, ground rule 2). Samples are not persisted — the sweep draws far
+more than is worth storing, and the per-cell $\hat\gamma$ values in `result.json` are
+the result; the base seed is recorded and spawning is deterministic, so any cell
+regenerates exactly.
+
+### Result (2026-08-20) — RATE passes, POINT fails by a constant
+
+$m=6$, $\rho=2$, $d=\omega_1=1$, 40 replicates per cell, $m_0\in\{2,\dots,11\}$,
+$B\in\{10^7,10^8,10^9\}$ (48 min).
+
+**RATE — passes.** $\mathrm d\log\mathrm{RMSE}/\mathrm d\log B$ measured $-0.364$ at
+`prop:opt`'s own $m_0$ and $-0.384$ at the empirically best $m_0$, against the predicted
+$-\omega_1/(d+2\omega_1) = -1/3$. The promised $B^{-1/3}$ error decay is real.
+
+**POINT — fails, by a constant offset of about 3 in $m_0$.**
+
+| $B$ | `prop:opt` $m_0$ | best $m_0$ | RMSE at `prop:opt` | best RMSE | penalty |
+|---|---|---|---|---|---|
+| $10^7$ | 7 | 3 | $1.04\times10^{-2}$ | $4.75\times10^{-3}$ | $2.18\times$ |
+| $10^8$ | 8 | 5 | $4.77\times10^{-3}$ | $2.19\times10^{-3}$ | $2.18\times$ |
+| $10^9$ | 9 | 6 | $1.94\times10^{-3}$ | $8.12\times10^{-4}$ | $2.39\times$ |
+
+**It is an offset, not a wrong trend.** The empirical argmin tracks
+$\theta_2\log_\rho B$ in slope — 0.45 over these three integer-valued points, and 0.30
+across five decades in the analytic version below, against $\theta_2=1/3$ — but sits
+about $3.3$ lower. So the theorem's $\log_\rho B$ coefficient is right and only the
+additive constant it drops is missing.
+
+**The mechanism: `prop:opt` over-corrects for bias.** Its derivation balances bias
+against standard deviation, and at the *empirical* optimum they are indeed balanced —
+$\lvert\mathrm{bias}\rvert/\mathrm{sd} = 1.68,\,0.77,\,0.60$ at the three budgets. At
+the $m_0$ the formula actually names, that ratio is $0.09,\,0.12,\,0.30$: the bias has
+been driven far below the noise floor, and the budget spent buying that unnecessary
+bias reduction would have bought more accuracy as samples. Raising $m_0$ costs $\rho^d$
+per step in affordable $n$, which is expensive.
+
+**Independent confirmation.** Computing the bias exactly (the same $w_{k,m}$ weights
+applied to the *exact* $\mathbb{E}\lvert S_k\rvert$, no sampling at all) and the
+standard deviation analytically from $n$ and the half-normal CV $\sqrt{\pi/2-1}$
+predicts the same thing without drawing a single sample — argmin $m_0 = 5$ at $10^8$
+and $6$ at $10^9$ with penalties $2.4\times$ and $2.3\times$, against the measured $5$,
+$6$, $2.18\times$, $2.39\times$. Two independent routes, same conclusion.
+
+**How to read this.** None of it contradicts the theorem: `prop:opt` is a *rate*
+result, correct up to constants, and the rate is confirmed. What the experiment adds is
+that the dropped constant is not negligible at usable budgets — it costs a factor
+$\approx2.2$–$2.4$ in RMSE, equivalently a factor of $\approx2^{3.3}\approx10$ in
+budget. A practitioner following the formula literally pays that. The offset should be
+derivable in closed form from the constants the rate argument discards ($a_1$, the
+observable's coefficient of variation, and $\lVert w\rVert$) — not attempted here.
+
 ### Fixed-memory generation for large `n`
 
 `Huge_test.json` (`n=100,000,000`, scales up to `1024`) used to have to be killed for

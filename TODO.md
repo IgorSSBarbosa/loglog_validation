@@ -300,9 +300,32 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       a rerun crossing the chunking threshold left the old layout in place, and
       `load_samples` prefers `samples.npz` over `samples/`, so a stale file silently
       shadowed the fresh run~~
-- [ ] Experiment C — $\gamma$ under `tools/allocation.py`'s optimal budget, **with a flat-$n$
-      control arm at equal budget** (`plans/three_experiment_ladder.md` §4). Check first
-      whether `prop:opt` degenerates at $(d,\omega_1)=(1,1)$
+- [x] ~~Experiment C — test Proposition `prop:opt`'s allocation (`plans/three_experiment_ladder.md`
+      §4, done 2026-08-20). `src/allocation_experiment.py` +
+      `experiments/01_srw/allocation_config.json`. The planned single flat-$n$ control arm was
+      generalized: `prop:opt` already fixes $n$ uniform, so what it really chooses is $m_0$, and
+      the honest control is **every other $m_0$ at the same budget**. That also separates two
+      claims a single-point measurement cannot distinguish. **RATE passes**: measured
+      $\mathrm d\log\mathrm{RMSE}/\mathrm d\log B = -0.364$ at `prop:opt`'s own $m_0$
+      ($-0.384$ at the best $m_0$) against the predicted $-\omega_1/(d+2\omega_1)=-1/3$.
+      **POINT fails by a constant**: `prop:opt`'s $m_0$ is 3-4 too high at every budget
+      (7 vs 3, 8 vs 5, 9 vs 6 at $B=10^7,10^8,10^9$), costing $2.18$, $2.18$, $2.39\times$ in
+      RMSE. It is an offset, not a wrong trend -- the empirical argmin tracks
+      $\theta_2\log_\rho B$ in slope (0.30 across five decades analytically, vs
+      $\theta_2=1/3$) but sits $\approx3.3$ lower. Mechanism: `prop:opt` **over-corrects for
+      bias** -- at the empirical optimum $|\mathrm{bias}|/\mathrm{sd} = 1.68/0.77/0.60$, the
+      balance its own derivation argues for, but at the $m_0$ it names, $0.09/0.12/0.30$, i.e.
+      bias driven far below the noise floor at the cost of samples. Confirmed independently by
+      an exact calculation (article weights on the exact $\mathbb E|S_k|$, analytic sd from the
+      half-normal CV) that draws no samples and predicts the same argmins and penalties. None of
+      this contradicts the theorem, which is a rate result correct up to constants -- but the
+      dropped constant costs a factor $\approx2.2$-$2.4$ in RMSE, i.e. $\approx10\times$ in
+      budget, for anyone following the formula literally. The offset should be derivable in
+      closed form from $a_1$, the CV, and $\|w\|$; not attempted. Verified:
+      `tools/tests/test_allocation_experiment.py` (10 cases -- ladder shape, budget arithmetic
+      never overspends, replicate streams reproduce and are independent across cells,
+      unaffordable cells marked skipped rather than faked, summary/rate machinery on planted
+      inputs)~~
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 

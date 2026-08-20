@@ -27,6 +27,9 @@ python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
 # 5. Estimate the correction-to-scaling exponent omega_1 from a run (Experiment B)
 python3 generate.py -meta ../experiments/01_srw/omega1_config.json --tag omega1
 python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 --expect-omega1 1.0
+
+# 6. Test the budget-allocation rule prop:opt (Experiment C)
+python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
 ```
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
@@ -77,6 +80,18 @@ known values for reporting only — those values are never passed to the estimat
 the measurement stays blind to the answer it is checking. See
 `experiments/01_srw/README.md` for the recipe, the allocation rule, and the result.
 
+`allocation_experiment.py` — Experiment C's driver: sweeps a (budget x $m_0$) grid,
+drawing $R$ independent replicates per cell (`SeedSequence.spawn`, ground rule 2) and
+estimating $\gamma$ with the article's own closed-form $w_{k,m}$ weights, to test
+Proposition `prop:opt`. Reports per-cell bias/sd/RMSE, the empirically best $m_0$ against
+the one the theorem names, and the measured error-decay exponent against
+$-\omega_1/(d+2\omega_1)$. Does **not** persist samples -- the sweep draws far more than
+is worth storing, and the per-cell $\hat\gamma$ values in `<run_dir>/result.json` are the
+result (the base seed is recorded and spawning is deterministic, so any cell regenerates
+exactly). `true_gamma` from the recipe scores finished estimates only and never reaches an
+estimator. Verified: `tools/tests/test_allocation_experiment.py` (10 cases). Result and
+interpretation in `experiments/01_srw/README.md`.
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
@@ -96,6 +111,6 @@ same one-run-one-folder convention as `plot_loglog.py`. Verified:
 d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and is
 what biases the pure fit low; and that the aggregator is selectable and recorded).
 
-Each of these five inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+Each of these six inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
 `tools/*.py` helper modules work regardless of where they're invoked from.
