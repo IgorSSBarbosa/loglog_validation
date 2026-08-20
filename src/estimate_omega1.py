@@ -87,6 +87,34 @@ def estimate(run_dir: str | Path, *, min_window_scales: int = MIN_WINDOW_SCALES)
     }
 
 
+def _sanity_warnings(fit: dict, *, a1_runaway: float = 100.0) -> list[str]:
+    """Reasons not to trust `fit`, as human-readable strings (empty if fine).
+
+    When the budget is too small for the chosen scale window, the correction
+    term sinks below the sampling noise and (a1, omega1) stop being jointly
+    identifiable: the optimizer compensates for a huge omega1 with an
+    enormous a1, since a1 * i**-omega1 can stay small either way. Observed at
+    budget 2e8 over scales 8..256: omega1 = 13.5 with a1 = -6.6e10.
+
+    That is a real, quiet trap for anyone running this themselves -- gamma
+    still comes back beautifully (0.5001), so the output looks healthy at a
+    glance. Hence an explicit, loud check rather than a `converged` flag the
+    reader has to know to look for.
+    """
+    out = []
+    if not fit.get("converged", False):
+        out.append("the optimizer did NOT converge")
+    if abs(fit.get("a1", 0.0)) > a1_runaway:
+        out.append(
+            f"|a1| = {abs(fit['a1']):.3g} is implausibly large (runaway fit: a huge a1 "
+            f"paired with a huge omega1 keeps a1*i^-omega1 small, so the two are "
+            f"trading off rather than being measured)"
+        )
+    if not 0.05 < fit.get("omega1", 0.0) < 10.0:
+        out.append(f"omega1 = {fit.get('omega1'):.4g} is outside any plausible range")
+    return out
+
+
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -113,6 +141,7 @@ def _main(argv: list[str] | None = None) -> None:
     out_path.write_text(json.dumps(result, indent=2, sort_keys=True))
 
     d = result["direct_fit"]
+    warnings = _sanity_warnings(d)
     print(f"run      = {result['run_dir']}")
     print(f"model    = {result['model']!r}   seed = {result['seed']}")
     print(f"scales   = {result['scales']}")
@@ -123,6 +152,16 @@ def _main(argv: list[str] | None = None) -> None:
     print(f"  a0      = {d['a0']:.4f}")
     print(f"  a1      = {d['a1']:.4f}")
     print(f"  rel_rmse={d['rel_rmse']:.3e}   converged={d['converged']}")
+
+    if warnings:
+        print("\n" + "!" * 72)
+        print("DO NOT TRUST THIS omega1 ESTIMATE:")
+        for w in warnings:
+            print(f"  - {w}")
+        print("Most likely cause: the budget is too small for this scale window, so the")
+        print("correction term is below the sampling noise. Raise the budget, or narrow")
+        print("the scale range. Note gamma can still look perfect while this is broken.")
+        print("!" * 72)
 
     b = result["bias_decay_fit"]
     print("\nbias-decay fit of gamma_hat(i) = gamma_inf + a*i^-omega1 (drop_leading windows):")
