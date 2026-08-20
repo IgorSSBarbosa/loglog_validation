@@ -274,8 +274,32 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] Experiment A — amortized/batched cost measurement (`plans/three_experiment_ladder.md` §2).
       May now be redundant: the affine fit already recovers $d$ correctly from $n=1$ timings.
       Worth running as an independent cross-check rather than assuming either way
-- [ ] Experiment B — measure $\omega_1$ at small scales, Neyman-style $n(i)\propto1/\sqrt{c(i)}$
-      allocation (`plans/three_experiment_ladder.md` §3). Acceptance: $\hat\omega_1\in[0.85,1.15]$
+- [x] ~~Experiment B — measure $\omega_1$ (`plans/three_experiment_ladder.md` §3, done
+      2026-08-20). **PASSED**: $\omega_1 = 1.0155 \pm 0.1050$ against the known $1$, alongside
+      $\gamma = 0.5000 \pm 0.0003$, $a_1 = -0.2748 \pm 0.0597$, $a_0 = 0.7979 \pm 0.0017$ --
+      all four within half a standard error -- over 5 independent replicates ($B=4\times10^{10}$
+      each, scales $8..256$). New: `tools/correction.py` (two estimators: a direct fit of
+      eq. (232)'s one-correction truncation, and a fit of how `gamma_drop_leading`'s bias
+      decays), `src/estimate_omega1.py` (the driver, writes `<run_dir>/omega1.json`), and
+      recipe-level allocation rules in `generate.py` (`"n": {"rule": ..., "budget": ...}`).
+      Three findings changed the design mid-flight, each documented where it bites:
+      (a) **the planned Neyman allocation was wrong.** It minimizes the variance of
+      $\overline Y_i$, but $\omega_1$ lives in the *correction term*, whose size shrinks with
+      $i$ -- so Neyman over-samples where the correction is already resolved and starves
+      where it is buried (measured SNR 460 at $k=2$ down to 0.25 at $k=1024$). Replaced by
+      `snr_allocation`, $n_i \propto i^{2\omega_1}$, i.e. INCREASING in $i$ -- the opposite
+      trend. `neyman_allocation` is kept and tested, with a test asserting the two trend
+      oppositely so they can never be silently conflated. (b) **the scale grid must not mix
+      parities**: $\mathbb E|S_{2m-1}| = \mathbb E|S_{2m}|$ exactly, so the mean is a
+      staircase; a $\rho=\sqrt2$ grid returns $\hat\omega_1 \approx 17.8$ on *exact*
+      means, and the failure is silent (converges, small residual). Powers of 2 are safe.
+      (c) **the window is a bias-variance tradeoff**: including $k=2$ caps $\hat\omega_1$
+      at 0.959 no matter the sample size (the $\omega_2=3$ term is 4.2% of the $\omega_1$
+      term there), while dropping small scales shrinks the signal -- hence $8..256$
+      (ceiling 0.995). Also fixed a latent data-corruption bug found while running this:
+      a rerun crossing the chunking threshold left the old layout in place, and
+      `load_samples` prefers `samples.npz` over `samples/`, so a stale file silently
+      shadowed the fresh run~~
 - [ ] Experiment C — $\gamma$ under `tools/allocation.py`'s optimal budget, **with a flat-$n$
       control arm at equal budget** (`plans/three_experiment_ladder.md` §4). Check first
       whether `prop:opt` degenerates at $(d,\omega_1)=(1,1)$

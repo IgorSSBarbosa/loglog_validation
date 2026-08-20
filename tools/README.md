@@ -184,8 +184,9 @@ assertion, which would fail 5% of the time by construction. Empirically
 validated against a real $\Theta(k)$ simulator in `experiments/01_srw/`
 (affine $\hat d=1.006$ against ground truth $d=1$).
 
-`allocation.py` — `optimal_allocation` (Proposition `prop:opt`, eq. 945-946)
-and `total_cost` (Lemma `lem:budget`'s closed-form cost). Given a budget $B$
+`allocation.py` — three allocation rules; they answer different questions and
+must not be swapped. `optimal_allocation` (Proposition `prop:opt`, eq. 945-946)
+and `total_cost` (Lemma `lem:budget`'s closed-form cost) are the article's. Given a budget $B$
 and $(d,\omega_1,\rho,m)$, returns the rate-optimal exponents
 $\theta_1,\theta_2$ and the sample count/scale-offset $n$, $m_0$ an experiment
 can actually run. The theorem treats $n$, $m_0$ as continuous; this module
@@ -193,10 +194,48 @@ floors both to integers, which is provably safe (cost stays $\le B$) whenever
 the continuous $n_{\mathrm{exact}}\ge1$ — when it isn't (budget too small for
 this configuration), `n`/`m0`/`cost` come back `None` and `integer_feasible`
 is `False` rather than silently overspending, the same "diagnostic the caller
-must check" pattern `gamma_mle`'s `trustworthy` uses. Verified:
-`tools/tests/test_allocation.py` (15 cases — $\theta_1+d\theta_2=1$ exactly,
+must check" pattern `gamma_mle`'s `trustworthy` uses. The other two are for Experiment B, which measures $\omega_1$ rather than
+$\gamma$ and therefore needs the *opposite* treatment of the small scales --
+`prop:opt` slides its window upward to escape the correction term, while
+Experiment B has to keep the scales where that term is still visible.
+`neyman_allocation` ($n_i\propto i^{-d/2}$) minimizes the variance of
+$\overline Y_i$ itself. **It is the wrong rule for $\omega_1$ and is kept only
+as the documented wrong answer**: $\omega_1$ is estimated from the correction
+$a_1i^{-\omega_1}$, whose size shrinks with $i$, so equalizing the error of
+$\overline Y_i$ over-samples the small scales, where the correction is already
+resolved hundreds of times over, and starves the large ones, where it has sunk
+below the noise (measured SNR 460 at $k=2$ down to 0.25 at $k=1024$).
+`snr_allocation` ($n_i\propto s_i^2 i^{2\omega_1}$, *increasing* in $i$)
+equalizes the correction term's signal-to-noise ratio across scales instead,
+and is what `experiments/01_srw/omega1_config.json` uses. Verified:
+`tools/tests/test_allocation.py` (38 cases — $\theta_1+d\theta_2=1$ exactly,
 continuous allocation costs exactly $B$, discretized allocation never exceeds
-$B$ when feasible, the small-$B$ infeasibility case, parameter validation).
+$B$ when feasible, the small-$B$ infeasibility case, both new rules' closed-form
+weights, that `snr_allocation` really does flatten the correction SNR, that the
+two new rules trend in *opposite* directions so they can never be silently
+conflated, and parameter validation).
+
+`correction.py` — the correction-to-scaling exponent $\omega_1$ itself, which
+`allocation.py` needs as an input and which `loglog.py` treats purely as a
+nuisance. Two deliberately different functionals, so agreement between them is
+evidence rather than bookkeeping: `fit_correction` fits eq. (232)'s
+one-correction truncation $\log\overline Y_i = \log a_0+\gamma\log i+a_1
+i^{-\omega_1}$ with all four parameters free (optionally weighted by each
+$\mathrm{sd}(\log\overline Y_i)$, which matters because Experiment B's
+allocation deliberately makes $n_i$ differ across scales); `omega1_from_bias_decay`
+never looks at $\overline Y_i$ at all, and instead fits how a *sequence* of
+$\hat\gamma$ estimates (e.g. `gamma_drop_leading`'s, one per $m_0$) converges as
+the most contaminated small scales are dropped. Both restart the optimizer from
+several $\omega_1$ seeds — the objective is not convex in $\omega_1$ and a
+single start does stop in local minima. **Caution, documented at length in the
+module: the scale grid must not mix odd and even $k$ for a lattice observable.**
+$\mathbb E|S_{2m-1}|=\mathbb E|S_{2m}|$ exactly, so the mean is a staircase, and
+a $\rho=\sqrt2$ grid returns $\hat\omega_1\approx17.8$ on *exact* means — a
+silent failure, since the fit converges with a small residual. Verified:
+`tools/tests/test_correction.py` (21 cases — exact recovery of all four planted
+parameters, a $(\gamma,\omega_1)$ grid of truths, agreement between the two
+estimators on planted data, robustness to small multiplicative noise, and the
+mixed-parity failure mode pinned down explicitly).
 
 Not started yet — planned modules (see `PLAN.md` repo layout): `wilson.py`,
 `bootstrap.py`, `rng.py`.

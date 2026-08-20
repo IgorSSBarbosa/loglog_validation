@@ -43,6 +43,7 @@ import psutil
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))  # models/persistence live there, as bare imports
 
+from allocation import neyman_allocation, snr_allocation  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402
     content_id,
@@ -53,6 +54,20 @@ from persistence import (  # noqa: E402
     save_samples,
     write_metadata,
 )
+
+
+def _clear_other_layout(rd: Path, chunked: bool) -> None:
+    """Remove whichever of samples.npz / samples/ this run did NOT just write."""
+    import shutil
+
+    if chunked:
+        stale = rd / "samples.npz"
+        if stale.exists():
+            stale.unlink()
+    else:
+        stale_dir = rd / "samples"
+        if stale_dir.is_dir():
+            shutil.rmtree(stale_dir)
 
 
 def generate(
@@ -180,6 +195,17 @@ def generate(
     if out_dir is not None:
         if not chunked:
             save_samples(rd, samples)
+        # Drop the *other* layout's leftovers. A run directory is written
+        # deterministically and overwritten on rerun (ground rule 6), but the
+        # two layouts live at different paths, so a rerun that crosses the
+        # chunking threshold in either direction would otherwise leave the
+        # previous run's data sitting alongside the new run's. That is not
+        # merely untidy: load_samples() resolves a flat samples.npz BEFORE a
+        # samples/ directory, so a stale .npz would silently shadow the run
+        # that just finished, and every downstream number would describe the
+        # old data. Observed for real on experiments/01_srw/data/omega1 when
+        # its allocation rule changed (2026-08-20).
+        _clear_other_layout(rd, chunked)
         write_metadata(
             run_dir=rd,
             model=model,
@@ -201,6 +227,56 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
     if meta is None:
         raise FileNotFoundError(f"no metadata.json in {run_dir}")
     return generate(meta["model"], meta["scales"], meta["n"], meta["params"], seed=meta["seed"])
+
+
+def _resolve_n(cfg: dict):
+    """Recipe `"n"`: a scalar, an explicit per-scale list, or an allocation rule.
+
+    The rule form keeps a recipe reproducible and self-describing -- it records
+    *why* those sample counts were chosen, not just the numbers, so the run can
+    be regenerated after a cost-model update by re-reading the recipe rather
+    than by remembering how the list was produced:
+
+        "n": {"rule": "neyman", "budget": 2e10, "d": 1.0}
+
+    Two rules, both in tools/allocation.py, neither the same as Proposition
+    prop:opt (see those docstrings for why they must not be swapped):
+    `neyman` (n_i ~ i^(-d/2)) minimizes the variance of Y_bar itself, and
+    `snr` (n_i ~ i^(2*omega1), and so needs an extra "omega1" design input)
+    equalizes the signal-to-noise ratio of the CORRECTION term -- which is
+    what Experiment B actually estimates, and what `neyman` gets wrong.
+    """
+    n = cfg["n"]
+    if not isinstance(n, dict):
+        return n
+
+    rule = n.get("rule")
+    common = dict(
+        budget=float(n["budget"]),
+        d=float(n["d"]),
+        sigma=n.get("sigma"),
+        min_n=int(n.get("min_n", 1)),
+    )
+    if rule == "neyman":
+        alloc = neyman_allocation(cfg["scales"], **common)
+    elif rule == "snr":
+        alloc = snr_allocation(cfg["scales"], omega1=float(n["omega1"]), **common)
+    else:
+        raise ValueError(
+            f"unknown allocation rule {rule!r} in recipe 'n'; known: 'neyman', 'snr'"
+        )
+    print(
+        f"allocation rule={rule!r} budget={alloc['budget']:.4g} d={n['d']} -> "
+        f"cost={alloc['cost']:.4g} ({alloc['exhausted']:.1%} of budget)"
+    )
+    if alloc["exhausted"] > 1.0:
+        print(
+            "  warning: min_n clamp binds, so this allocation OVERSPENDS the stated budget "
+            "-- raise the budget or drop the smallest scales",
+            file=sys.stderr,
+        )
+    print(f"  n per scale: {dict(zip(alloc['scales'], alloc['n']))}")
+    return alloc["n"]
 
 
 def _main(argv: list[str] | None = None) -> None:
@@ -231,7 +307,7 @@ def _main(argv: list[str] | None = None) -> None:
     model = cfg["model"]
     spec = get_model(model)
     params = cfg["params"]
-    scales_list, n_list = normalize_scales_n(cfg["scales"], cfg["n"])
+    scales_list, n_list = normalize_scales_n(cfg["scales"], _resolve_n(cfg))
 
     seed_seq = np.random.SeedSequence(cfg.get("seed"))
     resolved_seed = seed_seq.entropy

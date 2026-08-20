@@ -60,6 +60,160 @@ def feasible(theta1: float, theta2: float, d: float, *, tol: float = 1e-9) -> bo
     return theta1 + d * theta2 <= 1.0 + tol
 
 
+def neyman_allocation(
+    scales,
+    budget: float,
+    d: float,
+    *,
+    sigma=None,
+    min_n: int = 1,
+) -> dict:
+    """Per-scale sample counts n_i minimizing total variance at fixed budget.
+
+    NOT Proposition prop:opt, and not from the article at all. The two rules
+    answer different questions and must not be swapped:
+
+    - `optimal_allocation` (prop:opt) minimizes the error of gamma-hat. The
+      correction term a_1 i^-omega_1 is pure nuisance there, so the rule
+      SLIDES THE SCALE WINDOW UPWARD as the budget grows, abandoning the
+      small scales where that correction bites, and uses a uniform n.
+    - This rule is for measuring omega_1 itself (Experiment B,
+      plans/three_experiment_ladder.md section 3). That measurement needs the
+      small scales KEPT, because they are the only place the correction is
+      big enough to see. Applying prop:opt here would spend the budget
+      precisely where the signal is not.
+
+    Minimizing sum_i sigma_i^2 / n_i subject to sum_i n_i * cost(i) = budget,
+    with cost(i) = i**d, gives (Lagrange multiplier, continuous relaxation)
+
+        n_i  proportional to  sigma_i / sqrt(cost(i))  =  sigma_i * i**(-d/2),
+
+    i.e. cheap small scales get many more replicates than expensive large
+    ones. `sigma` defaults to constant across scales (reasonable for
+    log Y_bar, whose variance is roughly scale-free); pass per-scale values
+    to weight it.
+
+    Returns {'scales', 'n', 'cost', 'budget', 'exhausted'}. Counts are
+    floored and clamped to `min_n`, so the realized cost can exceed `budget`
+    when the clamp binds -- `exhausted` reports cost/budget so the caller can
+    check rather than assume (same "check the diagnostic" pattern as
+    `integer_feasible` above).
+    """
+    import numpy as np
+
+    i = np.asarray(scales, dtype=float)
+    if i.size == 0:
+        raise ValueError("scales must be non-empty")
+    if np.any(i <= 0):
+        raise ValueError("scales must be strictly positive")
+    if d <= 0:
+        raise ValueError(f"d must be > 0 (Assumption cost_is_power_law); got {d}")
+    if budget <= 0:
+        raise ValueError(f"budget must be > 0; got {budget}")
+    if min_n < 1:
+        raise ValueError(f"min_n must be >= 1; got {min_n}")
+
+    s = np.ones_like(i) if sigma is None else np.asarray(sigma, dtype=float)
+    if s.shape != i.shape:
+        raise ValueError("sigma must match scales in length")
+    if np.any(s <= 0):
+        raise ValueError("sigma must be strictly positive")
+
+    cost = i**d
+    weights = s / np.sqrt(cost)
+    # Scale the weights so the continuous allocation costs exactly `budget`.
+    n_exact = weights * (budget / float(np.sum(weights * cost)))
+    n = np.maximum(np.floor(n_exact).astype(np.int64), min_n)
+    realized = float(np.sum(n * cost))
+
+    return {
+        "scales": [int(x) for x in np.asarray(scales)],
+        "n": [int(x) for x in n],
+        "cost": realized,
+        "budget": float(budget),
+        "exhausted": realized / float(budget),
+    }
+
+
+def snr_allocation(
+    scales,
+    budget: float,
+    d: float,
+    omega1: float,
+    *,
+    sigma=None,
+    min_n: int = 1,
+) -> dict:
+    """Per-scale n_i equalizing the signal-to-noise ratio of the CORRECTION term.
+
+    This is Experiment B's corrected rule, and it supersedes
+    `neyman_allocation` for measuring omega_1 (measured 2026-08-20, see
+    plans/three_experiment_ladder.md section 3).
+
+    Neyman minimizes the variance of Y_bar_i. But omega_1 is not estimated
+    from Y_bar_i -- it is estimated from the small correction a_1 * i^-omega_1
+    riding on top of it, whose size SHRINKS with i. Equalizing the error of
+    Y_bar therefore over-samples the small scales, where the correction is
+    already resolved hundreds of times over, and starves the large scales,
+    where it has sunk below the noise floor. Measured on the first Experiment
+    B run (Neyman, budget 2e9, scales 2..1024), the correction-term SNR ran
+    from 460 at k=2 down to 0.25 at k=1024 -- three orders of magnitude of
+    imbalance, and the large scales contributed nothing but noise to the fit.
+
+    Writing sd(log Y_bar_i) = s_i / sqrt(n_i), the correction's SNR at scale i
+    is |a_1| i^-omega1 sqrt(n_i) / s_i. Holding that constant across scales,
+
+        n_i  proportional to  s_i**2 * i**(2*omega1),
+
+    which for omega1 = 1 puts n_i proportional to i**2 -- INCREASING in i, the
+    opposite of Neyman's i**(-d/2). `omega1` here is a design input (the value
+    you expect, or a prior guess); the allocation is not sensitive to getting
+    it exactly right, but it does need the right sign of the trend.
+
+    `sigma` is s_i, the per-scale coefficient of variation sd(Y_i)/E(Y_i); it
+    defaults to constant, which holds well for srw's |S_k| (the coefficient of
+    variation of |S_k| is scale-free in k).
+
+    Returns the same shape as `neyman_allocation`, including `exhausted` --
+    check it rather than assuming the budget was respected.
+    """
+    import numpy as np
+
+    i = np.asarray(scales, dtype=float)
+    if i.size == 0:
+        raise ValueError("scales must be non-empty")
+    if np.any(i <= 0):
+        raise ValueError("scales must be strictly positive")
+    if d <= 0:
+        raise ValueError(f"d must be > 0 (Assumption cost_is_power_law); got {d}")
+    if omega1 <= 0:
+        raise ValueError(f"omega1 must be > 0 (article eq. 232); got {omega1}")
+    if budget <= 0:
+        raise ValueError(f"budget must be > 0; got {budget}")
+    if min_n < 1:
+        raise ValueError(f"min_n must be >= 1; got {min_n}")
+
+    s = np.ones_like(i) if sigma is None else np.asarray(sigma, dtype=float)
+    if s.shape != i.shape:
+        raise ValueError("sigma must match scales in length")
+    if np.any(s <= 0):
+        raise ValueError("sigma must be strictly positive")
+
+    cost = i**d
+    weights = s**2 * i ** (2.0 * omega1)
+    n_exact = weights * (budget / float(np.sum(weights * cost)))
+    n = np.maximum(np.floor(n_exact).astype(np.int64), min_n)
+    realized = float(np.sum(n * cost))
+
+    return {
+        "scales": [int(x) for x in np.asarray(scales)],
+        "n": [int(x) for x in n],
+        "cost": realized,
+        "budget": float(budget),
+        "exhausted": realized / float(budget),
+    }
+
+
 def optimal_allocation(B: float, d: float, omega1: float, rho: float, m: int) -> dict:
     """Rate-optimal allocation (Proposition prop:opt, eq. 945-946).
 

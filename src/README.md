@@ -23,10 +23,19 @@ python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag
 
 # 4. Plot that timing data
 python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
+
+# 5. Estimate the correction-to-scaling exponent omega_1 from a run (Experiment B)
+python3 generate.py -meta ../experiments/01_srw/omega1_config.json --tag omega1
+python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 --expect-omega1 1.0
 ```
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
 Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.
+`"n"` is a scalar, an explicit per-scale list, or an **allocation rule** —
+`{"rule": "snr", "budget": 5e10, "d": 1.0, "omega1": 1.0}` or
+`{"rule": "neyman", "budget": ..., "d": ...}` — which keeps a recipe self-describing
+about *why* those sample counts were chosen (see `tools/allocation.py`; `snr` is the
+right one for measuring $\omega_1$, `neyman` the documented wrong one).
 Default output directory is `data/` next to the recipe file itself (not this
 script's own location, since it's shared across experiments), so each experiment's
 runs still land under that experiment's own `data/`. Runs whose total estimated size
@@ -60,6 +69,14 @@ about one run lives in the same folder as `samples.npz`/`metadata.json`, and sin
 the experiment's `images/` folder when you want to keep it as evidence (ground
 rule 1/6 — committed deliberately, one at a time).
 
+`estimate_omega1.py` — Experiment B's analysis driver: reads a run directory and
+applies both of `tools/correction.py`'s $\omega_1$ estimators to it, writing
+`<run_dir>/omega1.json`. Never draws samples (generation and analysis are always
+separate scripts here). `--expect-omega1`/`--expect-gamma` print a PASS/FAIL against
+known values for reporting only — those values are never passed to the estimators, so
+the measurement stays blind to the answer it is checking. See
+`experiments/01_srw/README.md` for the recipe, the allocation rule, and the result.
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
@@ -79,6 +96,6 @@ same one-run-one-folder convention as `plot_loglog.py`. Verified:
 d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and is
 what biases the pure fit low; and that the aggregator is selectable and recorded).
 
-Each of the four inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+Each of these five inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
 `tools/*.py` helper modules work regardless of where they're invoked from.

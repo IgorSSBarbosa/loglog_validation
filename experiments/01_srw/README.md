@@ -42,6 +42,22 @@ That $\omega_2=3$ sits three full orders below $\omega_1=1$ makes this an unusua
 clean testbed for measuring $\omega_1$: contamination from the next correction term is
 negligible over any usable scale range.
 
+### The scale grid must not mix parities
+
+$\mathbb{E}\lvert S_k\rvert$ is a **staircase**, not a smooth curve:
+
+$$\mathbb{E}\lvert S_{2m-1}\rvert=\mathbb{E}\lvert S_{2m}\rvert\quad\text{exactly, for every }m$$
+
+(verified for $m=1,\dots,300$) — a walk of odd length cannot get as close to the origin
+as the even length above it. The asymptotic expansion above describes the *even* branch.
+Any scale grid mixing odd and even $k$ therefore presents a zig-zag that eq. (232)'s
+smooth model fits as curvature, and the failure is **silent** — the fit converges and
+reports a small residual. Measured on exact means with zero sampling noise, a
+$\rho=\sqrt2$ grid over $8\dots256$ returns $\hat\omega_1\approx17.8$ instead of $1$.
+
+Powers of 2 are safe, which is what every recipe here uses. Pinned by
+`tools/tests/test_correction.py::test_mixed_parity_grid_breaks_the_fit_on_a_staircase_mean`.
+
 ## Cost-model probe — not blocked, done
 
 Separate from the above: measures the computational-cost exponent $d$ (article
@@ -157,6 +173,92 @@ question is resolved, but not itself a validated result.
 `tools/tests/test_generate.py` checks output shapes match the recipe and that
 `reproduce()` (regenerate from recorded metadata) matches a saved run exactly, for
 every registered model including this one (see `tools/README.md`).
+
+## Experiment B — measuring $\omega_1$
+
+`plans/three_experiment_ladder.md` §3. Estimates the correction-to-scaling exponent,
+which `tools/allocation.py`'s budget rule needs as an input, against the known
+$\omega_1=1$.
+
+```bash
+cd src
+python3 generate.py -meta ../experiments/01_srw/omega1_config.json --tag omega1
+python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 \
+        --expect-omega1 1.0 --expect-gamma 0.5
+```
+
+`estimate_omega1.py` writes `<run_dir>/omega1.json` and applies both of
+`tools/correction.py`'s estimators — the direct fit of eq. (232)'s one-correction
+truncation, and the bias-decay fit of how `gamma_drop_leading` converges. `--expect-*`
+is **reporting only**; the estimators never receive those values.
+
+**Allocation.** The recipe uses `"n": {"rule": "snr", ...}`, not a flat $n$ and not
+Neyman. Details and the derivation are in `tools/allocation.py`'s `snr_allocation`; the
+short version is that $\omega_1$ is estimated from the *correction term*, whose size
+shrinks with $i$, so equalizing the error of $\overline Y_i$ (Neyman) over-samples the
+small scales and starves the large ones. Measured on a first Neyman run, the
+correction's SNR ran 460 at $k=2$ down to 0.25 at $k=1024$; the `snr` rule
+($n_i\propto i^{2\omega_1}$) flattens it to a constant.
+
+**Choosing the window.** Two effects pull in opposite directions, so the grid is a
+tradeoff, not a free choice. Fitting the one-correction model to the *exact* means
+(zero sampling noise) isolates the truncation bias from the neglected $\omega_2$ term
+and caps what any sample size can achieve:
+
+| smallest scale kept | 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|
+| $\hat\omega_1$ ceiling | 0.959 | 0.987 | 0.996 | 0.999 | 1.000 |
+
+But dropping small scales shrinks the correction signal, so the allocation has to
+compensate with more samples at the larger scales. `omega1_config.json` uses
+$8\dots256$ (ceiling $\approx0.995$).
+
+**Precision is the binding constraint, and it is variance, not bias.** The estimator is
+unbiased but has a wide sampling distribution: with $B=5\times10^{10}$ over this grid,
+simulating the fit against noise of the measured size gives
+$\hat\omega_1 = 1.005 \pm 0.155$ over 400 replicates. So a single run's deviation from
+$1$ is dominated by noise — report a replicate-based standard error, never a lone point
+estimate. Ten times the budget brings the standard deviation to $\approx0.05$.
+
+### Result (2026-08-20) — PASS
+
+Five **independent** replicates (ground rule 2: separate seeds, no shared samples),
+$B=4\times10^{10}$ each, scales $8\dots256$, `snr` allocation. Mean $\pm$ standard error
+across replicates:
+
+| quantity | measured | known truth | $z$ |
+|---|---|---|---|
+| $\omega_1$ | $1.0155 \pm 0.1050$ | $1$ | $+0.15$ |
+| $\gamma$ | $0.5000 \pm 0.0003$ | $1/2$ | $+0.11$ |
+| $a_1$ | $-0.2748 \pm 0.0597$ | $-1/4$ | $-0.41$ |
+| $a_0$ | $0.7979 \pm 0.0017$ | $\sqrt{2/\pi}\approx0.797885$ | $+0.01$ |
+
+All four within half a standard error, and $\hat\omega_1\in[0.85,1.15]$ meets the
+acceptance criterion. Note the enormous spread in precision across parameters: $\gamma$
+is pinned to $3\times10^{-4}$ while $\omega_1$ is only known to $\pm0.1$ from the same
+data — a correction exponent is intrinsically far harder to measure than the leading
+one, which is precisely why it gets its own experiment and its own allocation rule.
+
+Reproduce (each replicate ~4 min, ~1.4 GB of samples; delete them afterwards, the
+`omega1.json` is the result):
+
+```bash
+cd src
+for r in 1 2 3 4 5; do
+  sed "s/20260820/2026082$r/; s/5e10/4e10/" ../experiments/01_srw/omega1_config.json > /tmp/rep$r.json
+  python3 generate.py -meta /tmp/rep$r.json -o ../experiments/01_srw/data --tag omega1_rep$r
+  python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_rep$r
+  rm -rf ../experiments/01_srw/data/omega1_rep$r/samples
+done
+```
+
+**Not done:** the bias-decay cross-check did not run on this grid — with only 6 scales,
+`gamma_drop_leading` leaves fewer than 4 windows of $\ge4$ scales, and
+`estimate_omega1.py` reports that rather than fitting 3 parameters to 3 points. It did
+run on the earlier 10-scale grid (giving $0.78$ against the direct fit's $0.94$), and it
+agrees with the direct fit on planted data in `tools/tests/test_correction.py`. Getting
+both estimators on one grid needs $\ge10$ scales, i.e. extending the window upward at
+$\Theta(i^3)$ cost — deferred, not attempted.
 
 ### Fixed-memory generation for large `n`
 
