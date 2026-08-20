@@ -1,8 +1,13 @@
 # Plan — three-experiment ladder: measure $d$, then $\omega_1$, then $\gamma$
 
-Status: **proposed, not started.** Per ground rule 3 (one experiment at a time, design
-agreed before coding), nothing here is implemented until the open decisions in
-§0 are signed off.
+Status: **decisions signed off 2026-08-20; §1 (shared prerequisites) implemented and
+verified. Experiments A, B, C not started.**
+
+| decision | resolution (user, 2026-08-20) |
+|---|---|
+| D1 — write the closed form into `article.tex`? | **No.** Derivations of the first few correction-to-scaling exponents already exist elsewhere in the user's own notes; the article is left untouched, and the experiments do not consume these values as input. |
+| D2 — add `target_fn`/`true_gamma_key` to `MODELS["srw"]`? | **No.** README-only acceptance criteria instead: the known $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$ are stated in `experiments/01_srw/README.md` and checked by hand when an experiment finishes, so the known answer never enters the code path the estimators run through. |
+| D3 — default timing aggregator | **`median`**, with `min`/`mean`/`q95`/`iqmean` also available. |
 
 Motivation (user, 2026-08-20): `larger_test`'s `estimates.png` is too noisy to show the
 expected $\hat\gamma_i \approx \gamma + a\,i^{-\omega_1}$ decay. Getting enough samples
@@ -79,18 +84,37 @@ exploratory number nothing checks. It also unblocks the ladder in
 
 ---
 
-## 1. Shared code changes (prerequisites for all three experiments)
+## 1. Shared code changes (prerequisites for all three experiments) — DONE
 
-### 1a. `models/srw.py` — 5.2× faster, same cost structure
+### 1a. `models/srw.py` — 4.4× faster, same cost structure — DONE
 
-Replace `rng.choice(_STEP_VALUES, size=(block, k), p=[1-q, q])` with an
-`rng.integers`-based draw. Benchmarked at $k=1024$, $n=2\times10^5$:
+Replaced `rng.choice(_STEP_VALUES, size=(block, k), p=[1-q, q])` with a
+`float32`-uniform draw, `rng.random(size=(rows,k), dtype=np.float32) < q`.
+Benchmarked at $k=1024$, $n=2\times10^5$:
 
-| variant | µs/sample | speedup |
-|---|---|---|
-| current `choice(..., p=)` | 28.70 | 1× |
-| `choice(...)` without `p=` | 9.42 | 3× |
-| `2*rng.integers(0,2,dtype=int8).sum(axis=1) - k` | 5.56 | **5.2×** |
+| variant | block-invariant | µs/sample | bytes/step |
+|---|---|---|---|
+| `choice(..., p=)` (old) | yes | 28.30 | 1 |
+| `integers(0,2, dtype=int8)` | **no** | 5.16 | 1 |
+| `integers(0,2, dtype=int64)` | yes | 7.65 | 8 |
+| **`random(dtype=float32) < q`** (chosen) | **yes** | **6.63** | 4 |
+| `random(dtype=float64) < q` | yes | 8.37 | 8 |
+
+**The int8 integer draw was tried first and rejected**, despite being the fastest
+option: numpy packs several small integers per 64-bit draw and *discards the leftover
+bits at the end of each call*, so splitting rows into blocks consumes the bit stream
+differently from one unblocked call and silently changes the output (reproduced at
+$k=7$, $n=50$, `block_n=3`). That would have broken both `srw`'s own `block_n`
+invariance and `src/generate.py`'s chunked path, which depends on it — i.e. it would
+have quietly undone the OOM fix's correctness guarantee. A float32 uniform is one draw
+per step with no packing, so row-blocking stays exact. float32 costs nothing
+statistically here: 24 random mantissa bits, and for $q=1/2$ the comparison is an
+exactly fair coin.
+
+Verified after the switch: `block_n` invariance exact at five $(k,n,\text{block})$
+combinations; sample means match the exact $\mathbb{E}\lvert S_k\rvert$ within
+$\lvert z\rvert\le2.5$ at nine scales; parity and $[0,k]$ bounds hold; asymmetric
+$q\in\{0.3,0.7\}$ matches an independent binomial reference.
 
 Deliberately **not** adopted: the exact closed-form sampler
 $\lvert S_k\rvert = \lvert 2\,\mathrm{Bin}(k,q)-k\rvert$, which is 375× faster and
@@ -109,21 +133,45 @@ Note this **breaks bit-reproducibility of existing runs** (different RNG consump
 old path kept behind a `method=` flag. Recommend regenerating — they are all cheap
 except `Huge_test`, which was never completed anyway.
 
-### 1b. `tools/cost_model.py` — aggregator registry
+### 1b. `tools/cost_model.py` — aggregator registry — DONE
 
-Add `AGGREGATORS = {"min", "median", "mean", "q95", "iqmean"}`, mirroring the existing
-`COST_ESTIMATORS` name-keyed-registry pattern, selectable from the recipe JSON.
-Measured on the existing runs, the choice barely moves $\hat d$ (min 0.884 / median
-0.888 / iqmean 0.887 / mean 0.850 / q95 0.811 on `cost_probe`) — this is for honest
-error bars and for the user's stated preference, not to change the estimate.
+`AGGREGATORS = {"min", "median", "mean", "q95", "iqmean"}`, mirroring the existing
+`COST_ESTIMATORS` name-keyed-registry pattern, selectable per-recipe via an
+`"aggregator"` key, defaulting to `median`. Measured on the existing runs the choice
+barely moves $\hat d$ (min 0.884 / median 0.888 / iqmean 0.887 / mean 0.850 / q95 0.811
+on `cost_probe`) — this is for honest error bars and for the user's stated preference,
+not to change the estimate. `median_ci` supplies the distribution-free interval from
+order statistics that motivated preferring `median` over `min`; verified by empirical
+coverage (95.6% against a nominal 95% at $N=31,301$) rather than by a single-draw
+bracket assertion, which would fail 5% of the time by construction.
 
-### 1c. `tools/cost_model.py` — affine-plus-power fit
+### 1c. `tools/cost_model.py` — affine-plus-power fit — DONE
 
-The real defect in `time_measure` is **model misspecification, not aggregation**: over
-$k=2\dots1024$ the measured cost is affine, $\approx 22\,\mu s + 0.025\,\mu s\cdot k$,
-so a pure power-law fit returns $\hat d\approx0.10$ — meaningless. Add
-`estimate_cost_exponent_affine` fitting $\mathrm{cost}(i)=a+b\,i^d$, and report the
-overhead $a$ explicitly as a diagnostic.
+The real defect is **model misspecification, not aggregation**: over $k=2\dots1024$ the
+measured cost is affine, $\approx 22\,\mu s + 0.025\,\mu s\cdot k$, so a pure power-law
+fit returns $\hat d\approx0.10$ — meaningless. `estimate_cost_affine` fits
+$\mathrm{cost}(i)=a+b\,i^d$ in log space and reports the overhead $a$ as an explicit
+diagnostic.
+
+This turns out to rescue the small-scale regime completely, which is the crux of the
+original conundrum — small scales are where the samples are affordable, and they were
+exactly where the cost model was failing:
+
+| run | pure-power $\hat d$ | affine $\hat d$ | fitted overhead $a$ |
+|---|---|---|---|
+| `time_measure` ($k=2\dots1024$) | 0.103 | **0.948** | 23.7 µs |
+| `cost_probe` ($k=256\dots10^6$), re-run after 1a | 0.771 | **1.006** | 11.2 µs |
+
+Three independent routes now agree on $d=1$ for `srw`: the affine fit (1.0063), the
+`drop_leading` local-slope limit (0.9980 at $m_0=5$), and the known $\Theta(k)$ ground
+truth. Acceptance in `src/measure_cost.py` is therefore checked against the affine
+$\hat d$ whenever the fit is available.
+
+**Consequence for Experiment A:** the batched/amortized measurement below may now be
+redundant — the affine fit already recovers $d$ correctly from $n=1$ timings. Worth
+confirming rather than assuming; the two are independent corrections (batching removes
+the overhead physically, the affine fit models it statistically), so agreement between
+them would be a genuine cross-check.
 
 ---
 

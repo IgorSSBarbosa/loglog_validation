@@ -16,7 +16,7 @@ registry). Each file exposes:
   which key in `params` holds the true $\gamma$, when known.
 
 `srw.py` — `srw(k, n=1, q=0.5, rng=None, block_n=None)`, $n$ i.i.d. realizations of
-$|S_k|$. Draws $\pm1$ steps as `(block_n, k)` int8 blocks over the $n$ axis and
+$|S_k|$. Draws steps as `(block_n, k)` float32 blocks over the $n$ axis and
 accumulates row sums, instead of one $(n,k)$ matrix — bounds peak transient memory to
 a fixed byte budget (`_DEFAULT_WORKING_SET_BYTES`) regardless of how large $n$ gets
 (the old unblocked, `int64` version needed 819 GiB at $n=10^8,\,k=1024$ —
@@ -24,10 +24,25 @@ a fixed byte budget (`_DEFAULT_WORKING_SET_BYTES`) regardless of how large $n$ g
 deliberately: splitting the leading axis into sequential row ranges consumes numpy's
 row-major RNG stream in the same order a single unblocked call would, so results are
 bit-identical for the same seed at any block size — splitting over $k$ would not have
-this property (see the module's own docstring for the full argument). No `target_fn`:
-no article-sanctioned closed form for SRW yet (`appendix-SimpleRandomWalk` is still an
-empty stub — see `experiments/01_srw/README.md`, PLAN.md "Open questions before Phase
-1"). Verified: `tools/tests/test_srw.py` (shape/bounds/parity, classical
+this property (see the module's own docstring for the full argument).
+
+The per-step draw is `rng.random(size=..., dtype=np.float32) < q`, counting $+1$s and
+mapping $S_k=2(\#{+1})-k$ — 4.4x faster than the `rng.choice(..., p=[1-q,q])` it
+replaced (6.6 vs 28.3 µs/sample at $k=1024$). Two faster alternatives were tried and
+deliberately rejected, both documented in `_draw_heads`: `rng.integers(0,2,dtype=int8)`
+(fastest, but numpy packs several values per 64-bit draw and discards the leftover bits
+per call, so row-blocking stops being exact — it breaks the bit-identity guarantee
+above and `src/generate.py`'s chunked path with it), and `rng.binomial(k,q,size=n)`
+(~375x faster and distributionally identical, but samples every scale in ~constant
+time, destroying the $\Theta(k)$ per-sample cost that is this model's entire reason for
+existing as a percolation stand-in — user's call, 2026-08-20).
+
+No `target_fn` — deliberate, not a gap. $\mathbb{E}\lvert S_k\rvert$ is known exactly
+(see `experiments/01_srw/README.md` for the formula and its verification, giving
+$\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$), but by the user's decision (2026-08-20) those
+values stay out of the code path and serve as hand-checked README acceptance criteria,
+so the estimators are never incidentally handed the answer they are measuring.
+Verified: `tools/tests/test_srw.py` (shape/bounds/parity, classical
 $\mathbb E|S_k|\sim\sqrt{2k/\pi}$ asymptotic, `block_n` exact-equivalence with the
 unblocked path, and a large-$(n,k)$ case that would be gigabytes unblocked).
 

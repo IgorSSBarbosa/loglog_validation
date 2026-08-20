@@ -221,12 +221,73 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       stayed a few GiB throughout, no flush warnings triggered, chunked output matched the
       in-RAM path exactly. `Huge_test.json` itself not re-run end-to-end this session (would
       take a long time) but is expected to complete without OOM now~~
+- [x] ~~Make the cost probe measure cost rather than overhead, and speed up `srw` without
+      flattening it (user request, 2026-08-20; `plans/three_experiment_ladder.md` §1).
+      Context: the user wants enough samples for `estimates.png` to show a smooth
+      $\hat\gamma_i\approx\gamma+a\,i^{-\omega_1}$ decay, which forces small scales -- but at
+      small scales `cost_probe`/`time_measure` showed no power law, so the budget-allocation
+      theorem couldn't be applied there. Diagnosed as **model misspecification, not timing
+      noise**: over $k=2\dots1024$ the measured cost is affine, $\approx22\,\mu s +
+      0.025\,\mu s\cdot k$, i.e. a fixed Python/NumPy dispatch overhead that doesn't scale
+      with $k$ at all (100% of the measurement at $k=2$, 88% at $k=256$). Also confirmed the
+      timing *aggregator* was never the problem -- min 0.884 / median 0.888 / iqmean 0.887 /
+      mean 0.850 / q95 0.811 on the same data. Three changes: (1) `tools/cost_model.py` gains
+      `estimate_cost_affine`, fitting $\mathrm{cost}(i)=a+b\,i^d$ in log space and reporting
+      $a$ as a diagnostic -- this rescues the small-scale regime completely, taking
+      `time_measure` from $\hat d=0.103$ to $\hat d=0.948$ and `cost_probe` to
+      $\hat d=1.006$ against ground truth $d=1$; (2) an `AGGREGATORS` registry
+      (min/median/mean/q95/iqmean, per-recipe, default `median` -- user's choice) plus
+      `median_ci`, a distribution-free interval from the order statistics, which is the
+      actual reason to prefer `median` over `min` (a minimum has no comparable interval);
+      (3) `models/srw.py` swaps `rng.choice(..., p=)` for a float32-uniform draw, 4.4x
+      faster (28.3 -> 6.6 µs/sample at $k=1024$; full suite 59s -> 15s). Two faster draws
+      were tried and rejected: `rng.integers(0,2,dtype=int8)` (fastest, but numpy's
+      bit-packing discards leftover bits per call, so row-blocking stops being exact --
+      caught by the existing `block_n` invariance test, and it would have silently broken
+      `generate.py`'s chunked path too), and `rng.binomial(k,q,size=n)` (~375x faster,
+      distributionally identical, but constant-time per scale -- it would destroy the
+      $\Theta(k)$ cost that makes `srw` a percolation stand-in and void Experiments A/C;
+      user's call). Note the speedup made the *pure* $\hat d$ worse (0.88 -> 0.77): faster
+      work against unchanged overhead, which is exactly the misspecification, and is why
+      acceptance moved to the affine fit. Verified: `tools/tests/test_cost_model.py` (+8
+      cases -- exact $(a,b,d)$ recovery on planted affine curves, the pure fit shown
+      genuinely biased low on the same data, aggregator behaviour under a planted outlier,
+      `median_ci` coverage measured empirically at 95.6% vs nominal 95% and its
+      $1/\sqrt N$ shrinkage), `tools/tests/test_measure_cost.py` (+2 cases, acceptance
+      moved to the affine $\hat d$); full suite 67 cases passing. Cross-check: the
+      independent `drop_leading` local-slope diagnostic converges to 0.998, agreeing with
+      the affine fit's 1.006 and the $\Theta(k)$ ground truth~~
+- [x] ~~Record the exact ground truth for $Y_k=\lvert S_k\rvert$ (2026-08-20). While
+      designing the $\omega_1$ experiment, found that
+      $\mathbb{E}\lvert S_k\rvert=k\binom{k-1}{\lfloor(k-1)/2\rfloor}2^{-(k-1)}$ exactly --
+      verified exhaustively against $2^{-k}\sum_j\binom kj\lvert2j-k\rvert$ for every
+      $k=1..200$ and by Monte Carlo at $2\times10^6$ samples. Its expansion is
+      $\sqrt{2/\pi}\,k^{1/2}\exp(-\frac14 k^{-1}+\frac1{24}k^{-3}+O(k^{-5}))$, i.e. exactly
+      article eq. (232) with $a_0=\sqrt{2/\pi}$, $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$ --
+      and the $k^{-2}$ term cancels identically, putting $\omega_2=3$, three orders below
+      $\omega_1$, which makes this an unusually clean testbed for measuring $\omega_1$.
+      Deliberately NOT wired into `tools/models.py` as a `target_fn`/`true_gamma_key`
+      (user's decision D1/D2, 2026-08-20): stated as hand-checked acceptance criteria in
+      `experiments/01_srw/README.md` instead, so the estimators are never handed the answer
+      they are supposed to be measuring; and the article's `appendix-SimpleRandomWalk` is
+      left untouched, since the user already has these derivations elsewhere~~
+- [ ] Experiment A — amortized/batched cost measurement (`plans/three_experiment_ladder.md` §2).
+      May now be redundant: the affine fit already recovers $d$ correctly from $n=1$ timings.
+      Worth running as an independent cross-check rather than assuming either way
+- [ ] Experiment B — measure $\omega_1$ at small scales, Neyman-style $n(i)\propto1/\sqrt{c(i)}$
+      allocation (`plans/three_experiment_ladder.md` §3). Acceptance: $\hat\omega_1\in[0.85,1.15]$
+- [ ] Experiment C — $\gamma$ under `tools/allocation.py`'s optimal budget, **with a flat-$n$
+      control arm at equal budget** (`plans/three_experiment_ladder.md` §4). Check first
+      whether `prop:opt` degenerates at $(d,\omega_1)=(1,1)$
 - [ ] `tools/wilson.py` — Wilson CI
 - [ ] `tools/bootstrap.py` — resampling for constants
 
 ## Later phases (not started, not designed yet)
-- [ ] Resolve open question: SRW/Bethe-lattice closed forms (article appendices are
-      empty stubs) — needed before Phase 1 can be designed
+- [ ] Resolve open question: Bethe-lattice closed form (article appendix is an empty
+      stub) — needed before Phase 4 can be designed. The **SRW** half of this is now
+      settled for $Y_k=\lvert S_k\rvert$: exact $\mathbb{E} Y_k$, $\gamma=1/2$,
+      $\omega_1=1$, $a_1=-1/4$, $\omega_2=3$, recorded as acceptance criteria in
+      `experiments/01_srw/README.md` (article deliberately left untouched — user's D1)
 - [ ] Phase 1 — SRW
 - [ ] Phase 2 — RWRE (cross-check against `critical_exponents/estimators/log_log_plot.py`)
 - [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster

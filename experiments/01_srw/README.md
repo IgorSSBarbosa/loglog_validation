@@ -7,17 +7,40 @@ every other experiment (`src/generate.py`, `src/plot_loglog.py`,
 `src/measure_cost.py`, `src/plot_cost.py` — see `src/README.md`); this folder now
 holds only recipes, README, `data/` (gitignored), and `images/` (committed evidence).
 
-## Gamma-estimation ladder — blocked on design
+## Known ground truth for $Y_k=\lvert S_k\rvert$ — acceptance criteria
 
-The article's `appendix-SimpleRandomWalk` is currently an empty section header — no
-closed-form $\mathbb{E} Y_i$, $\gamma$, or $\omega_1$ is written down for this testbed
-yet. Needs discussion (which observable $Y_i$: return probability at step $i$, range
-after $i$ steps, something else?) before any code is written for *this* purpose. See
-`PLAN.md` "Open questions before Phase 1". Phase 1 proper has not started. This is
-exactly why `MODELS["srw"]` in `tools/models.py` has no `target_fn`/`true_gamma_key` —
-that absence is what keeps `src/plot_loglog.py` from running gamma-hat estimators
-against this model at all (see "Sample generation" below), not a special case coded
-into the driver.
+The article's `appendix-SimpleRandomWalk` is still an empty section header, but for the
+observable $Y_k=\lvert S_k\rvert$ the mean is known exactly:
+
+$$\mathbb{E}\lvert S_k\rvert = k\binom{k-1}{\lfloor (k-1)/2\rfloor}2^{-(k-1)}
+=\sqrt{\tfrac{2}{\pi}}\;k^{1/2}\exp\!\Bigl(-\tfrac14 k^{-1}+\tfrac1{24}k^{-3}+O(k^{-5})\Bigr).$$
+
+Verified two independent ways (2026-08-20): exhaustively against
+$2^{-k}\sum_j\binom kj\lvert 2j-k\rvert$ for every $k=1,\dots,200$ (exact to machine
+precision), and by Monte Carlo at $2\times10^6$ samples across
+$k\in\{1,\dots,101\}$ (within 1.6 SE everywhere). Matching against article eq. (232),
+$\mathbb{E} Y_i = a_0 i^\gamma\exp(a_1 i^{-\omega_1}+\cdots)$:
+
+| object | exact value |
+|---|---|
+| $a_0$ | $\sqrt{2/\pi}\approx0.797885$ |
+| $\gamma$ | $1/2$ |
+| $\omega_1$ | $1$ |
+| $a_1$ | $-1/4$ |
+| $\omega_2$ | $3$ (the $k^{-2}$ term cancels identically) |
+
+**These are acceptance criteria, not inputs.** By explicit decision (user, 2026-08-20 —
+see `plans/three_experiment_ladder.md` D1/D2) they are deliberately *not* wired into
+the code: `MODELS["srw"]` still has no `target_fn`/`true_gamma_key`, so
+`src/plot_loglog.py` still overlays no reference curve, reports no `true_gamma`, and
+still prints its "exploratory, not validated" note. The estimators are never handed
+the answer they are supposed to be measuring — the numbers above are checked by hand
+against a finished run instead. Do not add `target_fn` here without revisiting that
+decision.
+
+That $\omega_2=3$ sits three full orders below $\omega_1=1$ makes this an unusually
+clean testbed for measuring $\omega_1$: contamination from the next correction term is
+negligible over any usable scale range.
 
 ## Cost-model probe — not blocked, done
 
@@ -31,11 +54,12 @@ summing them is $\Theta(k)$, i.e. $d=1$ — a known ground truth to validate the
 *measurement procedure* against, before ever pointing it at a real (and expensive)
 simulator.
 
-- `models/srw.py` — the simulator, `srw(k, n=1, q=0.5, rng=None)`, returning `n`
-  i.i.d. realizations of $|S_k|$ as an array (vectorized: one $(n,k)$ matrix of $\pm1$
-  steps, summed along the $k$ axis). `src/measure_cost.py` calls it at the default
-  `n=1` -- Assumption `cost_is_power_law` defines $\mathrm{cost}(i)$ as the cost of
-  simulating *one* sample -- `n>1` is what "Sample generation" below uses.
+- `models/srw.py` — the simulator, `srw(k, n=1, q=0.5, rng=None, block_n=None)`,
+  returning `n` i.i.d. realizations of $|S_k|$ as an array (vectorized over row-blocks
+  of $n$; $k$ steps are genuinely drawn per sample, keeping the cost $\Theta(nk)$).
+  `src/measure_cost.py` calls it at the default `n=1` -- Assumption
+  `cost_is_power_law` defines $\mathrm{cost}(i)$ as the cost of simulating *one*
+  sample -- `n>1` is what "Sample generation" below uses.
 - `tools/cost_model.py` — generic, experiment-agnostic estimator: `cost(i)=c\cdot i^d`
   has the same log-log-linear form as $\mathbb{E} Y_i=a_0 i^\gamma$ (eq. 232), so
   `estimate_cost_exponent` reuses `tools/loglog.py`'s OLS-slope machinery, behind a
@@ -43,15 +67,33 @@ simulator.
   added later without touching callers.
 - `src/measure_cost.py` — the shared driver: times `MODELS[model].simulate(k, n=1,
   ...)` at a small grid of scales (`cost_probe_config.json`: `[256, 1024, 4096, 16384,
-  65536, 262144, 1048576]`), 20 repeats each, aggregated by **minimum** (not mean --
+  65536, 262144, 1048576]`), 20 repeats each, aggregated by **median** (not mean --
   repeated timings all target the same true deterministic quantity, so noise only ever
   adds delay; this is the one place this experiment departs from the sample-mean
-  framing used elsewhere for genuinely stochastic $Y_i$). Also prints a
-  `gamma_drop_leading`-style view (drop the first $m_0$ scales) as a finite-overhead
-  diagnostic — fixed per-call overhead dominates at the smallest $k$, the same shape as
-  the article's own $m_0$ finite-size correction; empirically the local slope climbs
-  from $\approx 0.90$ (all 7 scales) to $\approx 1.0$–$1.09$ once the first scale or two
-  are dropped.
+  framing used elsewhere for genuinely stochastic $Y_i$). `min` is the classic
+  microbenchmark choice and remains available, but `median` is the default because it
+  resists the same one-sided jitter *and* carries a distribution-free confidence
+  interval (`tools/cost_model.py`'s `median_ci`), which a minimum does not; empirically
+  the two differ by $<0.005$ in $\hat d$.
+- **Two cost models are fitted, and the pure one is the wrong one at small $k$.** A
+  single `simulate(k, n=1, ...)` call pays a fixed $\approx11$–$24\,\mu s$ of
+  Python/NumPy dispatch that does not scale with $k$ at all. At the smallest scales
+  that overhead *is* the measurement (88% of it at $k=256$), so a pure
+  $\mathrm{cost}(i)=c\,i^d$ fit attributes overhead to the power law and returns a badly
+  biased $\hat d$. `tools/cost_model.py`'s `estimate_cost_affine` fits
+  $\mathrm{cost}(i)=a+b\,i^d$ instead and recovers $d$ correctly; acceptance is checked
+  against it. Measured 2026-08-20:
+
+  | run | pure-power $\hat d$ | affine $\hat d$ | overhead $a$ |
+  |---|---|---|---|
+  | `cost_probe` ($k=256\dots10^6$) | 0.771 | **1.006** | 11.2 µs |
+  | `time_measure` ($k=2\dots1024$) | 0.103 | **0.948** | 23.7 µs |
+
+  The `gamma_drop_leading`-style view (drop the first $m_0$ scales) is kept as an
+  independent finite-overhead diagnostic — the same shape as the article's own $m_0$
+  finite-size correction. It agrees: the local slope climbs monotonically from 0.771
+  (all 7 scales) to 0.998 ($m_0=5$), converging on the same $d=1$ the affine fit
+  reports directly and the $\Theta(k)$ ground truth predicts.
 - `src/plot_cost.py` — separate from `measure_cost.py` (generation and plotting are
   always distinct scripts in this repo). Reads `measure_cost.py`'s saved
   `<tag>/result.json` directly (`elapsed_all` is already `{scale: array}`,
@@ -59,7 +101,11 @@ simulator.
   `loglog_plot`.
 
 Numeric acceptance criterion (`tools/tests/test_measure_cost.py`, local-only — see
-`tools/README.md`): $\hat d \in [0.8, 1.2]$ over the default grid/repeats.
+`tools/README.md`): **affine** $\hat d \in [0.8, 1.2]$ over the default grid/repeats.
+A companion test asserts that the fitted overhead is strictly positive and that the
+pure-power $\hat d$ comes back *lower* than the affine one — so if a future change ever
+removes the fixed per-call overhead, that test fails loudly and the simpler pure fit can
+be restored rather than silently kept for no reason.
 `images/cost_probe.png` (committed snapshot, per ground rule 1 — supplement to the
 numeric check, not a replacement for it; copied in manually from a
 `data/cost_probe/plot.png` run, since `plot_cost.py`'s default output now lives

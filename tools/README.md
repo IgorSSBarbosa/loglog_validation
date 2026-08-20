@@ -117,20 +117,28 @@ module identity (see its docstring). The actual per-model logic lives in
   `mean_Y`, article eq. 232). Has both `target_fn` and `true_gamma_key="gamma"`,
   since the ground truth is planted and known — the only model that currently does.
 - `srw.py` — `srw(k, n, q, rng, block_n=None)`, $n$ i.i.d. realizations of $|S_k|$.
-  Draws $\pm1$ steps in `(block_n, k)` int8 blocks over the $n$ axis and accumulates
+  Draws steps in `(block_n, k)` float32 blocks over the $n$ axis and accumulates
   row sums, rather than one $(n,k)$ matrix — bounds peak transient memory to a fixed
   byte budget regardless of how large $n$ gets (the old unblocked, `int64` version
   needed 819 GiB at $n=10^8,\,k=1024$). Blocking over $n$, not $k$, is deliberate:
   splitting the leading axis into sequential row ranges consumes numpy's row-major RNG
   stream in the same order a single unblocked call would, so results are bit-identical
   for the same seed at any block size (splitting over $k$ would not have this
-  property — see the module's own docstring). No `target_fn`/`true_gamma_key`: no
-  article-sanctioned closed form for SRW yet (see `experiments/01_srw/README.md`),
-  which is exactly what keeps `src/plot_loglog.py` from overlaying a reference
-  curve or reporting a `true_gamma` for this model — not a special case in the
-  driver, just an absence in the registry. The gamma-hat estimators still run
-  (comparing estimators against each other doesn't need a known truth); an
-  explicit "exploratory" note is printed instead.
+  property — see the module's own docstring). The draw is
+  `rng.random(dtype=float32) < q`, ~4.4x faster than the `rng.choice(..., p=)` it
+  replaced; note the still-faster `rng.integers(0,2,dtype=int8)` was tried and
+  **rejected** because numpy's bit-packing discards leftover bits per call and breaks
+  exactly that block-invariance, and `rng.binomial` was rejected for sampling every
+  scale in ~constant time (which would destroy the $\Theta(k)$ cost this model exists
+  to provide). No `target_fn`/`true_gamma_key` — a deliberate choice, not a gap:
+  $\mathbb{E}\lvert S_k\rvert$ *is* known exactly, but the user's decision
+  (2026-08-20) is to keep $\gamma=1/2$, $\omega_1=1$ out of the code path and state
+  them as README acceptance criteria instead, so the estimators are never handed the
+  answer they are measuring (see `experiments/01_srw/README.md`). That absence is
+  what keeps `src/plot_loglog.py` from overlaying a reference curve or reporting a
+  `true_gamma` for this model — not a special case in the driver. The gamma-hat
+  estimators still run (comparing estimators against each other doesn't need a known
+  truth); an explicit "exploratory" note is printed instead.
 
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
 `tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
@@ -145,10 +153,36 @@ $d$ from Assumption `cost_is_power_law` ($\mathrm{cost}(i)=i^d$), which has the
 same log-log-linear form as $\mathbb{E} Y_i=a_0 i^\gamma$ (eq. 232) — reuses
 `loglog.py`'s `gamma_all_points` internally, behind a name-keyed registry
 (`COST_ESTIMATORS`) so a different estimation approach can be swapped in later.
-Verified: `tools/tests/test_cost_model.py` on synthetic noiseless cost curves;
-empirically validated against a real $\Theta(k)$ simulator in
-`experiments/01_srw/` (recovers $\hat d\approx0.90$–$1.09$ against ground truth
-$d=1$).
+
+`estimate_cost_affine` fits $\mathrm{cost}(i)=a+b\,i^d$ instead, and is the one
+to trust whenever the fitted overhead $a$ is not small next to the timings at
+the smallest scales. A real timing probe pays a fixed per-call cost that does
+not scale with $i$ at all (~11–24 µs of Python/NumPy dispatch on this machine);
+the pure power law has nowhere to put it and folds it into $d$, biasing the
+estimate downward — badly, when small scales are included ($\hat d=0.10$ on
+`time_measure`, where the truth is $1$; the affine fit recovers $0.95$). Fitted
+in log space, since costs span orders of magnitude across a scale grid.
+
+`AGGREGATORS`/`aggregate`/`median_ci` collapse repeated timings at one scale.
+Repeated timings target the same deterministic quantity, so their noise is
+one-sided (jitter only ever adds delay) — which is why `min` is the classic
+microbenchmark choice and was this project's original one. The registry
+(`min`/`median`/`mean`/`q95`/`iqmean`, selectable per-recipe) defaults to
+**`median`**: equally resistant to one-sided jitter, but unlike a minimum it
+has a distribution-free confidence interval from the order statistics
+(`median_ci`), so cost curves get honest error bars. The choice barely moves
+the estimate (min 0.884 / median 0.888 / iqmean 0.887 / mean 0.850 / q95 0.811
+on `cost_probe`) — it buys the interval, not a different number.
+
+Verified: `tools/tests/test_cost_model.py` — exact recovery of $d$ on
+noiseless power-law curves; exact recovery of *all three* of $(a,b,d)$ on
+planted affine curves, alongside a check that the pure fit is genuinely biased
+low on the same data; aggregator behaviour on a sample with a planted outlier;
+and `median_ci`'s nominal coverage measured empirically (95.6% against a
+nominal 95%) plus its $1/\sqrt N$ width shrinkage — not a single-draw bracket
+assertion, which would fail 5% of the time by construction. Empirically
+validated against a real $\Theta(k)$ simulator in `experiments/01_srw/`
+(affine $\hat d=1.006$ against ground truth $d=1$).
 
 `allocation.py` — `optimal_allocation` (Proposition `prop:opt`, eq. 945-946)
 and `total_cost` (Lemma `lem:budget`'s closed-form cost). Given a budget $B$
