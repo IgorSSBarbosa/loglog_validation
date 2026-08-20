@@ -1,5 +1,21 @@
+# Direct dependencies only -- one line per package this repo actually imports.
+# Transitive dependencies are resolved by pip and deliberately NOT pinned here
+# (see PLAN.md: this file "grows only as imports are added").
+#
+# Adding a library:
+#   1. pip install <pkg>
+#   2. add ONE line here, pinned to the version you just installed:
+#        python3 -c "import importlib.metadata as m; print(m.version('<pkg>'))"
+#   3. never `pip freeze > requirements.txt` -- that overwrites this curated list
+#      with the whole transitive closure of the environment.
+#
+# Canonical environment is the project venv (PLAN.md):
+#   python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
 numpy==2.0.2
 scipy==1.13.1
 matplotlib==3.9.4
+psutil==7.2.2
+
+# test-only
 pytest==8.4.2
-psutil==6.1.1
