@@ -37,6 +37,9 @@ python3 allocation_table.py --compare
 
 # 8. Check those predictions against reality (a few minutes; keep the machine idle)
 python3 verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+
+# 9. Plot Experiment C: the m0 tradeoff, and measured vs predicted decay rate
+python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
 ```
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
@@ -123,6 +126,19 @@ more than `--max-n` samples per scale: budget is derived *from* $m_0$ here, so $
 like $\rho^{2m_0}$ and a stray `--m0 20` would otherwise ask for $10^{25}$ samples.
 Verified: `tools/tests/test_verify_prediction.py` (7 cases).
 
+`plot_allocation.py` — Experiment C's plot, `<run_dir>/plot.png`. Left panel: RMSE
+against $m_0$, one curve per budget, with `prop:opt`'s $m_0$ and the empirical argmin
+marked — the U-shape *is* the bias-variance tradeoff, and the systematic gap between the
+two markers is the POINT failure made visible. Right panel: RMSE against budget on
+log-log with fitted decay exponents, compared against $-\omega_1/(d+2\omega_1)$
+**predicted from Experiment B's measured $\omega_1$**, banded by that measurement's own
+standard error — the cross-experiment check that B's $\omega_1$ predicts C's decay rate.
+Budgets whose `prop:opt` $m_0$ was not swept are dropped from the right panel and named
+on stderr, rather than silently leaving it empty. Palette is `tools/loglog_plot.py`'s
+unchanged. Verified: `tools/tests/test_plot_allocation.py` (5 cases — the chart itself is
+not unit-tested, per the convention for plots; the series selection and fitted exponents
+are).
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
@@ -142,6 +158,6 @@ same one-run-one-folder convention as `plot_loglog.py`. Verified:
 d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and is
 what biases the pure fit low; and that the aggregator is selectable and recorded).
 
-Each of these eight inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+Each of these nine inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
 `tools/*.py` helper modules work regardless of where they're invoked from.

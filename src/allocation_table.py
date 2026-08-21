@@ -55,6 +55,7 @@ from persistence import load_samples  # noqa: E402
 FALLBACK_A1 = -0.2748          # Experiment B, 5 replicates (truth -1/4)
 FALLBACK_CV = sqrt(3.14159265358979 / 2 - 1)   # half-normal limit for |S_k|
 FALLBACK_THROUGHPUT = 1.53e8   # steps/second, Experiment C's sweep
+FALLBACK_OMEGA1 = 1.0155      # Experiment B, 5 replicates (truth 1)
 
 
 def _fit_summary(d: Path) -> dict | None:
@@ -209,24 +210,51 @@ def measured_a1(run_dirs) -> tuple[float, float | None, str]:
     pooled estimator's sd is close to it over sqrt(R) (measured 0.0166 against
     0.0785/sqrt(20) = 0.0176). It needs >= 2 replicates to exist at all.
     """
+    return measured_correction(run_dirs)["a1_triple"]
+
+
+def measured_correction(run_dirs) -> dict:
+    """Experiment B's fit, pooled across replicates: a1 AND omega1, with stderrs.
+
+    Same pooling as described in `measured_a1` -- this is where it actually
+    happens; `measured_a1` is the a1-only view. omega_1 is returned too because
+    it is what sets the predicted error-decay exponent
+    -omega1/(d + 2*omega1), which src/plot_allocation.py draws as the
+    "expected" reference against Experiment C's measured slope.
+
+    Returns {'a1', 'a1_se', 'omega1', 'omega1_se', 'replicates', 'provenance',
+    'a1_triple'} -- the last being (a1, a1_se, provenance) for callers that
+    want the older shape.
+    """
     loaded = []
     for rd in run_dirs:
         p = Path(rd) / "omega1.json"
         if p.exists():
             loaded.append(json.loads(p.read_text()))
+
+    def _out(a1, a1_se, om, om_se, prov, reps):
+        return {"a1": a1, "a1_se": a1_se, "omega1": om, "omega1_se": om_se,
+                "replicates": reps, "provenance": prov,
+                "a1_triple": (a1, a1_se, prov)}
+
     if not loaded:
-        return FALLBACK_A1, None, "FALLBACK -- no omega1.json found"
+        return _out(FALLBACK_A1, None, FALLBACK_OMEGA1, None,
+                    "FALLBACK -- no omega1.json found", 0)
 
-    fits = [r["direct_fit"]["a1"] for r in loaded]
-    se = float(np.std(fits, ddof=1) / sqrt(len(fits))) if len(fits) > 1 else None
+    a1s = [r["direct_fit"]["a1"] for r in loaded]
+    oms = [r["direct_fit"]["omega1"] for r in loaded]
+    R = len(loaded)
+    a1_se = float(np.std(a1s, ddof=1) / sqrt(R)) if R > 1 else None
+    om_se = float(np.std(oms, ddof=1) / sqrt(R)) if R > 1 else None
 
-    if len(loaded) == 1:
-        return float(fits[0]), None, "measured, 1 replicate (no stderr available)"
+    if R == 1:
+        return _out(float(a1s[0]), None, float(oms[0]), None,
+                    "measured, 1 replicate (no stderr available)", 1)
 
     poolable = [r for r in loaded
                 if all(k in r for k in ("scales", "y_bar", "n", "sigma_log"))]
     scale_sets = {tuple(r["scales"]) for r in poolable}
-    if len(poolable) == len(loaded) and len(scale_sets) == 1:
+    if len(poolable) == R and len(scale_sets) == 1:
         scales = np.array(poolable[0]["scales"], dtype=float)
         y = np.array([r["y_bar"] for r in poolable], dtype=float)
         n = np.array([r["n"] for r in poolable], dtype=float)
@@ -234,15 +262,13 @@ def measured_a1(run_dirs) -> tuple[float, float | None, str]:
         y_pool = (y * n).sum(axis=0) / n.sum(axis=0)          # weighted by sample count
         sig_pool = 1.0 / np.sqrt((1.0 / sig**2).sum(axis=0))  # inverse-variance
         fit = fit_correction(scales, y_pool, sigma_log=sig_pool)
-        return float(fit["a1"]), se, (
-            f"measured, {len(loaded)} replicates POOLED then refitted once"
-        )
+        return _out(float(fit["a1"]), a1_se, float(fit["omega1"]), om_se,
+                    f"measured, {R} replicates POOLED then refitted once", R)
 
     why = ("scale grids differ" if len(scale_sets) > 1 else "some runs lack y_bar/n")
-    return float(np.mean(fits)), se, (
-        f"measured, {len(loaded)} replicates, mean of fits ({why}; pooling unavailable "
-        f"-- this retains a nonlinear bias, see measured_a1's docstring)"
-    )
+    return _out(float(np.mean(a1s)), a1_se, float(np.mean(oms)), om_se,
+                f"measured, {R} replicates, mean of fits ({why}; pooling unavailable "
+                f"-- this retains a nonlinear bias, see measured_a1's docstring)", R)
 
 
 def measured_cv(run_dir) -> tuple[float, str]:
