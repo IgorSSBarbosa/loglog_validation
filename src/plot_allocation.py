@@ -53,10 +53,30 @@ from allocation_table import (  # noqa: E402
 )
 
 # dataviz palette, identical to tools/loglog_plot.py's (categorical slots 1-3,
-# fixed order, never cycled; muted ink for reference marks).
+# fixed order, never cycled; muted ink for reference marks). The right panel
+# has exactly two series, so it uses these directly.
 _BLUE, _ORANGE, _AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 _SERIES = (_BLUE, _ORANGE, _AQUA)
 _INK, _MUTED, _GRIDLINE = "#0b0b0b", "#898781", "#e1e0d9"
+
+
+def _budget_colors(n: int):
+    """Colors for the left panel's budget curves.
+
+    Budget is an ORDERED variable, so it takes a sequential ramp rather than
+    categorical slots. That matters once a sweep has more than three budgets:
+    cycling a 3-color categorical palette gave B=1e4 and B=1e7 the same blue,
+    which is not a readability nitpick but an outright misreading -- the eye
+    groups them as one series. A perceptually-uniform ramp also encodes the
+    ordering itself, so "darker = more budget" is legible without the legend.
+    """
+    if n <= len(_SERIES):
+        return list(_SERIES[:n])
+    import matplotlib.cm as cm
+
+    # Trim the extremes: the lightest end is invisible on white, the darkest
+    # is hard to tell from the ink used for reference marks.
+    return [cm.viridis(x) for x in np.linspace(0.88, 0.12, n)]
 
 
 def _resolve_rate(expected, result) -> dict:
@@ -119,13 +139,14 @@ def plot_allocation(result: dict, expected: dict | None = None,
 
     # ---- LEFT: RMSE vs m0, one curve per budget -------------------------
     axL = axes[0]
+    palette = _budget_colors(len(result["budgets"]))
     for j, B in enumerate(result["budgets"]):
         rows = sorted((c for c in result["cells"]
                        if c["budget"] == B and not c["skipped"]),
                       key=lambda c: c["m0"])
         if not rows:
             continue
-        colour = _SERIES[j % len(_SERIES)]
+        colour = palette[j]
         m0s = [c["m0"] for c in rows]
         rmse = [c[estimator]["rmse"] for c in rows]
         axL.plot(m0s, rmse, "-", color=colour, linewidth=2, zorder=2,

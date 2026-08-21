@@ -400,6 +400,38 @@ cd src && for r in 0 1 2 3 4 5 6 7; do
 done
 ```
 
+### Extending to lower budgets (2026-08-21) — the RATE law tightens to 0.3 sigma
+
+`allocation_wide_config.json` repeats the sweep over **six** budgets,
+$10^4\dots10^9$, with $m_0\in\{0,\dots,11\}$ and 40 replicates (~58 min).
+Widening the span is the right lever: $\mathrm{se(slope)}$ carries
+$1/\sqrt{S_{xx}}$, and going from 3 budgets over 2 decades to 6 over 5 decades
+shrinks it **3x**, from $0.0343$ to $0.0116$ — whereas more replicates at the same
+span would only have bought $1/\sqrt R$.
+
+```
+predicted -omega1/(d+2*omega1) = -0.3307 +/- 0.0127
+measured slope se = 0.0116   (6 budgets, R=40)
+
+  at prop:opt's m0   -0.3502 +/- 0.0116   delta -0.0195 +/- 0.0172   z = -1.14  consistent
+  at the best m0     -0.3259 +/- 0.0116   delta +0.0049 +/- 0.0172   z = +0.28  consistent
+```
+
+**The apparent "consistently steeper" trend was an artefact of the narrow range.**
+Over 3 budgets both slopes came out steeper than predicted ($-0.364$, $-0.384$); over 6
+they move *toward* the prediction ($-0.350$, $-0.326$), and the best-$m_0$ curve now
+agrees to $0.28\sigma$ — essentially exact. Nothing was wrong with the earlier numbers;
+two decades simply cannot pin a slope to better than $\pm0.034$.
+
+The POINT failure is unchanged and, if anything, clearer: `prop:opt` overshoots $m_0$ at
+every one of the six budgets, at a cost of $2.0$–$2.7\times$ in RMSE.
+
+Note the left panel switches to a **sequential** color ramp beyond three budgets.
+Budget is an ordered variable, and cycling the 3-slot categorical palette gave
+$B=10^4$ and $B=10^7$ the same blue — not a nitpick but a misreading, since the eye
+groups them as one series. The ramp also encodes the ordering itself, so "darker = more
+budget" is legible without the legend.
+
 ### Tuning the constant (2026-08-21)
 
 The offset *is* derivable in closed form, from exactly the constants the rate argument
