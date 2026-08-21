@@ -109,7 +109,7 @@ the measured constants slides every row along the budget axis (see
 `experiments/01_srw/README.md`, "I ran it twice and got two different tables"). A run
 directory may be passed directly to `--data-root`, and any input that falls back to a
 hardcoded constant prints a loud warning rather than quietly pretending to be a
-measurement. Verified: `tools/tests/test_allocation_table.py` (14 cases).
+measurement. Replicates are **pooled and refitted once**, not averaged fit-by-fit: the fit is nonlinear, so averaging separate fits converges to $\mathbb{E}[\hat a_1]$ rather than $a_1$, a bias no number of replicates removes (see `measured_a1`'s docstring for the measured numbers). Pooling uses the `y_bar`/`n`/`sigma_log` stored in `omega1.json`, so the samples need not be kept. Verified: `tools/tests/test_allocation_table.py` (20 cases).
 
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times

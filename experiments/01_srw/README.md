@@ -444,9 +444,45 @@ sensitive is $\omega_1$ itself, which enters the exponent $\theta_2=1/(d+2\omega
 rather than a logarithm — which is exactly why Experiment B exists and why it is worth
 running with replicates.
 
+### Replicates: run them, but pool them rather than averaging the fits
+
+Replicates are the right protocol, for two separate reasons — they are the only source
+of a standard error, and they cut the variance. But **how they are combined matters**,
+and the obvious choice is the wrong one.
+
+`fit_correction` is a nonlinear function of the data, so $\mathbb{E}[\hat a_1]\neq a_1$.
+Averaging $R$ separate fits therefore converges to $\mathbb{E}[\hat a_1]$, **not** to
+$a_1$ — a bias that no number of replicates removes. Pooling the sample means first
+(weighted by $n$) and fitting *once* feeds the nonlinear step data with $\sqrt R$ less
+noise, so the bias shrinks with $R$ too. Measured on this experiment's own
+configuration, 250 trials, truth $a_1=-1/4$:
+
+| $R$ | mean-of-fits bias | pooled-fit bias | RMSE (mean / pooled) |
+|---|---|---|---|
+| 1 | $-0.0046$ | $-0.0046$ | 0.0787 / 0.0787 |
+| 5 | $-0.0094$ | $+0.0027$ | 0.0383 / 0.0348 |
+| 20 | $-0.0114$ | $+0.0038$ | 0.0212 / **0.0171** |
+
+Mean-of-fits is heading for $-0.262$, and by $R=20$ its bias is already comparable to
+its own spread — it would dominate entirely at larger $R$. $\omega_1$ is barely affected
+either way (0.0393 vs 0.0395 at $R=20$); $a_1$ is what the allocation offset depends on.
+
+`allocation_table.py` now pools. It works from the `y_bar`/`n`/`sigma_log` that
+`estimate_omega1.py` records in `omega1.json`, so **the samples need not be kept** — but
+the JSON does. The standard error still comes from the spread of the individual fits
+divided by $\sqrt R$ (that spread estimates a single fit's sd, and the pooled
+estimator's sd is close to it over $\sqrt R$: measured 0.0166 against
+$0.0785/\sqrt{20}=0.0176$).
+
+Two guards worth knowing: runs are only pooled when their scale grids match, and
+unrelated runs in the same `data/` are not silently treated as replicates — `data/`
+holds both `omega1` (scales $8\dots256$) and `Huge_test` (scales $2\dots1024$), and
+averaging *those* would be meaningless rather than merely imprecise.
+
 **How to be sure, in order of cost:**
 
-1. Run $\ge2$ replicates of Experiment B. The script then prints $a_1$'s standard error
+1. Run $\ge2$ replicates of Experiment B, with **identical configuration** so they can
+   be pooled (`omega1_rep*` tags are picked up automatically). The script then prints $a_1$'s standard error
    and converts it into an $m_0$ range and an RMSE penalty, instead of reporting a bare
    number with no uncertainty.
 2. Compare with `--by-budget`, never the $m_0$-indexed default.
