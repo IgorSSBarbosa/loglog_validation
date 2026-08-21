@@ -248,7 +248,7 @@ for r in 1 2 3 4 5; do
   sed "s/20260820/2026082$r/; s/5e10/4e10/" ../experiments/01_srw/omega1_config.json > /tmp/rep$r.json
   python3 generate.py -meta /tmp/rep$r.json -o ../experiments/01_srw/data --tag omega1_rep$r
   python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_rep$r
-  rm -rf ../experiments/01_srw/data/omega1_rep$r/samples
+  rm -rf ../experiments/01_srw/data/omega1_rep$r/samples   # keep omega1.json!
 done
 ```
 
@@ -333,9 +333,84 @@ $6$, $2.18\times$, $2.39\times$. Two independent routes, same conclusion.
 result, correct up to constants, and the rate is confirmed. What the experiment adds is
 that the dropped constant is not negligible at usable budgets — it costs a factor
 $\approx2.2$–$2.4$ in RMSE, equivalently a factor of $\approx2^{3.3}\approx10$ in
-budget. A practitioner following the formula literally pays that. The offset should be
-derivable in closed form from the constants the rate argument discards ($a_1$, the
-observable's coefficient of variation, and $\lVert w\rVert$) — not attempted here.
+budget. A practitioner following the formula literally pays that.
+
+### Tuning the constant (2026-08-21)
+
+The offset *is* derivable in closed form, from exactly the constants the rate argument
+discards. Write the two error sources of $\hat\gamma=\frac{1}{\log\rho}\sum_k w_{k,m}
+\log\overline Y_{\rho^k}$ separately. Using the weight identities $\sum_k w_k=0$ and
+$\sum_k w_k k=1$, the leading term passes through exactly and only the correction
+survives, so with $j=k-m_0$:
+
+$$\lvert\mathrm{bias}\rvert = C_b\,\rho^{-m_0\omega_1},\qquad
+C_b=\frac{\bigl\lvert a_1\sum_{j=1}^m w_j\rho^{-j\omega_1}\bigr\rvert}{\log\rho}$$
+
+$$\mathrm{sd} = C_s\,n^{-1/2},\qquad
+C_s=\frac{c_v\lVert w\rVert}{\log\rho},\qquad
+\lVert w\rVert^2=\frac{12}{m(m^2-1)}$$
+
+with $c_v=\mathrm{sd}(Y_i)/\mathbb{E}Y_i$ the observable's coefficient of variation
+(scale-free for $\lvert S_k\rvert$, $=\sqrt{\pi/2-1}$). The budget is
+$B=n\rho^{dm_0}G$, $G=\rho^d\frac{\rho^{dm}-1}{\rho^d-1}$ (Lemma `lem:budget`).
+Minimizing $C_b^2\rho^{-2m_0\omega_1}+C_s^2G\rho^{dm_0}/B$ over $m_0$ gives
+
+$$\boxed{\;m_0^{\ast}=\theta_2\Bigl(\log_\rho B+\log_\rho\kappa\Bigr),\qquad
+\kappa=\frac{2\omega_1 C_b^2}{d\,C_s^2\,G}\;}$$
+
+`prop:opt` is this with the $\log_\rho\kappa$ term dropped. Two consequences worth
+noting:
+
+- The optimum has $\lvert\mathrm{bias}\rvert/\mathrm{sd}=\sqrt{d/(2\omega_1)}$ —
+  $0.707$ here. **Measured: 0.60, 0.77, 1.68.** The two larger budgets bracket it.
+- For this testbed the offset evaluates to $\theta_2\log_\rho\kappa = -3.94$, against
+  the $-3.3$ estimated by eye from the sweep.
+
+Validation against Experiment C's own cells: predicted RMSE lands within **4–16%** of
+measured at every $(B,m_0)$ tested, and the predicted penalties (2.07, 2.37, 2.29) match
+the measured ones (2.18, 2.18, 2.39). The tuned $m_0$ reproduces the measured argmins
+$3,5,6$ as $4,5,6$ — within one step everywhere.
+
+Implemented as `tools/allocation.py`'s `allocation_constants` / `tuned_allocation` /
+`predict_error`. Note `tuned_allocation` **rounds** $m_0$ where `optimal_allocation`
+floors it: $n$ is recomputed and floored from whichever integer $m_0$ is chosen, so the
+budget guarantee holds either way, leaving rounding free to pick the nearer candidate
+(flooring would give $3,4,5$ against the measured $3,5,6$).
+
+### Planning table — what precision, for how long?
+
+`src/allocation_table.py` builds it from the measured results rather than assumed
+constants ($a_1$ from Experiment B, $c_v$ from its samples, throughput from Experiment
+C's wall clock):
+
+```bash
+cd src
+python3 allocation_table.py --compare          # add --csv table.csv to save it
+```
+
+Each row is one integer $m_0$, at the budget where it is optimal:
+
+| $m_0$ | $n$ per scale | wall clock | RMSE($\hat\gamma$) |
+|---|---|---|---|
+| 3 | 1,816 | 12 ms | $7.7\times10^{-3}$ |
+| 6 | 116,242 | 6.1 s | $9.6\times10^{-4}$ |
+| 9 | 7,439,547 | 52 min | $1.2\times10^{-4}$ |
+| 12 | 476,131,015 | 445 h | $1.5\times10^{-5}$ |
+| 15 | 30,472,384,995 | 26 yr | $1.9\times10^{-6}$ |
+| 18 | 1,950,232,639,725 | 13,306 yr | $2.4\times10^{-7}$ |
+
+The $B^{-1/3}$ rate is brutal in this direction: each extra decimal digit of accuracy
+costs $10^3$ in time. Three digits ($10^{-3}$) is seconds; six digits is millennia.
+
+The `--compare` column shows a steady $3.19\times$ RMSE penalty for using `prop:opt`'s
+uncalibrated $m_0$ — larger than the $2.18$–$2.39\times$ Experiment C measured, because
+the table compares at the exact continuous offset ($3.94$ steps) while those particular
+budgets happened to round to integer gaps of 3.
+
+**Keep `omega1.json` when cleaning up.** The reproduce block below deletes only
+`samples/`; deleting the whole run directory loses Experiment B's fit, and
+`allocation_table.py` then falls back to a single-replicate $a_1$ (which is what
+produced $-0.2217$ instead of the 5-replicate $-0.2748$, shifting the offset by 0.2).
 
 ### Fixed-memory generation for large `n`
 

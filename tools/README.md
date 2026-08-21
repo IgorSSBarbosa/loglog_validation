@@ -184,9 +184,27 @@ assertion, which would fail 5% of the time by construction. Empirically
 validated against a real $\Theta(k)$ simulator in `experiments/01_srw/`
 (affine $\hat d=1.006$ against ground truth $d=1$).
 
-`allocation.py` — three allocation rules; they answer different questions and
+`allocation.py` — four allocation rules; they answer different questions and
 must not be swapped. `optimal_allocation` (Proposition `prop:opt`, eq. 945-946)
-and `total_cost` (Lemma `lem:budget`'s closed-form cost) are the article's. Given a budget $B$
+and `total_cost` (Lemma `lem:budget`'s closed-form cost) are the article's.
+
+`tuned_allocation` is `prop:opt` with its dropped multiplicative constant put
+back. `prop:opt` is a *rate* result -- $m_0=\theta_2\log_\rho B$ is right up
+to an additive constant in $m_0$, which the rate argument discards and which
+Experiment C measured to be worth a factor $2.2$-$2.4$ in RMSE. Writing
+$\lvert\mathrm{bias}\rvert=C_b\rho^{-m_0\omega_1}$ and
+$\mathrm{sd}=C_s n^{-1/2}$ and minimizing, the constant is
+$\theta_2\log_\rho\kappa$ with $\kappa=2\omega_1C_b^2/(d\,C_s^2G)$;
+`allocation_constants` computes $C_b$, $C_s$, $G$ and $\kappa$ in closed form
+from the article's weights plus two *measured* inputs -- $a_1$ (Experiment B)
+and the observable's coefficient of variation -- so it is a calibration rather
+than extra theory. `predict_error` gives the bias/sd/RMSE of any $(n,m_0)$.
+Validated against Experiment C: predicted RMSE within 4-16% of measured at
+every cell, and the optimum's $\lvert\mathrm{bias}\rvert/\mathrm{sd}=
+\sqrt{d/(2\omega_1)}=0.707$ against measured 0.60-0.77. Note it **rounds**
+$m_0$ where `optimal_allocation` floors: $n$ is refloored from whichever
+integer is chosen, so the budget bound holds either way, and rounding lands
+nearer the continuous optimum. Given a budget $B$
 and $(d,\omega_1,\rho,m)$, returns the rate-optimal exponents
 $\theta_1,\theta_2$ and the sample count/scale-offset $n$, $m_0$ an experiment
 can actually run. The theorem treats $n$, $m_0$ as continuous; this module
@@ -208,7 +226,7 @@ below the noise (measured SNR 460 at $k=2$ down to 0.25 at $k=1024$).
 `snr_allocation` ($n_i\propto s_i^2 i^{2\omega_1}$, *increasing* in $i$)
 equalizes the correction term's signal-to-noise ratio across scales instead,
 and is what `experiments/01_srw/omega1_config.json` uses. Verified:
-`tools/tests/test_allocation.py` (38 cases — $\theta_1+d\theta_2=1$ exactly,
+`tools/tests/test_allocation.py` (47 cases — $\theta_1+d\theta_2=1$ exactly,
 continuous allocation costs exactly $B$, discretized allocation never exceeds
 $B$ when feasible, the small-$B$ infeasibility case, both new rules' closed-form
 weights, that `snr_allocation` really does flatten the correction SNR, that the

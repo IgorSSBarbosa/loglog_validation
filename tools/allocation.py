@@ -60,6 +60,130 @@ def feasible(theta1: float, theta2: float, d: float, *, tol: float = 1e-9) -> bo
     return theta1 + d * theta2 <= 1.0 + tol
 
 
+def allocation_constants(d: float, omega1: float, rho: float, m: int,
+                         a1: float, cv: float) -> dict:
+    """The multiplicative constants Proposition prop:opt drops, in closed form.
+
+    prop:opt is a RATE result: m0 = theta2 * log_rho(B) is correct up to an
+    additive constant in m0, which the rate argument discards. Experiment C
+    measured that constant to be ~ -3.3 for srw at (d, omega1, rho, m) =
+    (1, 1, 2, 6) -- worth a factor 2.2-2.4 in RMSE, i.e. ~10x in budget. This
+    function recovers it analytically. Writing the two error sources as
+
+        |bias| = Cb * rho**(-m0*omega1)        (independent of n)
+        sd     = Cs * n**(-1/2)                (independent of m0)
+        B      = n * rho**(d*m0) * G           (Lemma lem:budget)
+
+    the pieces are, with w_j the article's weights (eq. 526) and j = k - m0:
+
+        Cb = |a1 * sum_j w_j rho**(-j*omega1)| / log(rho)
+        Cs = cv * ||w|| / log(rho),   ||w||**2 = 12/(m(m**2-1))
+        G  = rho**d * (rho**(d*m) - 1) / (rho**d - 1)
+
+    `a1` is the correction amplitude of eq. (232) and `cv` the observable's
+    coefficient of variation sd(Y_i)/E(Y_i) (assumed scale-free, which holds
+    for srw's |S_k|: cv = sqrt(pi/2 - 1)). Both come from measurement --
+    Experiment B supplies a1, and cv is read straight off the samples -- so
+    this is a calibration, not extra theory.
+
+    Returns Cb, Cs, G, kappa and `offset`, where
+
+        m0_tuned = theta2 * (log_rho(B) + log_rho(kappa)) = m0_prop_opt + offset.
+    """
+    import numpy as np
+
+    if m < 2:
+        raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
+    if rho <= 1:
+        raise ValueError(f"rho must be > 1; got {rho}")
+    if d <= 0 or omega1 <= 0:
+        raise ValueError(f"d and omega1 must be > 0; got d={d}, omega1={omega1}")
+    if cv <= 0:
+        raise ValueError(f"cv must be > 0; got {cv}")
+
+    j = np.arange(1, m + 1, dtype=float)
+    w = 12.0 * (j - (m + 1) / 2.0) / (m * (m**2 - 1))
+    w_norm_sq = float(np.sum(w**2))
+
+    Cb = abs(a1 * float(np.sum(w * rho ** (-j * omega1)))) / math.log(rho)
+    Cs = cv * math.sqrt(w_norm_sq) / math.log(rho)
+    G = rho**d * (rho ** (d * m) - 1) / (rho**d - 1)
+
+    theta2 = 1.0 / (d + 2 * omega1)
+    if Cb == 0.0:
+        # No correction term at all (a1 = 0): there is no bias to trade
+        # against variance, so the balance that fixes m0 does not exist.
+        return {"Cb": 0.0, "Cs": Cs, "G": G, "w_norm_sq": w_norm_sq,
+                "kappa": None, "offset": None, "theta2": theta2}
+
+    kappa = 2 * omega1 * Cb**2 / (d * Cs**2 * G)
+    return {
+        "Cb": Cb,
+        "Cs": Cs,
+        "G": G,
+        "w_norm_sq": w_norm_sq,
+        "kappa": kappa,
+        "offset": theta2 * math.log(kappa) / math.log(rho),
+        "theta2": theta2,
+    }
+
+
+def predict_error(n: float, m0: float, d: float, omega1: float, rho: float,
+                  m: int, a1: float, cv: float) -> dict:
+    """Predicted |bias|, sd and RMSE of gamma-hat for a given (n, m0) ladder."""
+    c = allocation_constants(d, omega1, rho, m, a1, cv)
+    bias = c["Cb"] * rho ** (-m0 * omega1)
+    sd = c["Cs"] / math.sqrt(n)
+    return {"bias": bias, "sd": sd, "rmse": math.sqrt(bias**2 + sd**2)}
+
+
+def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
+                     *, a1: float, cv: float) -> dict:
+    """prop:opt's allocation with its dropped multiplicative constant restored.
+
+    Same rate as `optimal_allocation` -- this only shifts m0 by the constant
+    `allocation_constants` computes, which is exactly what the rate theorem
+    leaves free. Verified against Experiment C: predicted m0 of 3.75/4.86/5.97
+    at B = 1e7/1e8/1e9 against measured argmins of 3/5/6, and predicted RMSE
+    within ~10% of measured at every budget.
+
+    Returns the continuous m0, the floored integer actually usable, the
+    resulting n, the realized cost, and the predicted error decomposition.
+    `integer_feasible` is False when n floors below 1 -- check it, as with
+    `optimal_allocation`.
+    """
+    if B < 1:
+        raise ValueError(f"B must be >= 1; got {B}")
+    c = allocation_constants(d, omega1, rho, m, a1, cv)
+    if c["offset"] is None:
+        raise ValueError("a1 == 0: no correction term, so no bias/variance balance to solve")
+
+    m0_exact = c["theta2"] * math.log(B, rho) + c["offset"]
+    # ROUND, not floor. `optimal_allocation` floors m0 because there the
+    # budget guarantee needs it; here it does not. n is recomputed from
+    # whatever integer m0 is chosen and then floored, so cost = n*G*rho^(d*m0)
+    # <= B holds for ANY integer m0 -- leaving rounding free to pick the
+    # nearer of the two candidates. It matters: against Experiment C's
+    # measured argmins (3, 5, 6 at B = 1e7, 1e8, 1e9), rounding gives
+    # (4, 5, 6) and flooring gives (3, 4, 5).
+    m0 = max(0, int(round(m0_exact)))
+    n = math.floor(B / (c["G"] * rho ** (d * m0)))
+    feasible = n >= 1
+    out = {
+        "m0_exact": m0_exact,
+        "m0": m0 if feasible else None,
+        "n": n if feasible else None,
+        "cost": total_cost(n, m0, m, rho, d) if feasible else None,
+        "budget": float(B),
+        "offset_vs_prop_opt": c["offset"],
+        "integer_feasible": feasible,
+        "constants": c,
+    }
+    if feasible:
+        out.update(predict_error(n, m0, d, omega1, rho, m, a1, cv))
+    return out
+
+
 def neyman_allocation(
     scales,
     budget: float,

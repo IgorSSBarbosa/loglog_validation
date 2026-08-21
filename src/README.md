@@ -30,6 +30,9 @@ python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 --expect-omeg
 
 # 6. Test the budget-allocation rule prop:opt (Experiment C)
 python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
+
+# 7. Plan a run: precision vs wall-clock, using the tuned allocation
+python3 allocation_table.py --compare
 ```
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
@@ -92,6 +95,15 @@ exactly). `true_gamma` from the recipe scores finished estimates only and never 
 estimator. Verified: `tools/tests/test_allocation_experiment.py` (10 cases). Result and
 interpretation in `experiments/01_srw/README.md`.
 
+`allocation_table.py` — the budget-planning table: given the measured constants, how
+long must a run take for a target precision on $\hat\gamma$? One row per integer $m_0$,
+at the budget where that $m_0$ is optimal, showing $n$, wall-clock cost and predicted
+RMSE. Reads its inputs from this repo's own results rather than hardcoding them ($a_1$
+from Experiment B's `omega1.json`, the coefficient of variation from that run's samples,
+throughput from Experiment C's wall clock), each overridable by flag and each falling
+back to the last measured value if the run is absent. `--compare` adds what `prop:opt`'s
+uncalibrated $m_0$ would have cost; `--csv` saves the table.
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
@@ -111,6 +123,6 @@ same one-run-one-folder convention as `plot_loglog.py`. Verified:
 d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and is
 what biases the pure fit low; and that the aggregator is selectable and recorded).
 
-Each of these six inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+Each of these seven inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
 `tools/*.py` helper modules work regardless of where they're invoked from.
