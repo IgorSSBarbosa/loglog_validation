@@ -32,7 +32,11 @@ python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 --expect-omeg
 python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
 
 # 7. Plan a run: precision vs wall-clock, using the tuned allocation
+python3 allocation_table.py --list          # which run groups are available
 python3 allocation_table.py --compare
+
+# 8. Check those predictions against reality (a few minutes; keep the machine idle)
+python3 verify_prediction.py --m0 3 4 5 6 7 --replicates 3
 ```
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
@@ -111,6 +115,14 @@ directory may be passed directly to `--data-root`, and any input that falls back
 hardcoded constant prints a loud warning rather than quietly pretending to be a
 measurement. Replicates are **pooled and refitted once**, not averaged fit-by-fit: the fit is nonlinear, so averaging separate fits converges to $\mathbb{E}[\hat a_1]$ rather than $a_1$, a bias no number of replicates removes (see `measured_a1`'s docstring for the measured numbers). Pooling uses the `y_bar`/`n`/`sigma_log` stored in `omega1.json`, so the samples need not be kept. Verified: `tools/tests/test_allocation_table.py` (20 cases).
 
+`verify_prediction.py` — runs the tuned ladders for real and compares wall clock and
+RMSE against what `allocation_table.py` predicted. Measured 0.94x-1.00x on timing across
+four orders of magnitude, and 1.06x median on RMSE (noisy at small `--replicates`, since
+an RMSE over $R$ draws carries $1/\sqrt{2R}$ relative sd itself). Skips ladders needing
+more than `--max-n` samples per scale: budget is derived *from* $m_0$ here, so $n$ grows
+like $\rho^{2m_0}$ and a stray `--m0 20` would otherwise ask for $10^{25}$ samples.
+Verified: `tools/tests/test_verify_prediction.py` (7 cases).
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
@@ -130,6 +142,6 @@ same one-run-one-folder convention as `plot_loglog.py`. Verified:
 d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and is
 what biases the pure fit low; and that the aggregator is selectable and recorded).
 
-Each of these seven inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
+Each of these eight inserts `tools/` onto `sys.path` itself (`sys.path.insert(0,
 str(Path(__file__).resolve().parent.parent / "tools"))`) so their bare imports of
 `tools/*.py` helper modules work regardless of where they're invoked from.

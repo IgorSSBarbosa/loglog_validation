@@ -493,6 +493,86 @@ averaging *those* would be meaningless rather than merely imprecise.
 4. The final arbiter is simulation: `allocation_experiment.py` sweeps $m_0$ at a fixed
    budget and measures the argmin directly, assuming none of this.
 
+### Replicate groups on disk, and how to check the predictions
+
+Same-configuration replicates live in one folder, one subfolder per replicate
+(`--tag` may contain `/`, and `--seed` overrides the recipe's, so the loop is a
+one-liner):
+
+```bash
+cd src
+for r in 0 1 2 3 4; do
+  python3 generate.py -meta ../experiments/01_srw/omega1_config.json \
+      --tag omega1_b5e10/rep$r --seed $((20260900+r))
+  python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_b5e10/rep$r
+  rm -rf ../experiments/01_srw/data/omega1_b5e10/rep$r/samples   # keep omega1.json!
+done
+```
+
+`allocation_table.py --list` shows what it found, grouped by `(model, scales, n)` —
+only runs agreeing on all three are replicates of one configuration and may be pooled:
+
+```
+  #  group                      reps  scales                 n per scale
+  1  omega1                        6  8..256 (6)             166,893..170,899,089
+  2  Huge_test                     1  2..1024 (10)           100,000,000..100,000,000
+```
+
+`--group <name>` picks one; without it the group with the most replicates wins, and if
+several tie *and* stdin is a terminal you are asked. It never prompts in a pipeline —
+`--no-prompt` forces that off entirely.
+
+#### Are single runs unstable? Yes — badly, in $a_1$ and $\omega_1$; not at all in $\gamma$
+
+Six independent replicates of the *identical* configuration ($B=5\times10^{10}$,
+scales $8\dots256$):
+
+| run | $\hat a_1$ | $\hat\omega_1$ | $\hat\gamma$ | offset | recommended $m_0$ at $B=10^{12}$ |
+|---|---|---|---|---|---|
+| `omega1` | $-0.2217$ | — | — | $-4.141$ | 9 |
+| `rep0` | $-0.3857$ | 1.198 | 0.5005 | $-3.609$ | 10 |
+| `rep1` | $-0.2475$ | 0.965 | 0.4998 | $-4.035$ | 9 |
+| `rep2` | $-0.1104$ | 0.486 | 0.4971 | $-4.812$ | 8 |
+| `rep3` | $-0.3838$ | 1.254 | 0.5008 | $-3.613$ | 10 |
+| `rep4` | $-0.2291$ | 0.987 | 0.5001 | $-4.109$ | 9 |
+| **pooled (6)** | $\mathbf{-0.2353\pm0.0432}$ | | | $-4.084$ | **9** |
+| **truth** | $-0.25$ | 1 | 0.5 | $-3.998$ | |
+
+$\hat a_1$ spans a factor of 3.5 and $\hat\omega_1$ ranges 0.49–1.25, while $\hat\gamma$
+never leaves $0.497$–$0.501$. **Never trust a single run's $a_1$ or $\omega_1$.**
+
+But the *recommendation* is far more stable than its inputs, because the offset depends
+on $a_1$ only logarithmically: the six runs disagree by at most 1–2 steps in $m_0$, and
+the pooled estimate lands $0.086$ steps from the truth — under 1% in RMSE. Even the worst
+single run (`rep2`) is one step off, costing 19%.
+
+#### Are the predictions themselves right? The timing, essentially exactly
+
+`src/verify_prediction.py` runs each tuned ladder for real and compares
+(~4 min at the defaults; keep the machine idle, it measures wall clock):
+
+```bash
+cd src && python3 verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+```
+
+| $m_0$ | $n$ | predicted | measured | ratio | pred RMSE | meas RMSE | ratio |
+|---|---|---|---|---|---|---|---|
+| 3 | 2,478 | 0.016 s | 0.015 s | 0.94× | $6.59\times10^{-3}$ | $7.24\times10^{-3}$ | 1.10× |
+| 4 | 9,912 | 0.130 s | 0.125 s | 0.96× | $3.30\times10^{-3}$ | $2.54\times10^{-3}$ | 0.77× |
+| 5 | 39,649 | 1.042 s | 1.041 s | 1.00× | $1.65\times10^{-3}$ | $2.30\times10^{-3}$ | 1.40× |
+| 6 | 158,598 | 8.337 s | 8.347 s | 1.00× | $8.24\times10^{-4}$ | $7.83\times10^{-4}$ | 0.95× |
+| 7 | 634,393 | 66.69 s | 66.56 s | 1.00× | $4.12\times10^{-4}$ | $4.39\times10^{-4}$ | 1.06× |
+
+**Timing: 0.94×–1.00×, median 1.00×, over four orders of magnitude.** The wall-clock
+column of the planning table can be taken at face value on this machine — unsurprising
+once the cost model is right, since cost is genuinely $\Theta(nk)$ and throughput is a
+single calibrated constant. Re-derive it on other hardware
+(`--throughput`, or rerun Experiment C).
+
+**Accuracy: 0.77×–1.40×, median 1.06×** — consistent, but note an RMSE from $R=3$
+replicates has a relative sd of $1/\sqrt{2R}\approx41\%$ on its own, so this column is an
+order-of-magnitude check rather than a calibration. Raise `--replicates` to tighten it.
+
 **Keep `omega1.json` when cleaning up.** The reproduce block below deletes only
 `samples/`; deleting the whole run directory loses Experiment B's fit, and
 `allocation_table.py` then falls back to a single-replicate $a_1$ (which is what

@@ -299,7 +299,16 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--tag", dest="tag", type=str, default=None,
         help="Run directory name. Defaults to a content hash, so an identical rerun overwrites "
-        "rather than accumulating; pass a fixed --tag for a predictable path to chain into other tools.",
+        "rather than accumulating; pass a fixed --tag for a predictable path to chain into other "
+        "tools. May contain '/' to nest, which is how replicate groups are laid out: "
+        "--tag mygroup/rep0, mygroup/rep1, ... keeps same-config runs together under one folder.",
+    )
+    parser.add_argument(
+        "--seed", dest="seed", type=int, default=None,
+        help="Override the recipe's seed. The point of this flag is replicates: the same recipe "
+        "run at several seeds is exactly what 'independent replicates of one configuration' means "
+        "(ground rule 2), and overriding here avoids editing (or copying) the recipe to vary it. "
+        "The resolved seed is always recorded in the run's metadata.json.",
     )
     args = parser.parse_args(argv)
 
@@ -309,7 +318,7 @@ def _main(argv: list[str] | None = None) -> None:
     params = cfg["params"]
     scales_list, n_list = normalize_scales_n(cfg["scales"], _resolve_n(cfg))
 
-    seed_seq = np.random.SeedSequence(cfg.get("seed"))
+    seed_seq = np.random.SeedSequence(args.seed if args.seed is not None else cfg.get("seed"))
     resolved_seed = seed_seq.entropy
 
     out_dir = args.out_dir or (args.meta.resolve().parent / "data")

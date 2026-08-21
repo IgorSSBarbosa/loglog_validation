@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 from math import log, sqrt
 from pathlib import Path
@@ -56,43 +57,124 @@ FALLBACK_CV = sqrt(3.14159265358979 / 2 - 1)   # half-normal limit for |S_k|
 FALLBACK_THROUGHPUT = 1.53e8   # steps/second, Experiment C's sweep
 
 
-def find_omega1_runs(data_root: Path) -> list[Path]:
-    """Run directories holding an Experiment B fit, under OR at `data_root`.
+def _fit_summary(d: Path) -> dict | None:
+    f = d / "omega1.json"
+    if not f.exists():
+        return None
+    try:
+        return json.loads(f.read_text())
+    except (ValueError, OSError):
+        return None
 
-    Accepting `data_root` itself as a run directory matters: pointing this
-    script at `.../data/Huge_test/` (a run) rather than `.../data/` (the
-    parent of runs) is the natural mistake, and silently falling back to
-    hardcoded constants while printing a confident table is the worst
-    possible response to it.
+
+def discover_groups(data_root: Path) -> list[dict]:
+    """All groups of same-configuration Experiment B runs under `data_root`.
+
+    A "group" is a set of runs that may legitimately be pooled: same model,
+    same scale grid, same per-scale n. Runs of DIFFERENT configurations are
+    not replicates of one another, and combining them would be meaningless
+    rather than merely imprecise -- data/ routinely holds several unrelated
+    runs at once.
+
+    Two layouts are recognised, and both collapse to the same thing here:
+      <root>/<group>/rep0, rep1, ...   (preferred -- one folder per config)
+      <root>/omega1_rep0, omega1_rep1, ...  (flat, older runs)
+
+    Returns one dict per group, sorted with the largest (most replicates)
+    first, each carrying `name`, `runs`, `scales`, `n` and `replicates`.
     """
     root = Path(data_root)
+    candidates: list[Path] = []
     if (root / "omega1.json").exists():
-        return [root]
+        candidates = [root]
+    else:
+        for d in sorted(root.rglob("omega1.json")):
+            candidates.append(d.parent)
 
-    reps = [d for d in sorted(root.glob("omega1_rep*")) if (d / "omega1.json").exists()]
-    if reps:
-        return reps
-    if (root / "omega1" / "omega1.json").exists():
-        return [root / "omega1"]
+    groups: dict[tuple, dict] = {}
+    for d in candidates:
+        r = _fit_summary(d)
+        if r is None:
+            continue
+        scales, n = tuple(r.get("scales", ())), tuple(r.get("n", ()))
+        # Without a recorded scale grid there is no way to confirm two runs
+        # share a configuration, so each becomes its own group rather than
+        # being pooled on faith (older files predate y_bar/scales being saved).
+        key = ((r.get("model"), scales, n) if scales else ("__unknown__", str(d)))
+        g = groups.setdefault(key, {"runs": [], "scales": list(scales),
+                                    "n": list(n), "model": r.get("model")})
+        g["runs"].append(d)
 
-    # Last resort: any runs carrying a fit. Group them by scale grid and take
-    # the largest group -- runs of DIFFERENT configurations are not replicates
-    # of each other, and averaging their fits would be meaningless rather than
-    # merely imprecise (e.g. data/ holds both `omega1` on scales 8..256 and
-    # `Huge_test` on 2..1024).
-    groups: dict[tuple, list[Path]] = {}
-    for d in sorted(root.glob("*")):
-        f = d / "omega1.json"
-        if not f.exists():
-            continue
-        try:
-            key = tuple(json.loads(f.read_text()).get("scales", ()))
-        except (ValueError, OSError):
-            continue
-        groups.setdefault(key, []).append(d)
+    out = []
+    for g in groups.values():
+        runs = sorted(g["runs"])
+        # Name a group by the folder that holds its replicates: for the nested
+        # <group>/rep0, rep1, ... layout that is the group folder, even when
+        # only one replicate exists so far. Runs sitting directly in the data
+        # root are named by their own directory.
+        parents = {p.parent for p in runs}
+        if len(parents) == 1:
+            parent = next(iter(parents))
+            name = runs[0].name if parent == root else parent.name
+        else:
+            name = os.path.commonprefix([p.name for p in runs]).rstrip("_-") or runs[0].name
+        out.append({**g, "runs": runs, "name": name, "replicates": len(runs)})
+    return sorted(out, key=lambda g: (-g["replicates"], g["name"]))
+
+
+def format_groups(groups) -> str:
+    lines = [f"{'#':>3}  {'group':<26} {'reps':>4}  {'scales':<22} {'n per scale'}"]
+    lines.append("-" * 88)
+    for j, g in enumerate(groups, start=1):
+        sc = g["scales"]
+        scales = f"{sc[0]}..{sc[-1]} ({len(sc)})" if sc else "?"
+        n = g["n"]
+        nn = f"{min(n):,}..{max(n):,}" if n else "?"
+        lines.append(f"{j:>3}  {g['name']:<26} {g['replicates']:>4}  {scales:<22} {nn}")
+    return "\n".join(lines)
+
+
+def choose_group(groups, *, requested: str | None, interactive: bool):
+    """Pick one group: by name if asked, else the only/largest one.
+
+    Prompts ONLY when stdin is a terminal, the choice is genuinely ambiguous,
+    and no name was given -- never in a pipeline, where blocking on input
+    would hang a batch job rather than help anyone.
+    """
     if not groups:
-        return []
-    return max(groups.values(), key=len)
+        return None
+    if requested is not None:
+        for g in groups:
+            if g["name"] == requested:
+                return g
+        raise SystemExit(
+            f"no run group named {requested!r}. Available:\n{format_groups(groups)}"
+        )
+    if len(groups) == 1:
+        return groups[0]
+    if interactive and sys.stdin.isatty():
+        print("Several Experiment B run groups are available:\n")
+        print(format_groups(groups))
+        print()
+        while True:
+            raw = input(f"select 1-{len(groups)} (or blank for 1): ").strip()
+            if raw == "":
+                return groups[0]
+            if raw.isdigit() and 1 <= int(raw) <= len(groups):
+                return groups[int(raw) - 1]
+            print("  not a valid choice")
+    return groups[0]
+
+
+def find_omega1_runs(data_root: Path) -> list[Path]:
+    """Runs of the single best-supported configuration under `data_root`.
+
+    Thin wrapper over `discover_groups` kept for callers that just want the
+    default choice; use `discover_groups` + `choose_group` to see or pick
+    among several.
+    """
+    groups = discover_groups(data_root)
+    return groups[0]["runs"] if groups else []
 
 
 def measured_a1(run_dirs) -> tuple[float, float | None, str]:
@@ -319,6 +401,14 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("--cv", type=float, default=None, help="override the measured cv")
     parser.add_argument("--throughput", type=float, default=None,
                         help="override the measured steps/second")
+    parser.add_argument("--list", dest="list_groups", action="store_true",
+                        help="list the Experiment B run groups found under --data-root, then exit")
+    parser.add_argument("--group", type=str, default=None,
+                        help="name of the run group to use (see --list). Without it, the group "
+                             "with the most replicates is used; if several tie and stdin is a "
+                             "terminal, you are asked which")
+    parser.add_argument("--no-prompt", action="store_true",
+                        help="never ask interactively, even on a terminal -- for scripts")
     parser.add_argument("--by-budget", action="store_true",
                         help="index rows by budget instead of by m0 -- the view that stays "
                              "put when the measured constants change")
@@ -333,7 +423,27 @@ def _main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     root = args.data_root
-    runs = find_omega1_runs(root)
+    groups = discover_groups(root)
+
+    if args.list_groups:
+        if not groups:
+            print(f"no Experiment B runs (omega1.json) found under {root}")
+        else:
+            print(f"Experiment B run groups under {root}:\n")
+            print(format_groups(groups))
+            print("\nPass --group <name> to pick one. Runs are grouped by (model, scales, n):")
+            print("only runs sharing all three are replicates of one configuration and may be")
+            print("pooled. The default is the group with the most replicates.")
+        return
+
+    group = choose_group(groups, requested=args.group,
+                         interactive=not args.no_prompt)
+    runs = group["runs"] if group else []
+    if group is not None and len(groups) > 1:
+        print(f"using run group {group['name']!r} "
+              f"({group['replicates']} replicate(s)); "
+              f"{len(groups) - 1} other group(s) available -- see --list\n")
+
     if args.a1 is not None:
         a1, a1_se, a1_src = args.a1, None, "override"
     else:
