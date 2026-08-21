@@ -407,6 +407,56 @@ uncalibrated $m_0$ — larger than the $2.18$–$2.39\times$ Experiment C measur
 the table compares at the exact continuous offset ($3.94$ steps) while those particular
 budgets happened to round to integer gaps of 3.
 
+### "I ran it twice and got two different tables"
+
+Both were right, and the difference is mostly an artefact of how the table is indexed.
+
+**First, a real bug, now fixed.** Pointing `--data-root` at a *run* directory
+(`.../data/Huge_test/`) rather than the parent of runs (`.../data/`) found nothing and
+silently substituted hardcoded fallback constants, while still printing a confident
+table. It now accepts a run directory directly, and any fallback prints an unmissable
+warning naming which input was not measured.
+
+**Second, the indexing.** In the default table each row is an integer $m_0$ and the
+question is *"at what budget is this $m_0$ optimal"*. That budget depends on the offset,
+so any change in $a_1$ or $c_v$ slides **every row** along the budget axis and two honest
+tables look wildly different. Use `--by-budget` to index by budget instead — *"given this
+much time, what should I run"* — which is the comparable view. Across the two data roots
+above it gives **identical $m_0$ and $n$ at every budget**, with RMSE differing by under
+2%. In general the guarantee is weaker but still strong: $m_0$ agrees **within one step**,
+because the continuous optimum can fall either side of a rounding boundary.
+
+**Third, and most reassuring: the optimum is flat.** RMSE is quadratic in the $m_0$
+error, so
+
+| error in $m_0$ | 0.25 | 0.5 | 1 | 2 | 3 |
+|---|---|---|---|---|---|
+| RMSE penalty | 1.4% | 5.3% | 19% | 64% | 131% |
+
+The offset moves as $2\theta_2\log_\rho\lvert a_1'/a_1\rvert$ — *logarithmically*, so
+the 24% disagreement in $a_1$ between those two tables shifts $m_0$ by only 0.234, costing
+**1.2%** in RMSE. Scored against the exact truth ($a_1=-1/4$, $c_v=\sqrt{\pi/2-1}$), all
+three constant sets recommend the *same* $m_0$ and $n$ at $B=10^8,10^{10},10^{12}$, with
+identical RMSE.
+
+So: **the tuned allocation is not sensitive to these constants at all.** What *is*
+sensitive is $\omega_1$ itself, which enters the exponent $\theta_2=1/(d+2\omega_1)$
+rather than a logarithm — which is exactly why Experiment B exists and why it is worth
+running with replicates.
+
+**How to be sure, in order of cost:**
+
+1. Run $\ge2$ replicates of Experiment B. The script then prints $a_1$'s standard error
+   and converts it into an $m_0$ range and an RMSE penalty, instead of reporting a bare
+   number with no uncertainty.
+2. Compare with `--by-budget`, never the $m_0$-indexed default.
+3. Sanity-check $c_v$'s printed per-scale spread. It is assumed scale-free; for
+   $\lvert S_k\rvert$ it tends to $\sqrt{\pi/2-1}$, but small $k$ inflates it
+   (at $k=2$, $\lvert S_2\rvert\in\{0,2\}$ gives $c_v=1$), so a run whose grid starts
+   very low will report a biased average.
+4. The final arbiter is simulation: `allocation_experiment.py` sweeps $m_0$ at a fixed
+   budget and measures the argmin directly, assuming none of this.
+
 **Keep `omega1.json` when cleaning up.** The reproduce block below deletes only
 `samples/`; deleting the whole run directory loses Experiment B's fit, and
 `allocation_table.py` then falls back to a single-replicate $a_1$ (which is what

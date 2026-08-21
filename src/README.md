@@ -102,7 +102,14 @@ RMSE. Reads its inputs from this repo's own results rather than hardcoding them 
 from Experiment B's `omega1.json`, the coefficient of variation from that run's samples,
 throughput from Experiment C's wall clock), each overridable by flag and each falling
 back to the last measured value if the run is absent. `--compare` adds what `prop:opt`'s
-uncalibrated $m_0$ would have cost; `--csv` saves the table.
+uncalibrated $m_0$ would have cost; `--csv` saves the table. **`--by-budget` indexes rows
+by budget instead of by $m_0$, and is the view to use when comparing two runs of this
+script** -- the default view asks "at what budget is this $m_0$ optimal", so any change in
+the measured constants slides every row along the budget axis (see
+`experiments/01_srw/README.md`, "I ran it twice and got two different tables"). A run
+directory may be passed directly to `--data-root`, and any input that falls back to a
+hardcoded constant prints a loud warning rather than quietly pretending to be a
+measurement. Verified: `tools/tests/test_allocation_table.py` (14 cases).
 
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
