@@ -200,6 +200,29 @@ def rate_exponent(budgets, rmses) -> float:
     return float(np.polyfit(x, y, 1)[0])
 
 
+def rate_exponent_se(budgets, replicates: int) -> float:
+    """Standard error of `rate_exponent`, from the noise in each RMSE.
+
+    An RMSE estimated from R replicates is itself a random quantity: it is
+    sqrt of a mean of squares, so its RELATIVE standard deviation is about
+    1/sqrt(2R), and hence sd(log RMSE) ~ 1/sqrt(2R) too. The slope of an OLS
+    line through points with that much scatter has
+
+        se(slope) = sd(log rmse) / sqrt(Sxx),   Sxx = sum (log B - mean log B)^2
+
+    Derived from the known noise rather than from the fit residuals on
+    purpose: these sweeps use 3-4 budgets, so a residual-based estimate would
+    have 1-2 degrees of freedom and be nearly useless. Without this the
+    measured exponent looks exact, and comparing it to a predicted one with
+    error bars silently overstates any disagreement.
+    """
+    x = np.log(np.asarray(budgets, float))
+    sxx = float(((x - x.mean()) ** 2).sum())
+    if sxx <= 0 or replicates < 1:
+        return float("nan")
+    return float((1.0 / sqrt(2 * replicates)) / sqrt(sxx))
+
+
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-meta", "--meta", dest="meta", required=True, type=Path)

@@ -55,6 +55,7 @@ from persistence import load_samples  # noqa: E402
 FALLBACK_A1 = -0.2748          # Experiment B, 5 replicates (truth -1/4)
 FALLBACK_CV = sqrt(3.14159265358979 / 2 - 1)   # half-normal limit for |S_k|
 FALLBACK_THROUGHPUT = 1.53e8   # steps/second, Experiment C's sweep
+FALLBACK_D = 1.0               # srw is Theta(k) by construction
 FALLBACK_OMEGA1 = 1.0155      # Experiment B, 5 replicates (truth 1)
 
 
@@ -286,6 +287,65 @@ def measured_cv(run_dir) -> tuple[float, str]:
         f"measured over {len(per_scale)} scales, spread "
         f"{min(per_scale):.4f}-{max(per_scale):.4f}"
     )
+
+
+def measured_cost_exponent(data_root) -> tuple[float, float | None, str]:
+    """Cost exponent d from measure_cost.py runs: (value, stderr, provenance).
+
+    Takes the AFFINE fit's d, not the pure power law's: a single
+    simulate(k, n=1, ...) call pays a fixed per-call overhead that does not
+    scale with k, and the pure fit folds that into d (measured 0.77 against a
+    true 1.0 on this grid -- see experiments/01_srw/README.md).
+
+    Replicates are averaged directly here, unlike a1: d comes from a fit to
+    *timings*, and what varies between runs is machine jitter rather than a
+    sampling distribution, so there is no pooled-refit equivalent to prefer.
+    """
+    root = Path(data_root)
+    ds = []
+    for f in sorted(root.rglob("result.json")):
+        try:
+            r = json.loads(f.read_text())
+        except (ValueError, OSError):
+            continue
+        aff = r.get("affine")
+        if isinstance(aff, dict) and "d" in aff and aff.get("converged", True):
+            ds.append(float(aff["d"]))
+    if not ds:
+        return FALLBACK_D, None, "FALLBACK -- no cost-probe result.json found"
+    if len(ds) == 1:
+        return ds[0], None, "measured, 1 cost probe (no stderr available)"
+    se = float(np.std(ds, ddof=1) / sqrt(len(ds)))
+    return float(np.mean(ds)), se, f"measured, {len(ds)} cost probes"
+
+
+def predicted_rate(omega1: float, d: float, *, omega1_se=None, d_se=None) -> dict:
+    """The article's error-decay exponent -omega1/(d + 2*omega1), with its
+    uncertainty propagated from the two MEASURED inputs.
+
+        dtheta/domega1 = -d / (d + 2 omega1)^2
+        dtheta/dd      =  omega1 / (d + 2 omega1)^2
+
+    Both partials carry (d + 2 omega1)^-2, so the relative weight of the two
+    inputs is just d : omega1 -- comparable in magnitude here, which means the
+    error budget is decided by which input is measured worse, not by the
+    algebra. In practice omega_1 dominates by ~20x (see Experiment C's
+    write-up): it is intrinsically hard to measure, while d is easy.
+    """
+    denom = d + 2 * omega1
+    theta = -omega1 / denom
+    var = 0.0
+    parts = {}
+    if omega1_se:
+        c = d / denom**2
+        parts["omega1"] = c * omega1_se
+        var += parts["omega1"] ** 2
+    if d_se:
+        c = omega1 / denom**2
+        parts["d"] = c * d_se
+        var += parts["d"] ** 2
+    return {"theta": theta, "se": sqrt(var) if var else None,
+            "contributions": parts, "omega1": omega1, "d": d}
 
 
 def measured_throughput(result_json) -> tuple[float, str]:

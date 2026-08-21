@@ -44,14 +44,38 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 sys.path.insert(0, str(HERE))
 
-from allocation_experiment import rate_exponent, summarize  # noqa: E402
-from allocation_table import discover_groups, measured_correction  # noqa: E402
+from allocation_experiment import rate_exponent, rate_exponent_se, summarize  # noqa: E402
+from allocation_table import (  # noqa: E402
+    discover_groups,
+    measured_correction,
+    measured_cost_exponent,
+    predicted_rate,
+)
 
 # dataviz palette, identical to tools/loglog_plot.py's (categorical slots 1-3,
 # fixed order, never cycled; muted ink for reference marks).
 _BLUE, _ORANGE, _AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 _SERIES = (_BLUE, _ORANGE, _AQUA)
 _INK, _MUTED, _GRIDLINE = "#0b0b0b", "#898781", "#e1e0d9"
+
+
+def _resolve_rate(expected, result) -> dict:
+    """The predicted decay exponent, however much the caller supplied.
+
+    Accepts a fully-built `predicted_rate` dict, or just omega_1 (and
+    optionally d) to compute one from, or nothing at all -- in which case the
+    recipe's own values are used. Computing it here rather than demanding it
+    pre-built keeps `plot_allocation` callable with a bare
+    {"omega1": ...} dict, which is what every caller that is not the CLI
+    actually has.
+    """
+    if expected and "predicted_rate" in expected:
+        return expected["predicted_rate"]
+    if expected and "omega1" in expected:
+        return predicted_rate(
+            expected["omega1"], expected.get("d", result["d"]),
+            omega1_se=expected.get("omega1_se"), d_se=expected.get("d_se"))
+    return predicted_rate(result["omega1"], result["d"])
 
 
 def _budget_series(result, summary, estimator="closed_form", warn=True):
@@ -138,29 +162,31 @@ def plot_allocation(result: dict, expected: dict | None = None,
     bs, at_opt, at_best = _budget_series(result, summary, estimator)
     fitted = {}
     if len(bs) >= 2:
+        # The fitted slope has its own uncertainty, from the noise in each
+        # RMSE. Without it the measured exponent looks exact and any gap to
+        # the prediction is overstated -- which is exactly how a consistent
+        # result first read as a 3-sigma discrepancy here.
+        slope_se = rate_exponent_se(bs, result["replicates"]) if len(bs) >= 3 else None
         for label, ys, colour in (("at prop:opt's $m_0$", at_opt, _ORANGE),
                                   ("at the best $m_0$", at_best, _BLUE)):
             slope = rate_exponent(bs, ys) if len(bs) >= 3 else float("nan")
             fitted[label] = slope
             axR.plot(bs, ys, marker="o", markersize=8, linewidth=2, color=colour,
                      markeredgecolor="white", markeredgewidth=1.5, zorder=3,
-                     label=f"{label} — fitted {slope:+.3f}")
+                     label=f"{label} — fitted {slope:+.3f}" + (f"$\\pm{slope_se:.3f}$" if slope_se else ""))
 
         # Expected exponent, from Experiment B's omega_1 (not from this run).
-        om = expected["omega1"] if expected else omega1_recipe
-        om_se = (expected or {}).get("omega1_se")
-        theory = -om / (d + 2 * om)
+        pr = _resolve_rate(expected, result)
+        theory, th_se = pr["theta"], pr["se"]
         anchor = at_best[0] * 1.9
         ref = anchor * (bs / bs[0]) ** theory
-        src = (f"Exp B: $\\omega_1={om:.3f}$" + (f"$\\pm{om_se:.3f}$" if om_se else "")
-               if expected else f"recipe: $\\omega_1={om:.3f}$")
+        src = (f"$\\omega_1={pr['omega1']:.3f}$, $d={pr['d']:.3f}$")
         axR.plot(bs, ref, "--", color=_MUTED, linewidth=1.8, zorder=2,
-                 label=f"expected {theory:+.3f} ({src})")
-        if om_se:
-            lo = -(om - om_se) / (d + 2 * (om - om_se))
-            hi = -(om + om_se) / (d + 2 * (om + om_se))
-            axR.fill_between(bs, anchor * (bs / bs[0]) ** min(lo, hi),
-                             anchor * (bs / bs[0]) ** max(lo, hi),
+                 label=f"predicted {theory:+.3f}"
+                       + (f"$\\pm{th_se:.3f}$" if th_se else "") + f"  ({src})")
+        if th_se:
+            axR.fill_between(bs, anchor * (bs / bs[0]) ** (theory - th_se),
+                             anchor * (bs / bs[0]) ** (theory + th_se),
                              color=_MUTED, alpha=0.15, zorder=1, linewidth=0)
 
     axR.set_xscale("log")
@@ -198,21 +224,42 @@ def _main(argv: list[str] | None = None) -> None:
         groups = [g for g in groups if args.group is None or g["name"] == args.group]
         if groups:
             expected = measured_correction(groups[0]["runs"])
-            print(f"expected omega_1 from run group {groups[0]['name']!r}: "
+            d_hat, d_se, d_src = measured_cost_exponent(args.data.parent)
+            expected["d"], expected["d_se"] = d_hat, d_se
+            expected["predicted_rate"] = predicted_rate(
+                expected["omega1"], d_hat,
+                omega1_se=expected["omega1_se"], d_se=d_se)
+            print(f"omega_1 from run group {groups[0]['name']!r}: "
                   f"{expected['omega1']:.4f}"
                   + (f" +/- {expected['omega1_se']:.4f}" if expected["omega1_se"] else "")
                   + f"  ({expected['provenance']})")
+            print(f"d       : {d_hat:.4f}"
+                  + (f" +/- {d_se:.4f}" if d_se else "") + f"  ({d_src})")
 
     fig, _, fitted = plot_allocation(result, expected, args.estimator)
     out = args.out or (args.data / "plot.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    om = expected["omega1"] if expected else result["omega1"]
-    theory = -om / (result["d"] + 2 * om)
-    print(f"\nerror-decay exponent, measured vs expected ({theory:+.4f}):")
+    pr = _resolve_rate(expected, result)
+    theory, th_se = pr["theta"], pr["se"]
+    contrib = (", ".join(f"{k}: {v:.5f}" for k, v in pr["contributions"].items())
+               or "no stderrs available -- run replicates")
+
+    slope_se = rate_exponent_se(result["budgets"], result["replicates"])
+    print(f"\npredicted -omega1/(d+2*omega1) = {theory:+.4f}"
+          + (f" +/- {th_se:.4f}" if th_se else ""))
+    print(f"  error budget of the prediction ({contrib})")
+    print(f"measured slope se = {slope_se:.4f}  "
+          f"(RMSE over R={result['replicates']} draws carries ~1/sqrt(2R) "
+          f"relative sd, across {len(result['budgets'])} budgets)\n")
     for label, slope in fitted.items():
-        print(f"  {label:<22} {slope:+.4f}   delta {slope - theory:+.4f}")
+        delta = slope - theory
+        comb = float(np.hypot(slope_se, th_se or 0.0))
+        z = delta / comb if comb else float("nan")
+        print(f"  {label:<22} {slope:+.4f} +/- {slope_se:.4f}   "
+              f"delta {delta:+.4f} +/- {comb:.4f}   z = {z:+.2f}"
+              + ("   consistent" if abs(z) < 2 else "   DISCREPANT"))
     print(f"\nSaved {out}")
 
 

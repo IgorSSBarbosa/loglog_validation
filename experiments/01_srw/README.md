@@ -335,6 +335,71 @@ that the dropped constant is not negligible at usable budgets — it costs a fac
 $\approx2.2$–$2.4$ in RMSE, equivalently a factor of $\approx2^{3.3}\approx10$ in
 budget. A practitioner following the formula literally pays that.
 
+### The two plots, and the RATE check against measured $\omega_1$ *and* $d$
+
+`src/plot_allocation.py` writes `<run_dir>/plot.png`:
+
+```bash
+cd src && python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
+```
+
+**Left — the POINT claim.** RMSE of $\hat\gamma$ against $m_0$, one curve per budget. The
+U-shape *is* the bias-variance tradeoff `prop:opt` reasons about: at small $m_0$ the
+window still contains correction-contaminated scales (bias), at large $m_0$ the same
+budget buys fewer samples (variance). Each curve carries two markers — ● the empirical
+argmin, ✕ `prop:opt`'s choice. **Every ✕ sits systematically right of its ●**: that
+displacement is the POINT failure, and the vertical gap between them is the penalty
+factor (`rmse_at_prop_opt_m0 / best_rmse`, i.e. how much more error the theorem's ladder
+gives for identical compute).
+
+**Right — the RATE claim**, and the plot the paper's $B^{-\omega_1/(d+2\omega_1)}$ law calls
+for: RMSE against budget on log-log, fitted as a power law, against the exponent
+predicted from **measurements of both $\omega_1$ and $d$** — Experiment B's pooled
+$\omega_1$ and the cost probe's affine $\hat d$, neither taken from the recipe:
+
+$$\theta = -\frac{\omega_1}{d+2\omega_1},\qquad
+\sigma_\theta^2 = \frac{d^2\sigma_{\omega_1}^2 + \omega_1^2\sigma_d^2}{(d+2\omega_1)^4}$$
+
+```
+omega_1 = 0.9836 +/- 0.1113   (6 replicates, pooled)
+d       = 1.0069 +/- 0.0023   (9 cost probes, affine fit)
+
+predicted -omega1/(d+2*omega1) = -0.3307 +/- 0.0127
+  error budget (omega1: 0.01266, d: 0.00026)
+measured slope se = 0.0343   (RMSE over R=40 draws carries ~1/sqrt(2R) relative sd)
+
+  at prop:opt's m0   -0.3637 +/- 0.0343   delta -0.0330 +/- 0.0366   z = -0.90  consistent
+  at the best m0     -0.3837 +/- 0.0343   delta -0.0530 +/- 0.0366   z = -1.45  consistent
+```
+
+**The two experiments agree.** Three points are worth extracting:
+
+1. **The measured slope needs its own error bar.** An RMSE estimated from $R$ replicates
+   is itself random — relative sd $\approx1/\sqrt{2R}$, so $\mathrm{sd}(\log\mathrm{RMSE})
+   \approx1/\sqrt{2R}$ and $\mathrm{se(slope)} = \mathrm{sd}(\log\mathrm{RMSE})/\sqrt{S_{xx}}$.
+   Derived from the known noise rather than fit residuals on purpose: with 3 budgets a
+   residual-based estimate has 1 degree of freedom. **Omitting it made a consistent
+   result read as a 3-sigma discrepancy** — the error that this section corrects.
+2. **$d$'s uncertainty is negligible — 48x smaller than $\omega_1$'s** (0.00026 vs
+   0.01266). Both partials share $(d+2\omega_1)^{-2}$, so the error budget is decided
+   purely by which input is measured worse. $d$ comes from timings and is easy; $\omega_1$
+   is a correction exponent and is intrinsically hard. Effort spent tightening $d$ is
+   wasted; effort spent on $\omega_1$ replicates is not.
+3. **Both measured slopes are slightly steeper than predicted**, and consistently so
+   ($-0.033$ and $-0.053$). Within noise at three budgets, but if it is real it would
+   mean the error falls a little *faster* than the theorem promises. Distinguishing it
+   needs more budgets (the span enters $\mathrm{se(slope)}$ through $S_{xx}$) and more
+   Experiment B replicates, not more replicates in C.
+
+Measured $d$ comes from `data/cost_probe_reps/rep*` (8 independent probes, seconds each):
+
+```bash
+cd src && for r in 0 1 2 3 4 5 6 7; do
+  python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json \
+      -o ../experiments/01_srw/data --tag cost_probe_reps/rep$r
+done
+```
+
 ### Tuning the constant (2026-08-21)
 
 The offset *is* derivable in closed form, from exactly the constants the rate argument

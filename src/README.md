@@ -139,6 +139,15 @@ unchanged. Verified: `tools/tests/test_plot_allocation.py` (5 cases — the char
 not unit-tested, per the convention for plots; the series selection and fitted exponents
 are).
 
+`plot_allocation.py` — Experiment C's two panels. Left: RMSE vs $m_0$ per budget, with
+the empirical argmin (●) and `prop:opt`'s choice (✕) marked, so the POINT failure is
+visible. Right: RMSE vs budget on log-log with the fitted power law, against the exponent
+$-\omega_1/(d+2\omega_1)$ predicted from **measured** $\omega_1$ (Experiment B, pooled) and
+**measured** $d$ (the cost probe's affine fit), banded by the propagated uncertainty.
+Both the prediction and the fitted slope carry standard errors, and the comparison is
+reported as a z-score -- omitting the slope's own error made a consistent result read as
+a 3-sigma discrepancy. Verified: `tools/tests/test_plot_allocation.py`.
+
 `measure_cost.py`/`plot_cost.py` — the shared cost-model-exponent probe and its
 plot, same registry dispatch as `generate.py`/`plot_loglog.py` (times
 `MODELS[model].simulate(i, n=1, ...)` instead of drawing real samples). Only
