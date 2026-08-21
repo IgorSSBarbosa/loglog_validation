@@ -45,6 +45,7 @@ from allocation import (  # noqa: E402
     total_cost,
     tuned_allocation,
 )
+from correction import fit_correction  # noqa: E402
 from persistence import load_samples  # noqa: E402
 
 # Fallbacks, used only when the corresponding measured run is absent. Each is
@@ -67,33 +68,99 @@ def find_omega1_runs(data_root: Path) -> list[Path]:
     root = Path(data_root)
     if (root / "omega1.json").exists():
         return [root]
-    reps = sorted(root.glob("omega1_rep*"))
-    hits = [d for d in reps if (d / "omega1.json").exists()]
-    if hits:
-        return hits
-    return [d for d in sorted(root.glob("*")) if (d / "omega1.json").exists()]
+
+    reps = [d for d in sorted(root.glob("omega1_rep*")) if (d / "omega1.json").exists()]
+    if reps:
+        return reps
+    if (root / "omega1" / "omega1.json").exists():
+        return [root / "omega1"]
+
+    # Last resort: any runs carrying a fit. Group them by scale grid and take
+    # the largest group -- runs of DIFFERENT configurations are not replicates
+    # of each other, and averaging their fits would be meaningless rather than
+    # merely imprecise (e.g. data/ holds both `omega1` on scales 8..256 and
+    # `Huge_test` on 2..1024).
+    groups: dict[tuple, list[Path]] = {}
+    for d in sorted(root.glob("*")):
+        f = d / "omega1.json"
+        if not f.exists():
+            continue
+        try:
+            key = tuple(json.loads(f.read_text()).get("scales", ()))
+        except (ValueError, OSError):
+            continue
+        groups.setdefault(key, []).append(d)
+    if not groups:
+        return []
+    return max(groups.values(), key=len)
 
 
 def measured_a1(run_dirs) -> tuple[float, float | None, str]:
     """Correction amplitude a_1 from Experiment B: (value, stderr, provenance).
 
-    The stderr is across replicates, so it exists only with >= 2 of them. It
-    is what `offset_uncertainty` turns into an m0 range -- reporting a1
-    without it invites exactly the "which table is right?" confusion, since
-    two runs of the same experiment legitimately differ by more than the gap
-    between the tables they produce.
+    Replicates are POOLED and refitted once, NOT averaged fit-by-fit. The
+    distinction matters and is not cosmetic: fit_correction is a nonlinear
+    function of the data, so E[a1_hat] != a1, and averaging R separate fits
+    converges to E[a1_hat] rather than to a1 -- a bias that does not shrink
+    no matter how many replicates are added. Measured on this experiment's
+    own configuration (250 trials, truth a1 = -0.25):
+
+        R      mean-of-fits bias    pooled-fit bias    RMSE (mean / pooled)
+        1          -0.0046             -0.0046          0.0787 / 0.0787
+        5          -0.0094             +0.0027          0.0383 / 0.0348
+        20         -0.0114             +0.0038          0.0212 / 0.0171
+
+    Mean-of-fits is heading for -0.262, not -0.25, and by R=20 its bias is
+    already comparable to its own spread. Pooling averages the sample means
+    (weighted by n) BEFORE the nonlinear step, so the fit sees data with
+    sqrt(R) less noise and the nonlinear bias shrinks with it. omega_1 is
+    barely affected either way (0.0393 vs 0.0395 at R=20); a1 is what the
+    allocation offset depends on.
+
+    Pooling needs each run's y_bar/n/sigma_log, which estimate_omega1.py
+    records in omega1.json -- so it works from the stored summaries and does
+    not require keeping the samples. Falls back to averaging fits for older
+    files that lack them.
+
+    The stderr is still taken from the SPREAD of the per-replicate fits,
+    divided by sqrt(R): that spread estimates the sd of a single fit, and the
+    pooled estimator's sd is close to it over sqrt(R) (measured 0.0166 against
+    0.0785/sqrt(20) = 0.0176). It needs >= 2 replicates to exist at all.
     """
-    vals = []
+    loaded = []
     for rd in run_dirs:
         p = Path(rd) / "omega1.json"
         if p.exists():
-            vals.append(json.loads(p.read_text())["direct_fit"]["a1"])
-    if not vals:
+            loaded.append(json.loads(p.read_text()))
+    if not loaded:
         return FALLBACK_A1, None, "FALLBACK -- no omega1.json found"
-    if len(vals) == 1:
-        return float(vals[0]), None, "measured, 1 replicate (no stderr available)"
-    se = float(np.std(vals, ddof=1) / sqrt(len(vals)))
-    return float(np.mean(vals)), se, f"measured, {len(vals)} replicates"
+
+    fits = [r["direct_fit"]["a1"] for r in loaded]
+    se = float(np.std(fits, ddof=1) / sqrt(len(fits))) if len(fits) > 1 else None
+
+    if len(loaded) == 1:
+        return float(fits[0]), None, "measured, 1 replicate (no stderr available)"
+
+    poolable = [r for r in loaded
+                if all(k in r for k in ("scales", "y_bar", "n", "sigma_log"))]
+    scale_sets = {tuple(r["scales"]) for r in poolable}
+    if len(poolable) == len(loaded) and len(scale_sets) == 1:
+        scales = np.array(poolable[0]["scales"], dtype=float)
+        y = np.array([r["y_bar"] for r in poolable], dtype=float)
+        n = np.array([r["n"] for r in poolable], dtype=float)
+        sig = np.array([r["sigma_log"] for r in poolable], dtype=float)
+        y_pool = (y * n).sum(axis=0) / n.sum(axis=0)          # weighted by sample count
+        sig_pool = 1.0 / np.sqrt((1.0 / sig**2).sum(axis=0))  # inverse-variance
+        fit = fit_correction(scales, y_pool, sigma_log=sig_pool)
+        return float(fit["a1"]), se, (
+            f"measured, {len(loaded)} replicates POOLED then refitted once"
+        )
+
+    why = ("scale grids differ" if len(scale_sets) > 1 else "some runs lack y_bar/n")
+    return float(np.mean(fits)), se, (
+        f"measured, {len(loaded)} replicates, mean of fits ({why}; pooling unavailable "
+        f"-- this retains a nonlinear bias, see measured_a1's docstring)"
+    )
 
 
 def measured_cv(run_dir) -> tuple[float, str]:
