@@ -320,9 +320,15 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       half-normal CV) that draws no samples and predicts the same argmins and penalties. None of
       this contradicts the theorem, which is a rate result correct up to constants -- but the
       dropped constant costs a factor $\approx2.2$-$2.4$ in RMSE, i.e. $\approx10\times$ in
-      budget, for anyone following the formula literally. The offset should be derivable in
-      closed form from $a_1$, the CV, and $\|w\|$; not attempted. Verified:
-      `tools/tests/test_allocation_experiment.py` (10 cases -- ladder shape, budget arithmetic
+      budget, for anyone following the formula literally. The offset **is** derivable in
+      closed form from $a_1$, the CV and $\|w\|$, and was: $\theta_2\log_\rho\kappa=-3.94$
+      here, implemented as `allocation_constants`/`tuned_allocation`. Re-scored on the wide
+      sweep ($10^4$--$10^9$, $R=40$, tag `allocation_wide`): the gap to the measured argmin is
+      flat in $B$ (slope $-0.05$ per decade of $\log_\rho B$, mean gap $3.67$), confirming a
+      pure constant rather than a wrong $\theta_2$; the tuned $m_0$ lands within one step of
+      the argmin at all six budgets, for an RMSE penalty of $1.00$--$1.02\times$ against
+      `prop:opt`'s $2.02$--$3.35\times$. Verified:
+      `tools/tests/test_allocation_experiment.py` (13 cases -- ladder shape, budget arithmetic
       never overspends, replicate streams reproduce and are independent across cells,
       unaffordable cells marked skipped rather than faked, summary/rate machinery on planted
       inputs)~~

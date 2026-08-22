@@ -143,9 +143,15 @@ def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
 
     Same rate as `optimal_allocation` -- this only shifts m0 by the constant
     `allocation_constants` computes, which is exactly what the rate theorem
-    leaves free. Verified against Experiment C: predicted m0 of 3.75/4.86/5.97
-    at B = 1e7/1e8/1e9 against measured argmins of 3/5/6, and predicted RMSE
-    within ~10% of measured at every budget.
+    leaves free. Verified against Experiment C's wide sweep (B = 1e4..1e9,
+    R = 40, tag `allocation_wide`): the tuned m0 lands within ONE step of the
+    measured argmin at all six budgets, costing 1.00-1.02x RMSE against the
+    best m0 on the grid, where prop:opt's own m0 costs 2.02-3.35x.
+
+    Quote that as a range, not as exact integers: which of two near-tied m0
+    wins is itself noisy at R = 40, because the RMSE curve is flat near its
+    minimum (at B = 1e6 the two best differ by 0.03%). An earlier 3-budget
+    run gave argmins 3/5/6 at B = 1e7/1e8/1e9; the wide run gives 4/4/6.
 
     Returns the continuous m0, the floored integer actually usable, the
     resulting n, the realized cost, and the predicted error decomposition.
