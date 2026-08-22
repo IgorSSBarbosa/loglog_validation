@@ -74,7 +74,46 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       problem than ours; resolved instead via the MLE above. True Hill estimator
       still not implemented/discussed further
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
-- [ ] 0.4 $\omega_1$/$\sigma_\infty^2$/$a_1$ bootstrap + coverage calibration
+- [x] ~~0.4 coverage calibration of the $\omega_1$/$a_1$/$\gamma$ error bars (done
+      2026-08-22). **FOUND A REAL DEFECT**: every "95%" interval this repo had
+      published was an 88% interval. `src/check_coverage.py` replays Experiment B's
+      exact configuration (scales $8..256$, the real per-scale $n$, $R=5$) 2000 times
+      against srw's known truth and counts interval hits; all six quantity/centre
+      combinations came in at $0.877$--$0.891$ against a nominal $0.95$, and all six
+      are calibrated ($0.946$--$0.955$) once the quantile is $t(R-1)=2.776$ instead of
+      the normal's $1.960$. The cause is *only* the quantile: `se_ratio` (stated se
+      over the estimates' actual scatter) is $0.94$--$1.03$, so the bar is the right
+      size -- an sd from 5 points is noisy and downward-biased ($c_4(5)=0.940$) and
+      $t(4)$ is exactly that correction. New `tools/coverage.py` (`coverage_test`,
+      `coverage_multi` for scoring many quantities from one pass, `rescore` for
+      re-asking at another level without re-running, `interval`,
+      `wilson_score_interval`, `se_ratio`, `combine_se`, `consistency_threshold`).
+      Three side findings: (a) the pooling-vs-averaging decision is confirmed at 2000
+      trials -- $\hat a_1$ bias $-0.0155$ mean-of-fits vs $-0.0019$ pooled, 8x smaller;
+      (b) the "mismatched pair" worry (centre from the pooled refit, width from the
+      unpooled spread) is backwards -- pooling shrinks the centre's scatter, moving it
+      *closer* to the stated se, `se_ratio` $0.870\to0.974$; (c) calibration is
+      $n$-dependent and does not transfer -- below $n$-scale $\approx0.1$ the estimator
+      itself fails ($(a_1,\omega_1)$ unidentified, $\hat a_1\approx-2\times10^{10}$ at
+      $0.003$), so coverage must be re-checked before trusting an error bar at a
+      smaller budget. The full-pipeline srw arm was dropped as unaffordable in the
+      regime that works ($\approx160$ s/trial); the Gaussian planting is instead
+      validated directly by `--arm planting` (one-sample KS of real srw
+      $\overline Y_i$ against the planted normal, run at deliberately small $n$ since
+      normality of a sample mean only improves with $n$ -- all six scales pass,
+      observed sd within 2% of exact). Fix applied where an se becomes a *decision*:
+      `src/plot_allocation.py`'s $|z|<2$ rule now uses `combine_se`'s
+      Welch--Satterthwaite effective dof and cuts at $t(\mathrm{dof_{eff}})=2.111$;
+      both existing verdicts are unchanged. Verified: `tools/tests/test_coverage.py`
+      (33 cases -- an exactly-calibrated interval must measure 95%, a halved one and a
+      biased one must each be caught and *distinguished*, `coverage_multi` must agree
+      with `coverage_test` bit-for-bit on one seed, `rescore` must equal a fresh run at
+      the new setting) and `tools/tests/test_check_coverage.py` (14 cases -- exact
+      $\mathbb E|S_k|$ against brute-force enumeration, the parity staircase, the
+      replay pooling the same way `allocation_table.py` does, the KS test shown to have
+      teeth against a one-se shift). Still open from the original 0.4 wording: a
+      *bootstrap* (as opposed to replicate-spread) estimator for these constants, and
+      $\sigma_\infty^2$~~
 - [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage
 
 ## Shared tools (built alongside Phase 0, as each is first needed)
@@ -332,7 +371,11 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       never overspends, replicate streams reproduce and are independent across cells,
       unaffordable cells marked skipped rather than faked, summary/rate machinery on planted
       inputs)~~
-- [ ] `tools/wilson.py` — Wilson CI
+- [ ] `tools/wilson.py` — the article's Wilson interval, eq. (720)'s four-term bound
+      on $\hat\gamma$. Note this is **not** the binomial score interval added as
+      `tools/coverage.py`'s `wilson_score_interval` (which only puts a CI on a
+      measured coverage proportion) — same name, different object, deliberately
+      not merged so this entry stays honestly open
 - [ ] `tools/bootstrap.py` — resampling for constants
 
 ## Later phases (not started, not designed yet)

@@ -44,6 +44,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 sys.path.insert(0, str(HERE))
 
+from coverage import combine_se, consistency_threshold  # noqa: E402
 from allocation_experiment import rate_exponent, rate_exponent_se, summarize  # noqa: E402
 from allocation_table import (  # noqa: E402
     discover_groups,
@@ -263,6 +264,7 @@ def _main(argv: list[str] | None = None) -> None:
     plt.close(fig)
 
     pr = _resolve_rate(expected, result)
+    expected_reps = (expected or {}).get("replicates")
     theory, th_se = pr["theta"], pr["se"]
     contrib = (", ".join(f"{k}: {v:.5f}" for k, v in pr["contributions"].items())
                or "no stderrs available -- run replicates")
@@ -274,13 +276,23 @@ def _main(argv: list[str] | None = None) -> None:
     print(f"measured slope se = {slope_se:.4f}  "
           f"(RMSE over R={result['replicates']} draws carries ~1/sqrt(2R) "
           f"relative sd, across {len(result['budgets'])} budgets)\n")
+    # The prediction's error comes from omega_1 (and d), each measured from a
+    # handful of replicates, so the combined statistic is not standard normal
+    # and the familiar |z| < 2 is the wrong cut-off. Welch-Satterthwaite gives
+    # the effective dof; at R = 5 replicates a "2.5 sigma discrepancy" is in
+    # fact consistent. Measured in src/check_coverage.py -- normal-quantile
+    # intervals at R = 5 cover 88%, not 95%.
+    comb, dof_eff = combine_se([(slope_se, None),
+                                (th_se, (expected_reps - 1) if expected_reps else None)])
+    crit = consistency_threshold(dof_eff)
+    print(f"  consistency cut-off |z| < {crit:.3f} "
+          f"(t at {dof_eff:.1f} effective dof, not the normal's 1.960)")
     for label, slope in fitted.items():
         delta = slope - theory
-        comb = float(np.hypot(slope_se, th_se or 0.0))
         z = delta / comb if comb else float("nan")
         print(f"  {label:<22} {slope:+.4f} +/- {slope_se:.4f}   "
               f"delta {delta:+.4f} +/- {comb:.4f}   z = {z:+.2f}"
-              + ("   consistent" if abs(z) < 2 else "   DISCREPANT"))
+              + ("   consistent" if abs(z) < crit else "   DISCREPANT"))
     print(f"\nSaved {out}")
 
 

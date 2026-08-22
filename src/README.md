@@ -40,7 +40,28 @@ python3 verify_prediction.py --m0 3 4 5 6 7 --replicates 3
 
 # 9. Plot Experiment C: the m0 tradeoff, and measured vs predicted decay rate
 python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
+
+# 10. Are the error bars themselves calibrated? (checkpoint 0.4)
+python3 check_coverage.py --arm planted --trials 2000 --centre both
+python3 check_coverage.py --arm srw --trials 200 --n-scale 0.003   # slow cross-check
 ```
+
+`check_coverage.py` — PLAN.md checkpoint 0.4: replays Experiment B's whole
+estimation pipeline hundreds of times against srw's known ground truth and counts
+how often the interval it reports actually contains that truth. Tests the *error
+bar*, not the estimate — Experiment B already showed the estimates are right; what
+had never been checked is whether "±0.1050" means what it claims. Two arms:
+`planted` draws $\overline Y_i$ straight from $\mathcal N(\mu_i,\sigma_i^2/n_i)$
+using the exact moments of $|S_k|$ (cheap, so many trials, and it isolates the
+fit's error bar from whether the CLT has kicked in), `srw` draws for real at
+reduced $n$ (slow, few trials, exists only to confirm the planted arm's Gaussian
+assumption isn't itself what's being measured — run both at the same `--n-scale`
+to compare them). `--centre both` scores the pipeline's own pooled estimate
+against the mean-of-fits alternative on identical draws. Ground truth
+($\mathbb E|S_k|$, $\mathrm{sd}|S_k|$) lives in this driver and is deliberately
+*not* registered in `tools/models.py` as a `target_fn` — same rule as
+`allocation_experiment.py`'s `true_gamma`: truth may plant data and score a
+finished answer, never reach an estimator.
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
 Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.

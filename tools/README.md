@@ -34,6 +34,26 @@ chart at three). Neither chart has a unit test yet (they're plots, not
 numeric claims) — visually verified against `experiments/00_synthetic/`,
 including the untrustworthy-MLE styling path.
 
+`coverage.py` — calibration testing for error bars (PLAN.md checkpoint 0.4).
+Answers a question none of the other tools do: this repo reports every result
+as *estimate ± uncertainty*, and while the estimates are checked against known
+truth, the **uncertainties are themselves untested claims**. `coverage_test`
+replays a whole pipeline many times against a known truth and counts how often
+its stated interval actually contains it; `coverage_multi` does the same but
+scores many quantities from one pass, which matters because $\omega_1$ and
+$a_1$ come out of a single `least_squares` call — re-running the trials per
+quantity would both multiply the cost and score each on different draws, so
+two results could not be compared. `interval(estimate, se, dof=)` builds the
+interval, with `dof=None` reproducing the naive normal quantile on purpose so
+a test can measure what it costs. `wilson_score_interval` puts an honest CI on
+a measured coverage (score, not Wald: a calibrated 95% test measures coverage
+near 1, exactly where Wald runs past 1). `se_ratio` separates the two causes of
+undercoverage — an interval too narrow vs. an estimator off-centre — because
+the fix differs. **Not article eq. (720)**: the article's Wilson interval is a
+four-term bound on $\hat\gamma$ and belongs in the still-unwritten
+`tools/wilson.py`; the one here is the textbook binomial score interval, used
+only for counting proportions. Driven by `src/check_coverage.py`.
+
 `loglog.py` — four $\hat\gamma$ estimators. Three as the general OLS slope of
 $\log\overline Y_i$ vs $\log i$ (equivalent to the article's closed-form
 $w_{k,m}$ weights, eq. 523-526, on a consecutive $\rho^k$ grid, but not tied to

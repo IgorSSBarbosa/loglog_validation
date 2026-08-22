@@ -590,6 +590,107 @@ averaging *those* would be meaningless rather than merely imprecise.
 4. The final arbiter is simulation: `allocation_experiment.py` sweeps $m_0$ at a fixed
    budget and measures the argmin directly, assuming none of this.
 
+### Are the error bars themselves calibrated? (2026-08-22) — they were not
+
+Everything above reports *estimate $\pm$ uncertainty*, and the estimates have been
+checked against known truth. The uncertainties never had been. "$\omega_1 = 1.0155 \pm
+0.1050$" is also a claim: that re-running the experiment many times would land within
+$0.1050$ of truth about 68% of the time. `src/check_coverage.py` measures that
+(PLAN.md checkpoint 0.4) by replaying Experiment B's exact configuration — scales
+$8..256$, the real per-scale $n$, $R=5$ — 2000 times against srw's known truth and
+counting interval hits.
+
+**Result: every "95%" interval this repo published was an 88% interval.**
+
+| quantity | centre | $q$ = normal | $q$ = $t(4)$ |
+|---|---|---|---|
+| $\omega_1$ | pooled | **0.880** [0.866, 0.894] | 0.948 [0.937, 0.956] |
+| $\omega_1$ | mean-of-fits | **0.877** | 0.946 |
+| $a_1$ | pooled | **0.880** | 0.950 |
+| $a_1$ | mean-of-fits | **0.878** | 0.955 |
+| $\gamma$ | pooled | **0.891** | 0.952 |
+| $\gamma$ | mean-of-fits | **0.878** | 0.950 |
+
+The cause is the quantile, and the diagnostics show it rather than assume it: the
+`se_ratio` (stated se over the estimates' actual scatter) is $0.94$–$1.03$ for the
+pooled estimates, so the error bar is the right *size*. What is wrong is multiplying
+it by $1.960$ when an sd built from 5 points needs $2.776$. An sd from $R$ draws is
+both noisy and downward-biased ($c_4(5)=0.940$), and $t(R-1)$ is exactly the
+correction. Nothing about the model, the estimator or the pooling was at fault.
+
+Two things fell out that were not the point of the exercise:
+
+**The pooling decision is confirmed at 2000 trials.** $\hat a_1$'s bias is $-0.0155$
+for mean-of-fits against $-0.0019$ pooled — 8x smaller. That choice had been argued
+from a 250-trial run; it holds.
+
+**A "mismatched pair" worry turned out to be backwards.** The pipeline takes its
+centre from the pooled refit but its width from the spread of the *unpooled* fits,
+which describe different estimators. Measured, the mismatch is benign and mildly
+favourable: pooling shrinks the centre's scatter ($0.0349$ vs $0.0390$ for $a_1$),
+moving it *closer* to the stated se — `se_ratio` improves from $0.870$ to $0.974$.
+
+#### Calibration is not free at any $n$
+
+Sweeping the sample size shows where it stops working (300 trials each, $t(4)$):
+
+| $n$-scale | $n$ at $k=256$ | $\omega_1$ coverage | $\omega_1$ bias |
+|---|---|---|---|
+| 1.0 | 170,899,089 | 0.953 | $-0.013$ |
+| 0.3 | 51,269,726 | 0.947 | $-0.021$ |
+| 0.1 | 17,089,908 | 0.947 | $-0.035$ |
+| 0.03 | 5,126,972 | 0.917 | $-0.055$ |
+| 0.01 | 1,708,990 | 0.937 | $+0.275$ |
+| 0.003 | 512,697 | 0.863 | $+1.400$ |
+
+Below $n$-scale $\approx0.1$ the *estimator* fails, not the interval: $(a_1,\omega_1)$
+stops being identified once the noise swamps the correction, and at $0.003$ the fit
+returns $\hat a_1\approx-2\times10^{10}$. So the calibration established here belongs
+to the regime Experiment B actually ran in, and does not transfer automatically to a
+cheaper one. **Check coverage again before trusting an error bar at a smaller budget.**
+
+#### Validating the planting instead of re-running srw
+
+The coverage arm draws $\overline Y_i$ from $\mathcal N(\mu_i,\sigma_i^2/n_i)$ with the
+exact moments of $\lvert S_k\rvert$ rather than simulating, which is what makes 2000
+trials affordable. Doing the same with real srw draws is not affordable in the regime
+that works — $\approx160$ s per trial at $n$-scale $0.1$, i.e. hours for a coverage
+interval too wide to conclude anything.
+
+So the Gaussian assumption is tested directly instead, by `--arm planting`:
+many independent real srw $\overline Y_i$, one-sample KS against the planted normal.
+Run at **small** $n$ on purpose — $\overline Y$ is a sample mean, so its normality can
+only improve as $n$ grows, and a pass at $n=10^4$ implies a pass at Experiment B's
+$1.7\times10^5$–$1.7\times10^8$. At $n=10^4$, 3000 draws per scale:
+
+| $k$ | exact se | observed sd | KS | $p$ |
+|---|---|---|---|---|
+| 8 | 1.793e-2 | 1.766e-2 | 0.0273 | 0.022 |
+| 16 | 2.475e-2 | 2.456e-2 | 0.0151 | 0.496 |
+| 32 | 3.456e-2 | 3.435e-2 | 0.0169 | 0.354 |
+| 64 | 4.855e-2 | 4.874e-2 | 0.0178 | 0.296 |
+| 128 | 6.843e-2 | 6.818e-2 | 0.0161 | 0.412 |
+| 256 | 9.661e-2 | 9.584e-2 | 0.0135 | 0.638 |
+
+#### What changed as a result
+
+The printed $\pm$ values are unchanged — a standard error is a fine thing to report.
+What changed is every place an se becomes a *decision*. `src/plot_allocation.py`'s
+"consistent / DISCREPANT" rule used $\lvert z\rvert<2$, which is only right when the
+se is known exactly; here it is built partly from $\omega_1$'s replicate se. It now
+combines components with `tools/coverage.py`'s `combine_se` (Welch–Satterthwaite for
+the effective dof) and cuts at $t(\mathrm{dof}_{\mathrm{eff}})$:
+
+```
+consistency cut-off |z| < 2.111 (t at 16.9 effective dof, not the normal's 1.960)
+  at prop:opt's m0   -0.3502 +/- 0.0116   delta -0.0195 +/- 0.0172   z = -1.14  consistent
+  at the best m0     -0.3259 +/- 0.0116   delta +0.0049 +/- 0.0172   z = +0.28  consistent
+```
+
+Both verdicts are unchanged — the correction widens the cut-off rather than moving any
+conclusion, which is the outcome to hope for from a calibration fix. But the rule is
+now the one it always claimed to be.
+
 ### Replicate groups on disk, and how to check the predictions
 
 Same-configuration replicates live in one folder, one subfolder per replicate
