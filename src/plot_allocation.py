@@ -108,7 +108,7 @@ def _budget_series(result, summary, estimator="closed_form", warn=True):
     5) and would otherwise render an empty right-hand panel with no
     explanation, so the dropped budgets are named.
     """
-    bs, at_opt, at_best, missing = [], [], [], []
+    bs, at_opt, at_best, at_tuned, missing = [], [], [], [], []
     for B in result["budgets"]:
         s = summary.get(str(B))
         if not s:
@@ -119,12 +119,17 @@ def _budget_series(result, summary, estimator="closed_form", warn=True):
         bs.append(B)
         at_opt.append(s["rmse_at_prop_opt_m0"])
         at_best.append(s["best_rmse"])
+        at_tuned.append(s.get("rmse_at_tuned_m0"))
     if warn and missing:
         which = ", ".join(f"B={B:.0e} wants m0={m0}" for B, m0 in missing)
         print(f"[plot_allocation] {len(missing)} budget(s) omitted from the decay-rate "
               f"panel: prop:opt's m0 was not swept ({which}); "
               f"m0_values={result['m0_values']}", file=sys.stderr)
-    return np.array(bs), np.array(at_opt), np.array(at_best)
+    # The tuned arm is all-or-nothing: a partial series would fit a slope over
+    # a different budget span than the other two, which is not comparable.
+    tuned = (np.array(at_tuned, dtype=float)
+             if at_tuned and all(v is not None for v in at_tuned) else None)
+    return np.array(bs), np.array(at_opt), np.array(at_best), tuned
 
 
 def plot_allocation(result: dict, expected: dict | None = None,
@@ -161,6 +166,15 @@ def plot_allocation(result: dict, expected: dict | None = None,
         if at_opt is not None:
             axL.plot([at_opt["m0"]], [at_opt[estimator]["rmse"]], marker="X", markersize=11,
                      color=colour, markeredgecolor="white", markeredgewidth=1.5, zorder=4)
+        # The paired arm: same rule with its dropped constant restored. Drawn
+        # open so it reads as a prediction sitting on the measured curve rather
+        # than as a third measurement.
+        if s.get("tuned_m0") is not None:
+            at_tuned = next((c for c in rows if c["m0"] == s["tuned_m0"]), None)
+            if at_tuned is not None:
+                axL.plot([at_tuned["m0"]], [at_tuned[estimator]["rmse"]],
+                         marker="s", markersize=10, markerfacecolor="none",
+                         color=colour, markeredgewidth=2.0, zorder=5)
 
     axL.set_yscale("log")
     axL.set_xlabel(r"scale offset $m_0$")
@@ -177,11 +191,17 @@ def plot_allocation(result: dict, expected: dict | None = None,
                    markeredgecolor="white", markersize=11),
     ]
     labels += ["best $m_0$ (measured)", r"$m_0$ from prop:opt"]
+    if any(summary.get(str(B), {}).get("tuned_m0") is not None
+           for B in result["budgets"]):
+        handles.append(plt.Line2D([], [], marker="s", linestyle="none",
+                                  markerfacecolor="none", color=_MUTED,
+                                  markeredgewidth=2.0, markersize=10))
+        labels.append(r"$m_0$ from prop:opt + tuned constant")
     axL.legend(handles, labels, fontsize=9, frameon=False)
 
     # ---- RIGHT: error-decay rate ----------------------------------------
     axR = axes[1]
-    bs, at_opt, at_best = _budget_series(result, summary, estimator)
+    bs, at_opt, at_best, at_tuned = _budget_series(result, summary, estimator)
     fitted = {}
     if len(bs) >= 2:
         # The fitted slope has its own uncertainty, from the noise in each
@@ -189,8 +209,11 @@ def plot_allocation(result: dict, expected: dict | None = None,
         # the prediction is overstated -- which is exactly how a consistent
         # result first read as a 3-sigma discrepancy here.
         slope_se = rate_exponent_se(bs, result["replicates"]) if len(bs) >= 3 else None
-        for label, ys, colour in (("at prop:opt's $m_0$", at_opt, _ORANGE),
-                                  ("at the best $m_0$", at_best, _BLUE)):
+        series = [("at prop:opt's $m_0$", at_opt, _ORANGE),
+                  ("at the best $m_0$", at_best, _BLUE)]
+        if at_tuned is not None:
+            series.insert(1, ("at the tuned $m_0$", at_tuned, _AQUA))
+        for label, ys, colour in series:
             slope = rate_exponent(bs, ys) if len(bs) >= 3 else float("nan")
             fitted[label] = slope
             axR.plot(bs, ys, marker="o", markersize=8, linewidth=2, color=colour,

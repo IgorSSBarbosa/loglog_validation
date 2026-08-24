@@ -102,6 +102,11 @@ def closed_form_weights(m: int, m0: int = 0) -> np.ndarray:
     change the returned array -- kept as a parameter purely to document which
     k the array indexes (weights[0] is w_{m0+1,m}).
     """
+    if m < 2:
+        # m(m^2-1) = 0 at m = 1, which silently produced nan weights and hence
+        # a nan gamma-hat all the way through the allocation path. A slope
+        # needs two points; reject rather than propagate nan.
+        raise ValueError(f"m must be >= 2 to fit a slope; got {m}")
     j = np.arange(1, m + 1, dtype=np.float64)
     return 12.0 * (j - (m + 1) / 2.0) / (m * (m**2 - 1))
 

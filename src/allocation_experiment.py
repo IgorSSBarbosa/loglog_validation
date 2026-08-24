@@ -55,15 +55,36 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
 
-from allocation import optimal_allocation, total_cost  # noqa: E402
+from allocation import (  # noqa: E402
+    optimal_allocation,
+    total_cost,
+    tuned_allocation,
+)
 from loglog import gamma_all_points, gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import run_dir as _run_dir  # noqa: E402
 
 
 def ladder(m0: int, m: int, rho: float) -> list[int]:
-    """The scales of Definition def:alloc: rho**k for k = m0+1, ..., m0+m."""
-    return [int(round(rho ** k)) for k in range(m0 + 1, m0 + m + 1)]
+    """The scales of Definition def:alloc: rho**k for k = m0+1, ..., m0+m.
+
+    Rounds to integers, and refuses to return a grid where that rounding has
+    collided. At rho = 1.5, m0 = 0, m = 6 the naive result is
+    [2, 2, 3, 5, 8, 11]: two scales equal, so the ladder has m-1 distinct
+    points while every downstream formula assumes m. `gamma_closed_form` would
+    catch it -- its grid check rejects anything that is not exactly rho**k --
+    but only after the samples had been drawn, and `total_cost` would already
+    have charged for the duplicate. Raise here instead.
+    """
+    if m < 2:
+        raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
+    scales = [int(round(rho ** k)) for k in range(m0 + 1, m0 + m + 1)]
+    if len(set(scales)) != len(scales):
+        raise ValueError(
+            f"rho={rho} with m0={m0}, m={m} rounds to a grid with repeated "
+            f"scales {scales}; use an integer rho (or a larger m0) so that "
+            f"rho**k are distinct integers")
+    return scales
 
 
 def n_for_budget(budget: float, m0: int, m: int, rho: float, d: float) -> int:
@@ -107,16 +128,37 @@ def sweep(
     true_gamma: float,
     seed: int | None = None,
     progress: bool = False,
+    a1: float | None = None,
+    cv: float | None = None,
 ) -> dict:
-    """RMSE of gamma-hat over a (budget x m0) grid, `replicates` draws per cell."""
+    """RMSE of gamma-hat over a (budget x m0) grid, `replicates` draws per cell.
+
+    PAIRED ARMS. Two named allocations are scored on the same grid, against the
+    same empirical argmin:
+
+      prop:opt  -- `optimal_allocation`, the theorem's m0 = theta2 log_rho(B),
+                   correct up to the multiplicative constant it discards.
+      tuned     -- `tuned_allocation`, the same rule with that constant
+                   restored from measured a1 and cv (see tools/allocation.py's
+                   `allocation_constants`).
+
+    Running them as a pair, rather than replacing one with the other, is the
+    point: the untuned arm is the claim under test and the tuned arm is the
+    proposed fix, and only scoring both on identical draws shows what the
+    constant is worth. Pass `a1` and `cv` to enable the tuned arm; without them
+    only prop:opt is marked.
+    """
     seed_seq = np.random.SeedSequence(seed)
     # One independent stream per (budget, m0, replicate) cell -- ground rule 2.
     streams = iter(seed_seq.spawn(len(budgets) * len(m0_values) * replicates))
 
+    have_tuned = a1 is not None and cv is not None
     cells = []
     t0 = time.perf_counter()
     for B in budgets:
         opt = optimal_allocation(B=B, d=d, omega1=omega1, rho=rho, m=m)
+        tun = (tuned_allocation(B=B, d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv)
+               if have_tuned else None)
         for m0 in m0_values:
             n = n_for_budget(B, m0, m, rho, d)
             if n < 2:
@@ -131,7 +173,8 @@ def sweep(
             cell = {"budget": B, "m0": m0, "n": n, "skipped": False,
                     "scales": ladder(m0, m, rho),
                     "cost": total_cost(n, m0, m, rho, d),
-                    "is_prop_opt_m0": m0 == opt["m0"]}
+                    "is_prop_opt_m0": m0 == opt["m0"],
+                    "is_tuned_m0": bool(tun and m0 == tun["m0"])}
             for key in ("closed_form", "all_points"):
                 v = np.array([h[key] for h in hats])
                 cell[key] = {
@@ -163,18 +206,31 @@ def sweep(
         "budgets": list(budgets),
         "m0_values": list(m0_values),
         "cells": cells,
+        "a1": a1,
+        "cv": cv,
         "prop_opt": {
             str(B): optimal_allocation(B=B, d=d, omega1=omega1, rho=rho, m=m)
             for B in budgets
         },
+        "tuned": ({
+            str(B): tuned_allocation(B=B, d=d, omega1=omega1, rho=rho, m=m,
+                                     a1=a1, cv=cv)
+            for B in budgets
+        } if have_tuned else None),
         "elapsed_seconds": time.perf_counter() - t0,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
 
 
 def summarize(result: dict, estimator: str = "closed_form") -> dict:
-    """Per-budget: prop:opt's m0, the empirically best m0, and the price of the gap."""
+    """Per-budget: each arm's m0, the empirically best m0, and the price of each gap.
+
+    `penalty_factor` (prop:opt) and `penalty_tuned` are RMSE relative to the
+    best m0 available on the grid -- the honest yardstick, since the best cell
+    is measured on the same draws rather than predicted.
+    """
     out = {}
+    tuned_all = result.get("tuned")
     for B in result["budgets"]:
         rows = [c for c in result["cells"]
                 if c["budget"] == B and not c["skipped"]]
@@ -183,14 +239,26 @@ def summarize(result: dict, estimator: str = "closed_form") -> dict:
         best = min(rows, key=lambda c: c[estimator]["rmse"])
         predicted = result["prop_opt"][str(B)]["m0"]
         at_pred = next((c for c in rows if c["m0"] == predicted), None)
-        out[str(B)] = {
+        entry = {
             "prop_opt_m0": predicted,
             "best_m0": best["m0"],
             "best_rmse": best[estimator]["rmse"],
             "rmse_at_prop_opt_m0": at_pred[estimator]["rmse"] if at_pred else None,
             "penalty_factor": (at_pred[estimator]["rmse"] / best[estimator]["rmse"])
             if at_pred else None,
+            "tuned_m0": None,
+            "rmse_at_tuned_m0": None,
+            "penalty_tuned": None,
         }
+        if tuned_all and tuned_all.get(str(B)):
+            tm0 = tuned_all[str(B)]["m0"]
+            at_tuned = next((c for c in rows if c["m0"] == tm0), None)
+            entry["tuned_m0"] = tm0
+            if at_tuned:
+                entry["rmse_at_tuned_m0"] = at_tuned[estimator]["rmse"]
+                entry["penalty_tuned"] = (at_tuned[estimator]["rmse"]
+                                          / best[estimator]["rmse"])
+        out[str(B)] = entry
     return out
 
 
@@ -236,6 +304,7 @@ def _main(argv: list[str] | None = None) -> None:
         m=cfg["m"], rho=cfg["rho"], d=cfg["d"], omega1=cfg["omega1"],
         replicates=cfg["replicates"], true_gamma=cfg["true_gamma"],
         seed=cfg.get("seed"), progress=True,
+        a1=cfg.get("a1"), cv=cfg.get("cv"),
     )
 
     out_dir = args.out_dir or (args.meta.resolve().parent / "data")
@@ -256,24 +325,48 @@ def _main(argv: list[str] | None = None) -> None:
         print(f"  {'m0':>4} {'n':>12} {'bias':>11} {'sd':>11} {'rmse':>11}")
         for c in rows:
             s = c["closed_form"]
-            mark = "  <-- prop:opt" if c["is_prop_opt_m0"] else ""
+            mark = ("  <-- prop:opt" if c["is_prop_opt_m0"] else "") + \
+                   ("  <-- tuned" if c.get("is_tuned_m0") else "")
             print(f"  {c['m0']:>4} {c['n']:>12,} {s['bias']:>11.3e} {s['sd']:>11.3e} "
                   f"{s['rmse']:>11.3e}{mark}")
         s = summary[str(B)]
-        print(f"  prop:opt m0={s['prop_opt_m0']}, empirically best m0={s['best_m0']}"
-              + (f", cost of the gap: {s['penalty_factor']:.2f}x RMSE"
-                 if s["penalty_factor"] else "")
-              + "\n")
+        line = (f"  best m0={s['best_m0']}   |   prop:opt m0={s['prop_opt_m0']}"
+                + (f" ({s['penalty_factor']:.2f}x)" if s["penalty_factor"] else ""))
+        if s["tuned_m0"] is not None:
+            line += (f"   |   tuned m0={s['tuned_m0']}"
+                     + (f" ({s['penalty_tuned']:.2f}x)" if s["penalty_tuned"] else ""))
+        print(line + "\n")
+
+    # PAIRED ARMS side by side: the constant's worth, in one table.
+    if result.get("tuned"):
+        print("paired allocation arms (RMSE relative to the best m0 on the grid):")
+        print(f"  {'B':>9} {'best m0':>8} | {'prop:opt m0':>11} {'penalty':>8} "
+              f"| {'tuned m0':>9} {'penalty':>8}")
+        for B in result["budgets"]:
+            s = summary.get(str(B))
+            if not s:
+                continue
+            pf = f"{s['penalty_factor']:.2f}x" if s["penalty_factor"] else "--"
+            pt = f"{s['penalty_tuned']:.2f}x" if s["penalty_tuned"] else "--"
+            tm = s["tuned_m0"] if s["tuned_m0"] is not None else "--"
+            print(f"  {B:>9.0e} {s['best_m0']:>8} | {s['prop_opt_m0']:>11} {pf:>8} "
+                  f"| {str(tm):>9} {pt:>8}")
+        print()
 
     # RATE: does the error fall like B**(-omega1/(d+2*omega1))?
     print("error-decay rate, log(rmse) vs log(B):")
-    for label, pick in (("at prop:opt's m0", "prop_opt_m0"), ("at the best m0", "best_m0")):
+    arms = [("at prop:opt's m0", "prop_opt_m0"), ("at the best m0", "best_m0")]
+    if result.get("tuned"):
+        arms.insert(1, ("at the tuned m0", "tuned_m0"))
+    for label, pick in arms:
         bs, rs = [], []
         for B in result["budgets"]:
             s = summary.get(str(B))
             if not s:
                 continue
-            r = s["rmse_at_prop_opt_m0"] if pick == "prop_opt_m0" else s["best_rmse"]
+            r = {"prop_opt_m0": s["rmse_at_prop_opt_m0"],
+                 "tuned_m0": s.get("rmse_at_tuned_m0"),
+                 "best_m0": s["best_rmse"]}[pick]
             if r:
                 bs.append(B)
                 rs.append(r)

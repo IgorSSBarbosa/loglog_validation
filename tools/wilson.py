@@ -52,6 +52,8 @@ from typing import Sequence
 
 import numpy as np
 
+from loglog import closed_form_weights
+
 #: Taylor constant of Lemma lem:q-bound: |q(x)| <= c0 (x-1)^2 for x >= 1/2.
 C0 = 4.0 * math.log(2.0) - 2.0
 
@@ -92,7 +94,7 @@ def sigma_se_per_scale(n_per_scale: Sequence, m: int, rho: float,
     if np.any(n <= 0) or np.any(cv2 < 0):
         raise ValueError("n must be positive and cv2 non-negative")
     j = np.arange(1, m + 1, dtype=float)
-    w = 12.0 * (j - (m + 1) / 2.0) / (m * (m**2 - 1))
+    w = closed_form_weights(m)          # eq. (526), one definition (tools/loglog.py)
     se = math.sqrt(float(np.sum(w**2 * cv2 / n)))
     return se / math.log(rho) if for_gamma else se
 

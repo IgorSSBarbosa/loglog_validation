@@ -92,6 +92,8 @@ def allocation_constants(d: float, omega1: float, rho: float, m: int,
     """
     import numpy as np
 
+    from loglog import closed_form_weights
+
     if m < 2:
         raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
     if rho <= 1:
@@ -102,7 +104,7 @@ def allocation_constants(d: float, omega1: float, rho: float, m: int,
         raise ValueError(f"cv must be > 0; got {cv}")
 
     j = np.arange(1, m + 1, dtype=float)
-    w = 12.0 * (j - (m + 1) / 2.0) / (m * (m**2 - 1))
+    w = closed_form_weights(m)          # eq. (526), one definition (tools/loglog.py)
     w_norm_sq = float(np.sum(w**2))
 
     Cb = abs(a1 * float(np.sum(w * rho ** (-j * omega1)))) / math.log(rho)
@@ -367,8 +369,12 @@ def optimal_allocation(B: float, d: float, omega1: float, rho: float, m: int) ->
         raise ValueError(f"omega1 must be > 0 (article eq. 232); got {omega1}")
     if rho <= 1:
         raise ValueError(f"rho must be > 1; got {rho}")
-    if m < 1:
-        raise ValueError(f"m must be >= 1; got {m}")
+    if m < 2:
+        # Was m >= 1, which let a degenerate one-scale ladder through: the
+        # eq. (526) weights are nan there (m(m^2-1) = 0), so the allocation
+        # looked valid and produced a nan gamma-hat. `allocation_constants`
+        # already required m >= 2; these now agree.
+        raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
     if B < 1:
         raise ValueError(f"B must be >= 1; got {B}")
 
