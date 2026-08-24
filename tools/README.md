@@ -34,6 +34,23 @@ chart at three). Neither chart has a unit test yet (they're plots, not
 numeric claims) — visually verified against `experiments/00_synthetic/`,
 including the untrustworthy-MLE styling path.
 
+`wilson.py` — the article's Wilson confidence interval, Theorem `thm:wilson`
+(eq. 720): the four-term bound $\mathcal B_{\mathrm{fs}}+\mathcal B_{\mathrm{good}}
++\mathcal B_{\mathrm{bad}}+\Phi(\alpha)\sigma_{\mathrm{se}}$ on
+$\lvert\hat\beta-\beta\rvert$. **For $\gamma$ only** — that is the theorem's own
+scope: it describes $\hat\beta=\sum_k w_{k,m}\log\overline Y_{\rho^k}$ and says
+nothing about $\omega_1$ or $a_1$, so do not reach for it there. Its value over a
+replicate interval is the fourth term: $\sigma_{\mathrm{se}}=\sqrt{12\sigma_\infty^2/
+(nm^3)}$ is a closed form, estimable from the raw samples, so no 5-point variance
+estimate is involved and $\Phi(\alpha)=1.960$ is honest where replicates force
+$t_4=2.776$. It is a **bound**, so it overcovers — measured $0.966$–$1.000$ across
+$m_0=2..10$, against a replicate interval that collapses to $0.000$ at $m_0=2$ for want
+of any bias term. `moment_bounds` reads $\sigma_\infty^2$/$\sigma_{\max}^2$/$\Lambda$
+off real samples; `sigma_se_per_scale` handles the non-uniform $n$ eq. (720) does not
+cover. Terms whose constants are unmeasured are dropped only behind a loud
+`complete=False` — a bound missing a term is not a bound. Driven by
+`src/check_coverage.py --arm wilson`.
+
 `coverage.py` — calibration testing for error bars (PLAN.md checkpoint 0.4).
 Answers a question none of the other tools do: this repo reports every result
 as *estimate ± uncertainty*, and while the estimates are checked against known

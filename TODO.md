@@ -371,11 +371,40 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       never overspends, replicate streams reproduce and are independent across cells,
       unaffordable cells marked skipped rather than faked, summary/rate machinery on planted
       inputs)~~
-- [ ] `tools/wilson.py` — the article's Wilson interval, eq. (720)'s four-term bound
-      on $\hat\gamma$. Note this is **not** the binomial score interval added as
-      `tools/coverage.py`'s `wilson_score_interval` (which only puts a CI on a
-      measured coverage proportion) — same name, different object, deliberately
-      not merged so this entry stays honestly open
+- [x] ~~`tools/wilson.py` — the article's Wilson interval, Theorem `thm:wilson`
+      (eq. 720): the four-term bound $\mathcal B_{\mathrm{fs}}+\mathcal
+      B_{\mathrm{good}}+\mathcal B_{\mathrm{bad}}+\Phi(\alpha)\sigma_{\mathrm{se}}$
+      on $|\hat\beta-\beta|$, done 2026-08-24 **for $\gamma$ only** (user's scope call).
+      That restriction is the theorem's, not ours: eq. (720) is a statement about
+      $\hat\beta=\sum_k w_{k,m}\log\overline Y_{\rho^k}$ and says nothing about
+      $\omega_1$ or $a_1$, which come from `correction.py`'s nonlinear fit that the
+      article does not analyse. Why it was worth building rather than keeping the
+      replicate interval: its $\sigma_{\mathrm{se}}=\sqrt{12\sigma_\infty^2/(nm^3)}$
+      is a **closed form** in $\sigma_\infty^2$, estimable from the raw samples
+      ($1.7\times10^8$ of them at $k=256$, relative error $\sim5\times10^{-5}$), so it
+      needs no replicates and $\Phi(\alpha)=1.960$ is legitimate where the 5-replicate
+      interval is forced to $t_4=2.776$. Verified against measurement: $\sigma_{\mathrm{se}}$
+      predicts `gamma_closed_form`'s scatter to 1.1% ($4.313$ vs $4.267\times10^{-4}$),
+      and $\mathcal B_{\mathrm{fs}}$ bounds its true bias by $1.60\times$ — correctly
+      conservative. **The decisive comparison** (1500 trials, equal total budget, on the
+      article's own estimator): the replicate interval covers $0.000/0.021/0.835/0.945/
+      0.955$ at $m_0=2/4/6/8/10$ — it collapses on shallow ladders because it has no bias
+      term at all and sits 8 half-widths off truth — while the Wilson bound covers
+      $1.000/1.000/0.996/0.982/0.966$ everywhere and, once bias is negligible, is 20-29%
+      **narrower** at the same budget. Also: `moment_bounds` estimates
+      $\sigma_\infty^2$/$\sigma_{\max}^2$/$\Lambda$ from real samples, and
+      `sigma_se_per_scale` generalises the fourth term to the non-uniform $n$ that
+      Experiment B's snr allocation produces (eq. 720 assumes uniform $n$; substituting a
+      mean $n$ there is wrong by a factor of ten). Terms whose constants we have not
+      measured ($\mathcal B_{\mathrm{bad}}$ needs $\Lambda,\delta$; the $\omega_2$ piece
+      needs $\phi^+$) are omitted only with a loud `complete=False` flag — a bound missing
+      a term is not a bound. Verified: `tools/tests/test_wilson.py` (23 cases — each term
+      against the equation as written, $\mathcal B_{\mathrm{fs}}$ shown to bound the exact
+      bias, the bias/variance crossover in $m_0$, monotonicity, and that omitting a term
+      is impossible to miss). Not covered: $\omega_1$/$a_1$ intervals, which still need
+      replicates or `tools/bootstrap.py`~~ — note `tools/coverage.py`'s
+      `wilson_score_interval` remains a **different object** (binomial score interval, for
+      putting a CI on a measured coverage proportion)
 - [ ] `tools/bootstrap.py` — resampling for constants
 
 ## Later phases (not started, not designed yet)

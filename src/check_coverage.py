@@ -54,6 +54,11 @@ sys.path.insert(0, str(HERE.parent / "tools"))
 
 from allocation_experiment import ladder, rate_exponent, rate_exponent_se  # noqa: E402
 from correction import fit_correction  # noqa: E402
+from wilson import (  # noqa: E402
+    format_interval,
+    sigma_se,
+    wilson_interval,
+)
 from coverage import (  # noqa: E402
     coverage_multi,
     coverage_test,
@@ -121,6 +126,46 @@ def _srw_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
         y_bar[j] = m
         sigma_log[j] = float(np.std(s, ddof=1)) / sqrt(len(s)) / m
     return y_bar, sigma_log
+
+
+def make_wilson_experiment(m0: int, m: int, rho: float, n: int, *,
+                           sigma_inf2: float, sigma_max2: float,
+                           a1: float, omega1: float, level: float = 0.95,
+                           Lambda: float | None = None,
+                           delta: float | None = None):
+    """Coverage arm for the article's Wilson bound (tools/wilson.py, eq. 720).
+
+    Differs from the other arms in what is being tested. Those ask whether an
+    interval built from R replicate fits is the width it claims. This one asks
+    whether a BOUND holds -- so the expected answer is not 0.95 but "at least
+    0.95", and the interesting number is how far above.
+
+    Uniform n, because the theorem assumes it, and gamma_closed_form (the
+    article's own linear estimator) because the theorem is about that estimator
+    and no other. One replicate per trial: the bound needs no replicates, which
+    is the entire point of it.
+
+    Returned as (estimate, se_equivalent) with se_equivalent = half_width/q so
+    that `coverage_test`'s interval(est, se, dof=None) reproduces the bound
+    exactly; that keeps the scoring inside the tested harness rather than
+    re-implementing hit-counting here.
+    """
+    from scipy.stats import norm
+
+    scales = ladder(m0, m, rho)
+    mu = np.array([exact_mean(k) for k in scales])
+    sd = np.array([exact_sd(k) for k in scales])
+    q = float(norm.ppf(0.5 + level / 2))
+
+    def experiment(rng):
+        y_bar = rng.normal(mu, sd / sqrt(n))
+        g = float(gamma_closed_form(scales, y_bar, rho, m0))
+        res = wilson_interval(g, n, m, m0, rho, sigma_inf2=sigma_inf2,
+                              sigma_max2=sigma_max2, a1=a1, omega1=omega1,
+                              Lambda=Lambda, delta=delta, level=level)
+        return g, res["half_width"] / q
+
+    return experiment
 
 
 def check_planting(n: int, trials: int, seed: int | None = None,
@@ -244,8 +289,12 @@ def make_rate_experiment(budgets, replicates: int, d: float, omega1: float,
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--arm", choices=("planted", "srw", "rate", "planting",
-                                     "both", "all"),
+                                     "wilson", "both", "all"),
                    default="planted")
+    p.add_argument("--wilson-m0", type=int, nargs="+", default=[2, 4, 6, 8, 10],
+                   help="m0 values to sweep in the wilson arm")
+    p.add_argument("--wilson-n", type=int, default=100_000,
+                   help="uniform n per scale for the wilson arm")
     p.add_argument("--planting-n", type=int, default=10_000,
                    help="n per y_bar for the planting arm (small on purpose: "
                         "normality of a sample mean only improves with n, so a "
@@ -270,6 +319,34 @@ def _main(argv=None) -> None:
     out, t0 = {}, time.perf_counter()
 
     for arm in arms:
+        if arm == "wilson":
+            sig_inf2 = float(np.pi / 2 - 1)          # half-normal limit of Var(xi)
+            print(f"\n{'=' * 72}\nwilson arm: article eq. (720) as a bound on gamma\n"
+                  f"uniform n={a.wilson_n:,}, m={6}, rho=2, sigma_inf2={sig_inf2:.4f}, "
+                  f"a1={TRUTH['a1']}, omega1={TRUTH['omega1']}\n"
+                  f"a BOUND, so coverage >= {a.level:.0%} is a pass; the question is "
+                  f"how conservative\n{'=' * 72}")
+            print(f"  {'m0':>4} {'B_fs':>11} {'se_term':>11} {'half':>11} "
+                  f"{'dominant':>9} {'coverage':>9} {'95% CI':>16}")
+            for m0 in a.wilson_m0:
+                scales = ladder(m0, 6, 2.0)
+                cv2 = [(exact_sd(k) / exact_mean(k)) ** 2 for k in scales]
+                exp = make_wilson_experiment(
+                    m0, 6, 2.0, a.wilson_n, sigma_inf2=sig_inf2,
+                    sigma_max2=max(cv2), a1=TRUTH["a1"], omega1=TRUTH["omega1"],
+                    level=a.level)
+                r = coverage_test(exp, TRUTH["gamma"], trials=a.trials,
+                                  level=a.level, dof=None, seed=a.seed)
+                w = wilson_interval(0.5, a.wilson_n, 6, m0, 2.0,
+                                    sigma_inf2=sig_inf2, sigma_max2=max(cv2),
+                                    a1=TRUTH["a1"], omega1=TRUTH["omega1"],
+                                    level=a.level)
+                lo, hi = r["coverage_ci"]
+                print(f"  {m0:>4} {w['B_fs']:>11.3e} {w['se_term']:>11.3e} "
+                      f"{w['half_width']:>11.3e} {w['dominant']:>9} "
+                      f"{r['coverage']:>9.3f} {f'[{lo:.3f}, {hi:.3f}]':>16}")
+                out[f"wilson/m0={m0}"] = r
+            continue
         if arm == "planting":
             print(f"\n{'=' * 72}\nplanting arm: is y_bar really N(mu, sigma^2/n)?"
                   f"  n={a.planting_n:,}, {a.trials} draws per scale\n"

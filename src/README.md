@@ -43,7 +43,8 @@ python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
 
 # 10. Are the error bars themselves calibrated? (checkpoint 0.4)
 python3 check_coverage.py --arm planted --trials 2000 --centre both
-python3 check_coverage.py --arm srw --trials 200 --n-scale 0.003   # slow cross-check
+python3 check_coverage.py --arm planting --trials 3000       # is the planting faithful?
+python3 check_coverage.py --arm wilson --trials 1000        # eq. (720) as a bound on gamma
 ```
 
 `check_coverage.py` — PLAN.md checkpoint 0.4: replays Experiment B's whole
@@ -62,6 +63,13 @@ against the mean-of-fits alternative on identical draws. Ground truth
 *not* registered in `tools/models.py` as a `target_fn` — same rule as
 `allocation_experiment.py`'s `true_gamma`: truth may plant data and score a
 finished answer, never reach an estimator.
+
+The `wilson` arm is a different question from the others: it scores `tools/wilson.py`'s
+eq. (720) **bound** rather than a replicate interval, so the pass condition is coverage
+$\ge$ nominal and the interesting number is how conservative. It sweeps $m_0$ to show
+the crossover from bias-dominated (shallow ladders, where the bound is very wide and the
+replicate interval is simply wrong) to variance-dominated (deep ladders, where the bound
+is both valid and narrower).
 
 `generate.py` — the shared sample-generator CLI/API (`generate`, `reproduce`).
 Recipe: `{"model": ..., "params": {...}, "scales": [...], "n": ..., "seed": null}`.

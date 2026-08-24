@@ -691,6 +691,82 @@ Both verdicts are unchanged — the correction widens the cut-off rather than mo
 conclusion, which is the outcome to hope for from a calibration fix. But the rule is
 now the one it always claimed to be.
 
+### The article's own Wilson interval, eq. (720) — for $\gamma$ (2026-08-24)
+
+The calibration above fixed the replicate interval by widening its quantile. The
+article already contains a different answer, Theorem `thm:wilson`:
+
+$$\lvert\hat\beta-\beta\rvert \le \underbrace{\tfrac{6}{m(m+1)}\Big[\tfrac{a_1\rho^{-\omega_1m_0}}{\rho^{\omega_1}-1}+\phi^{+}\tfrac{\rho^{-\omega_2m_0}}{\rho^{\omega_2}-1}\Big]}_{\mathcal B_{\mathrm{fs}}} + \underbrace{\tfrac{6(c_0+2)\sigma^2_{\max,m_0}}{n(m+1)}}_{\mathcal B_{\mathrm{good}}} + \mathcal B_{\mathrm{bad}} + \Phi(\alpha)\underbrace{\sqrt{\tfrac{12\sigma_\infty^2}{nm^3}}}_{\sigma_{\mathrm{se}}}$$
+
+with $c_0=4\log 2-2$ and $\beta=\gamma\log\rho$. Implemented as `tools/wilson.py`,
+**for $\gamma$ only** — that is the theorem's own scope, not a shortcut: eq. (720)
+describes $\hat\beta=\sum_k w_{k,m}\log\overline Y_{\rho^k}$ and says nothing about
+$\omega_1$ or $a_1$, which come from `correction.py`'s nonlinear fit the article does
+not analyse.
+
+**Why bother, when $t_4$ already restored calibration.** The replicate interval
+estimates its own width from 5 numbers, which forces $t_4=2.776$ instead of $1.960$.
+Eq. (720)'s fourth term is a *closed form* in $\sigma_\infty^2$, and $\sigma_\infty^2$
+is estimated from the raw samples — $1.7\times10^8$ of them at $k=256$, relative error
+$\sim1/\sqrt{2n}\approx5\times10^{-5}$. At that precision $\sigma_{\mathrm{se}}$ is
+*known*, not estimated, and $\Phi(\alpha)=1.960$ is legitimate. No replicates required.
+
+**Both derivations check out against measurement** (planted arm, Experiment B's grid,
+$m_0=2$, 3000 draws):
+
+| quantity | closed form | measured | ratio |
+|---|---|---|---|
+| bias, our $C_b\rho^{-\omega_1m_0}$ (Part I of the derivations note) | $8.091\times10^{-3}$ | $8.069\times10^{-3}$ | 0.997 |
+| sd, eq. (720)'s $\sigma_{\mathrm{se}}$ | $4.313\times10^{-4}$ | $4.267\times10^{-4}$ | 0.989 |
+| eq. (720)'s $\mathcal B_{\mathrm{fs}}$ *bound* | $1.288\times10^{-2}$ | $8.069\times10^{-3}$ | 1.60 — conservative, as a bound must be |
+
+#### The decisive comparison
+
+1500 trials, **equal total sampling budget**, on the article's own estimator
+`gamma_closed_form` — the replicate route spends it as $R=5$ passes of $n=N/5$, the
+Wilson route as one pass of $n=N$:
+
+| $m_0$ | replicate $t_4$ coverage | half-width | Wilson coverage | half-width |
+|---|---|---|---|---|
+| 2 | **0.000** | $1.00\times10^{-3}$ | 1.000 | $1.36\times10^{-2}$ |
+| 4 | **0.021** | $9.73\times10^{-4}$ | 1.000 | $3.94\times10^{-3}$ |
+| 6 | **0.835** | $9.66\times10^{-4}$ | 0.996 | $1.52\times10^{-3}$ |
+| 8 | 0.945 | $9.65\times10^{-4}$ | 0.982 | $9.17\times10^{-4}$ |
+| 10 | 0.955 | $9.64\times10^{-4}$ | 0.966 | $\mathbf{7.66\times10^{-4}}$ |
+
+Two things to read off.
+
+**The replicate interval does not merely undercover on shallow ladders — it fails
+completely**, because it contains no bias term at all. At $m_0=2$ the estimator's true
+bias is $8.07\times10^{-3}$, eight half-widths from truth, so no quantile could rescue
+it. This was invisible in the coverage work above only because that measured
+`fit_correction`'s $\gamma$, which fits the correction away and so carries bias
+$-1.8\times10^{-4}$ instead. **Two different $\gamma$ estimators with a 44x difference
+in bias** — on this grid the nonlinear fit is 9.5x better in RMSE (it trades 3.8x
+variance for the bias), though at Experiment C's tuned $m_0$ the ranking reverses.
+
+**Where the bias is negligible the bound is both valid and narrower** — $7.66$ against
+$9.64\times10^{-4}$ at $m_0=10$, a 20% gain, rising to 29% asymptotically
+($1.960/(t_4/\sqrt5)=0.706$). Spending the budget on one deep pass beats splitting it
+into five, once you no longer need replicates to learn the width.
+
+#### Caveats recorded in the module
+
+- **It is a bound, not an interval**: it adds $|\text{bias}|$ rather than recentring, so
+  it overcovers. That is the price of validity, and it is measured above rather than
+  assumed.
+- **Uniform $n$.** Eq. (720) assumes it; Experiment B's snr allocation spans
+  $1.7\times10^5$ to $1.7\times10^8$. Substituting a mean $n$ gives $4.2\times10^{-5}$
+  against the correct $4.3\times10^{-4}$ — **wrong by a factor of ten**.
+  `sigma_se_per_scale` generalises the fourth term; the three bias terms would need
+  rederiving, so the module refuses rather than guessing.
+- **$\mathcal B_{\mathrm{bad}}$ needs $(\Lambda,\delta)$ and the $\omega_2$ piece needs
+  $\phi^{+}$**, none of which we have measured. They are omitted only behind a
+  `complete=False` flag that `format_interval` prints in the first line — a bound
+  missing a term is not a bound, and the reported half-width is then a *lower* estimate
+  of the true one. `moment_bounds` will estimate $\Lambda$, $\sigma_\infty^2$ and
+  $\sigma^2_{\max}$ from real samples when we want the complete version.
+
 ### Replicate groups on disk, and how to check the predictions
 
 Same-configuration replicates live in one folder, one subfolder per replicate
