@@ -691,6 +691,61 @@ Both verdicts are unchanged — the correction widens the cut-off rather than mo
 conclusion, which is the outcome to hope for from a calibration fix. But the rule is
 now the one it always claimed to be.
 
+### The paired allocation arms (2026-08-25) — the tuned constant closes the gap
+
+Experiment C now runs the two allocations side by side on the same cells, rather than
+testing `prop:opt` alone and arguing about the fix afterwards: **prop:opt** is the claim
+under test, **tuned** is the same rule with its dropped multiplicative constant restored
+from measured $a_1$ and cv, and the **best $m_0$ on the grid** is the yardstick both are
+scored against. Re-run at `allocation_wide` ($10^4$–$10^9$, $R=40$, seed 20260821):
+
+| $B$ | best $m_0$ | prop:opt $m_0$ | penalty | tuned $m_0$ | penalty |
+|---|---|---|---|---|---|
+| $10^4$ | 0 | 4 | 3.35x | 0 | **1.00x** |
+| $10^5$ | 1 | 5 | 2.59x | 2 | **1.01x** |
+| $10^6$ | 2 | 6 | 2.29x | 3 | **1.00x** |
+| $10^7$ | 4 | 7 | 2.02x | 4 | **1.00x** |
+| $10^8$ | 4 | 8 | 2.69x | 5 | **1.02x** |
+| $10^9$ | 6 | 9 | 2.26x | 6 | **1.00x** |
+
+An RMSE estimated from $R$ draws carries relative sd $\approx1/\sqrt{2R}$, so a *ratio*
+of two carries $\sqrt2/\sqrt{2R}=0.158$ at $R=40$. Against that yardstick the tuned arm
+sits at $z=+0.04$ on average — **statistically indistinguishable from the best cell at
+every budget** — while prop:opt sits at $z=6.4$ to $14.8$. In compute: prop:opt costs
+$8.4$–$38.5\times$ the budget for the same accuracy, tuned costs $1.0$–$1.1\times$.
+
+The residual gap tells the same story as the penalties. prop:opt's $m_0$ is $[4,4,4,3,4,3]$
+steps too deep (mean $3.67$, slope $-0.17$ per decade — flat, so a constant); tuned's is
+$[0,1,1,0,1,0]$ (mean $0.50$, slope $-0.03$). And where tuned misses by one step it costs
+$0.03\%$, $1.33\%$, $1.97\%$ — the objective is flat near its minimum, which is why a
+one-step miss is nearly free and why chasing the last step would be pointless.
+
+All three arms recover the rate law, now with the $t(\nu_{\mathrm{eff}})$ cut-off:
+
+```
+predicted -omega1/(d+2*omega1) = -0.3307 +/- 0.0127
+consistency cut-off |z| < 2.111 (t at 16.9 effective dof, not the normal's 1.960)
+  at prop:opt's m0   -0.3502 +/- 0.0116   z = -1.14   consistent
+  at the tuned m0    -0.3256 +/- 0.0116   z = +0.30   consistent
+  at the best m0     -0.3259 +/- 0.0116   z = +0.28   consistent
+```
+
+The tuned and best slopes agree to three decimals, as they must when tuned tracks best.
+
+**This is prediction, not fitting**, and the distinction matters for what the result
+means. The tuned arm was handed $a_1=-0.2748$ and $\mathrm{cv}=0.7771$ from Experiment B
+and its samples — different draws, different seeds — and the offset
+$\theta_2\log_\rho\kappa$ is a closed form that was never fitted to Experiment C's
+argmins. Re-running the recommendation with today's *pooled* constants
+($a_1=-0.2353$, $\omega_1=0.9836$) gives $m_0=[0,1,3,4,5,6]$ against
+$[0,2,3,4,5,6]$ — one step different at one budget, and if anything closer to the
+measured argmins. The recommendation is robust to the constants precisely because the
+offset depends on them only through a logarithm.
+
+Enabling the second arm does not perturb the draws (pinned by a test, and confirmed here:
+prop:opt's penalties are identical to the pre-paired run at the same seed), so the two
+runs are directly comparable.
+
 ### The article's own Wilson interval, eq. (720) — for $\gamma$ (2026-08-24)
 
 The calibration above fixed the replicate interval by widening its quantile. The
