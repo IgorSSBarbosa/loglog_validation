@@ -41,8 +41,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
-sys.path.insert(0, str(HERE))
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
 
 from coverage import combine_se, consistency_threshold  # noqa: E402
 from allocation_experiment import rate_exponent, rate_exponent_se, summarize  # noqa: E402

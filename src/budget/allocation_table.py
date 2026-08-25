@@ -37,7 +37,8 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import (  # noqa: E402
     allocation_constants,

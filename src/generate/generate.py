@@ -41,7 +41,8 @@ import numpy as np
 import psutil
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # models/persistence live there, as bare imports
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import neyman_allocation, snr_allocation  # noqa: E402
 from models import get_model  # noqa: E402

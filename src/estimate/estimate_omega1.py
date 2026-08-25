@@ -36,7 +36,8 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from correction import fit_correction, omega1_from_bias_decay  # noqa: E402
 from loglog import gamma_drop_leading  # noqa: E402

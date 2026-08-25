@@ -50,7 +50,9 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
 
 from allocation_experiment import ladder, rate_exponent, rate_exponent_se  # noqa: E402
 from correction import fit_correction  # noqa: E402

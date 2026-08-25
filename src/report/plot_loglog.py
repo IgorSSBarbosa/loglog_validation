@@ -55,7 +55,8 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from loglog import compare_methods  # noqa: E402
 from loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402

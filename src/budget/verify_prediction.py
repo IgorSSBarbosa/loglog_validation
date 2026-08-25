@@ -32,14 +32,14 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "tools"))  # helper modules live there, as bare imports
+ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import run_dir as _run_dir  # noqa: E402
 
-sys.path.insert(0, str(HERE))
 from allocation_table import (  # noqa: E402
     choose_group,
     discover_groups,
