@@ -45,6 +45,7 @@ ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
 
+from artifacts import read_artifact  # noqa: E402
 from coverage import combine_se, consistency_threshold  # noqa: E402
 from allocation_experiment import rate_exponent, rate_exponent_se, summarize  # noqa: E402
 from allocation_table import (  # noqa: E402
@@ -262,7 +263,7 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("-o", "--out", dest="out", type=Path, default=None)
     args = parser.parse_args(argv)
 
-    result = json.loads((args.data / "result.json").read_text())
+    result = read_artifact(args.data, "allocation_sweep")
 
     expected = None
     if not args.no_expected:

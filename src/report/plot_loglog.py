@@ -45,6 +45,7 @@ Run (after generating some data, e.g. `generate.py -meta
     python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
 """
 
+from artifacts import artifact_path  # noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -111,7 +112,7 @@ def main(argv: list[str] | None = None) -> None:
     scales, y_bar, _se, n = loglog_points(samples)
     results = compare_methods(scales, y_bar, n, true_gamma=true_gamma)
     results["source"] = str(args.data)
-    results_path = args.data / "results.json"
+    results_path = artifact_path(args.data, "gamma_estimates")
     results_path.write_text(json.dumps(results, indent=2, sort_keys=True))
 
     all_points = results["methods"]["all_points"]

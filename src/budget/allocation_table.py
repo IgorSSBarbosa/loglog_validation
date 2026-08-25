@@ -40,6 +40,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import artifact_path, find_artifacts  # noqa: E402
 from allocation import (  # noqa: E402
     allocation_constants,
     optimal_allocation,
@@ -61,7 +62,7 @@ FALLBACK_OMEGA1 = 1.0155      # Experiment B, 5 replicates (truth 1)
 
 
 def _fit_summary(d: Path) -> dict | None:
-    f = d / "omega1.json"
+    f = artifact_path(d, "omega1")
     if not f.exists():
         return None
     try:
@@ -88,11 +89,11 @@ def discover_groups(data_root: Path) -> list[dict]:
     """
     root = Path(data_root)
     candidates: list[Path] = []
-    if (root / "omega1.json").exists():
+    if artifact_path(root, "omega1").exists():
         candidates = [root]
     else:
-        for d in sorted(root.rglob("omega1.json")):
-            candidates.append(d.parent)
+        for f in find_artifacts(root, "omega1"):
+            candidates.append(f.parent)
 
     groups: dict[tuple, dict] = {}
     for d in candidates:
@@ -230,7 +231,7 @@ def measured_correction(run_dirs) -> dict:
     """
     loaded = []
     for rd in run_dirs:
-        p = Path(rd) / "omega1.json"
+        p = artifact_path(Path(rd), "omega1")
         if p.exists():
             loaded.append(json.loads(p.read_text()))
 
@@ -304,7 +305,7 @@ def measured_cost_exponent(data_root) -> tuple[float, float | None, str]:
     """
     root = Path(data_root)
     ds = []
-    for f in sorted(root.rglob("result.json")):
+    for f in find_artifacts(root, "cost_probe"):
         try:
             r = json.loads(f.read_text())
         except (ValueError, OSError):
@@ -505,7 +506,7 @@ def _main(argv: list[str] | None = None) -> None:
                         help="also show what prop:opt's uncalibrated m0 would cost")
     parser.add_argument("--csv", type=Path, default=None, help="also write the table as CSV")
     parser.add_argument("--data-root", type=Path,
-                        default=HERE.parent / "experiments" / "01_srw" / "data",
+                        default=ROOT / "experiments" / "01_srw" / "data",
                         help="where to look for the measured runs")
     args = parser.parse_args(argv)
 
@@ -537,9 +538,10 @@ def _main(argv: list[str] | None = None) -> None:
         a1, a1_se, a1_src = measured_a1(runs)
     cv_run = runs[0] if runs else root / "omega1"
     cv, cv_src = (args.cv, "override") if args.cv is not None else measured_cv(cv_run)
-    tp_json = root / "allocation" / "result.json"
-    if not tp_json.exists() and (root.parent / "allocation" / "result.json").exists():
-        tp_json = root.parent / "allocation" / "result.json"
+    tp_json = artifact_path(root / "allocation", "allocation_sweep")
+    if not tp_json.exists() and artifact_path(root.parent / "allocation",
+                                              "allocation_sweep").exists():
+        tp_json = artifact_path(root.parent / "allocation", "allocation_sweep")
     tp, tp_src = (args.throughput, "override") if args.throughput is not None else \
         measured_throughput(tp_json)
 

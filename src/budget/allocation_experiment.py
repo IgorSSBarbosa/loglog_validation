@@ -56,6 +56,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import write_artifact  # noqa: E402
 from allocation import (  # noqa: E402
     optimal_allocation,
     total_cost,
@@ -311,7 +312,9 @@ def _main(argv: list[str] | None = None) -> None:
     out_dir = args.out_dir or (args.meta.resolve().parent / "data")
     rd = _run_dir(out_dir, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
-    (rd / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True))
+    write_artifact(rd, "allocation_sweep", result,
+                   produced_by="src/budget/allocation_experiment.py",
+                   recipe=args.meta)
 
     summary = summarize(result)
     theory_rate = -cfg["omega1"] / (cfg["d"] + 2 * cfg["omega1"])

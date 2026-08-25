@@ -52,6 +52,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import artifact_path  # noqa: E402
 from cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
     aggregate,
@@ -156,7 +157,7 @@ def _main(argv: list[str] | None = None) -> None:
     out_dir = args.out_dir or (args.meta.resolve().parent / "data")
     rd = _run_dir(out_dir, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
-    out_path = rd / "result.json"
+    out_path = artifact_path(rd, "cost_probe")
     out_path.write_text(json.dumps(result, indent=2, sort_keys=True))
 
     local_slopes = gamma_drop_leading(result["scales"], result["elapsed"])

@@ -35,6 +35,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import write_artifact  # noqa: E402
 from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
@@ -132,7 +133,7 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("--group", type=str, default=None)
     parser.add_argument("--tag", type=str, default="prediction_check")
     parser.add_argument("--data-root", type=Path,
-                        default=HERE.parent / "experiments" / "01_srw" / "data")
+                        default=ROOT / "experiments" / "01_srw" / "data")
     args = parser.parse_args(argv)
 
     root = args.data_root
@@ -160,7 +161,8 @@ def _main(argv: list[str] | None = None) -> None:
 
     rd = _run_dir(root, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
-    (rd / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True))
+    write_artifact(rd, "prediction_check", result,
+                   produced_by="src/budget/verify_prediction.py")
 
     print(f"\n{'m0':>4} {'n':>12} {'pred s':>10} {'meas s':>10} {'ratio':>7}"
           f" {'pred rmse':>11} {'meas rmse':>11} {'ratio':>7}")

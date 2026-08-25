@@ -36,6 +36,8 @@ from pathlib import Path
 
 import numpy as np
 
+from artifacts import artifact_path, read_artifact
+
 
 def normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:
     """Scalar-or-sequence `n` -> matched (scales, n) integer lists, same length."""
@@ -111,7 +113,7 @@ def load_metadata(run_dir: str | Path) -> dict | None:
     """Load <run_dir>/metadata.json. Returns None (not an error) if there's no
     metadata file -- metadata is optional context (e.g. for a target_fn
     overlay), never required just to plot data."""
-    path = Path(run_dir) / "metadata.json"
+    path = artifact_path(Path(run_dir), "samples_meta")
     if not path.exists():
         return None
     return json.loads(path.read_text())
@@ -136,7 +138,7 @@ def write_metadata(
 ) -> Path:
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
-    path = run_dir / "metadata.json"
+    path = artifact_path(run_dir, "samples_meta")
     meta = {
         "model": model,
         "params": params,

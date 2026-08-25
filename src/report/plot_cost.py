@@ -24,6 +24,7 @@ Run (after measuring, e.g. `measure_cost.py -meta cost_probe_config.json
     python3 plot_cost.py -data ../experiments/01_srw/data/demo_run
 """
 
+from artifacts import artifact_path  # noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -54,7 +55,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    result_path = args.data / "result.json"
+    result_path = artifact_path(args.data, "cost_probe")
     if not result_path.exists():
         parser.error(
             f"no data at {result_path}.\n"

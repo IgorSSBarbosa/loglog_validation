@@ -39,6 +39,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import artifact_path  # noqa: E402
 from correction import fit_correction, omega1_from_bias_decay  # noqa: E402
 from loglog import gamma_drop_leading  # noqa: E402
 from persistence import load_metadata, load_samples  # noqa: E402
@@ -138,7 +139,7 @@ def _main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     result = estimate(args.data)
-    out_path = Path(args.data) / "omega1.json"
+    out_path = artifact_path(Path(args.data), "omega1")
     out_path.write_text(json.dumps(result, indent=2, sort_keys=True))
 
     d = result["direct_fit"]
