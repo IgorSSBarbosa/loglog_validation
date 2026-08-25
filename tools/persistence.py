@@ -1,5 +1,5 @@
-"""Sample + metadata persistence shared across every model (src/generate.py,
-src/measure_cost.py) and consumed by src/plot_loglog.py/src/plot_cost.py.
+"""Sample + metadata persistence shared across every model (src/generate/generate.py,
+src/estimate/measure_cost.py) and consumed by src/report/plot_loglog.py/src/report/plot_cost.py.
 
 Each run gets its own directory, named by `tag`: `<out_dir>/<tag>/samples.npz`
 (a compressed {scale: array of n i.i.d. samples} archive) alongside
@@ -104,7 +104,7 @@ def load_samples(run_dir: str | Path) -> dict[int, np.ndarray]:
 
     raise FileNotFoundError(
         f"no data at {npz_path} or {samples_dir}/.\n"
-        f"Generate some first (src/generate.py -meta <recipe.json> --tag <name>), "
+        f"Generate some first (src/generate/generate.py -meta <recipe.json> --tag <name>), "
         f"then pass the printed run directory here."
     )
 

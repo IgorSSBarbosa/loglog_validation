@@ -290,6 +290,23 @@ def load_recipe(path, expect: str) -> dict:
     return payload
 
 
+RECIPE_DIR = "recipes"
+
+
+def default_out_dir(recipe_path) -> Path:
+    """Where a driver writes when the caller gave no --out-dir.
+
+    Always the *experiment's* `data/`, which since recipes moved into
+    `experiments/<exp>/recipes/` is no longer the recipe's own sibling: the
+    naive `recipe.parent / "data"` silently started writing to
+    `experiments/01_srw/recipes/data/`, one level too deep. A loose recipe
+    outside a `recipes/` folder still gets a sibling `data/`.
+    """
+    parent = Path(recipe_path).resolve().parent
+    base = parent.parent if parent.name == RECIPE_DIR else parent
+    return base / "data"
+
+
 def recipe_name(kind: str, name: str) -> str:
     """Canonical recipe filename: <prefix>_<name>.json, e.g. samples_omega1.json."""
     if kind not in RECIPES:

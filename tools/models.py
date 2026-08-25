@@ -1,5 +1,5 @@
-"""Model registry: names a model to src/generate.py, src/measure_cost.py, and
-src/plot_loglog.py via a recipe's "model" field, so those scripts are single,
+"""Model registry: names a model to src/generate/generate.py, src/estimate/measure_cost.py, and
+src/report/plot_loglog.py via a recipe's "model" field, so those scripts are single,
 shared drivers rather than one copy per experiment. This module is purely an
 importer/registry -- each model's actual sampling logic lives in its own
 models/<name>.py (a sibling of tools/, not a submodule of it).
@@ -80,7 +80,7 @@ MODELS: dict[str, ModelSpec] = {
         cost_hint=model_srw.cost_hint,
         # No target_fn/true_gamma_key: no article-sanctioned closed form for
         # SRW yet (see models/srw.py, experiments/01_srw/README.md). This is
-        # what keeps src/plot_loglog.py from overlaying a reference curve or
+        # what keeps src/report/plot_loglog.py from overlaying a reference curve or
         # reporting a true_gamma for this model -- not a special case in the
         # driver, just the absence of a target_fn here. The gamma-hat
         # estimators themselves still run (comparing estimators against each

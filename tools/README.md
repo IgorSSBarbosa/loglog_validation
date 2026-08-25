@@ -2,7 +2,7 @@
 
 Helper functions: code meant to be *called by other code*, not run directly (user's
 own framing, 2026-08-12) — `src/` holds the scripts a human runs
-(`python3 src/generate.py ...`); everything here is imported by those scripts, or by
+(`python3 src/generate/generate.py ...`); everything here is imported by those scripts, or by
 each other, or by tests. May not import from `experiments/`. Every function here
 needs a passing unit test in `tools/tests/` (checked against a closed form, not just
 "runs") before any experiment is allowed to depend on it. `tools/tests/` is
@@ -15,13 +15,33 @@ not a subfolder of it — see `models/README.md`) + one entry in `tools/models.p
 registry; `tools/models.py` itself is purely an importer/registry module, not where
 the simulation logic lives.
 
+Ten modules. The dependency graph is shallow on purpose — `loglog.py` is the only
+one several others import, because it owns the article's weight definition:
+
+| module | what it owns | imports |
+|---|---|---|
+| `loglog.py` | four $\hat\gamma$ estimators + eq. (526) weights — **the canonical definition** | — |
+| `correction.py` | two $\omega_1$ estimators (direct fit of eq. 232, and bias decay) | — |
+| `allocation.py` | `prop:opt` (eq. 945–946), `lem:budget` costs, the tuned constant $\kappa$, `snr`/`neyman` | `loglog` |
+| `cost_model.py` | cost exponent $d$: pure + affine fits, timing aggregators, declared-vs-measured | `loglog` |
+| `wilson.py` | eq. (720)'s four-term bound, **for $\gamma$ only** | `loglog` |
+| `coverage.py` | do our stated error bars actually cover? | — |
+| `artifacts.py` | what every file on disk is called, in or out | — |
+| `persistence.py` | run directories, samples, metadata, content hashing | — |
+| `models.py` | the `MODELS` registry — a pure importer | `models/` |
+| `loglog_plot.py` | the two charts | — |
+
+Full detail, one section per module, below.
+
+---
+
 `loglog_plot.py` — two charts. `loglog_plot`: generic log-log plot of
 $\overline Y_i$ vs $i$ (any `{scale: samples}` dict, from any experiment) with
 $\pm 1$ SE error bars, an optional overlay of a known $\mathbb{E} Y_i$ curve
 (`target_fn`, dashed gray, only when ground truth is known), and an optional
 overlay of an arbitrary fitted curve (`fit_fn`, solid colored -- e.g. the
 all-points OLS fit, which needs no known ground truth, just the data itself;
-`src/plot_loglog.py` always passes one). `estimates_plot`: compares the four $\hat\gamma$ estimators from
+`src/report/plot_loglog.py` always passes one). `estimates_plot`: compares the four $\hat\gamma$ estimators from
 `loglog.py`'s `compare_methods` — `two_point`/`drop_leading` (each a sequence
 of estimates) plotted against the smallest scale in their window, so the
 chart shows convergence as small, more finite-size-biased scales are dropped;
@@ -49,7 +69,7 @@ of any bias term. `moment_bounds` reads $\sigma_\infty^2$/$\sigma_{\max}^2$/$\La
 off real samples; `sigma_se_per_scale` handles the non-uniform $n$ eq. (720) does not
 cover. Terms whose constants are unmeasured are dropped only behind a loud
 `complete=False` — a bound missing a term is not a bound. Driven by
-`src/check_coverage.py --arm wilson`.
+`src/estimate/check_coverage.py --arm wilson`.
 
 `coverage.py` — calibration testing for error bars (PLAN.md checkpoint 0.4).
 Answers a question none of the other tools do: this repo reports every result
@@ -67,9 +87,10 @@ a measured coverage (score, not Wald: a calibrated 95% test measures coverage
 near 1, exactly where Wald runs past 1). `se_ratio` separates the two causes of
 undercoverage — an interval too narrow vs. an estimator off-centre — because
 the fix differs. **Not article eq. (720)**: the article's Wilson interval is a
-four-term bound on $\hat\gamma$ and belongs in the still-unwritten
-`tools/wilson.py`; the one here is the textbook binomial score interval, used
-only for counting proportions. Driven by `src/check_coverage.py`.
+four-term bound on $\hat\gamma$ and lives in `tools/wilson.py` (above); the one
+here is the textbook binomial score interval, used only for counting
+proportions. The distinction is the whole reason both exist -- `coverage.py`
+*scores* intervals, `wilson.py` *builds* one. Driven by `src/estimate/check_coverage.py`.
 
 `loglog.py` — four $\hat\gamma$ estimators. Three as the general OLS slope of
 $\log\overline Y_i$ vs $\log i$ (equivalent to the article's closed-form
@@ -102,8 +123,8 @@ the per-scale sample counts, in addition to `scales`/`y_bar`, since
 estimators against each other doesn't require a known ground truth, only
 comparing against one does). `all_points` also carries `a0_hat` (the OLS
 fit's intercept, exp'd) alongside `gamma_hat` -- needed to actually draw the
-fitted line (`src/plot_loglog.py`'s `fit_fn`), not just report its slope.
-`src/plot_loglog.py` runs this, and writes its output to `results.json`, for
+fitted line (`src/report/plot_loglog.py`'s `fit_fn`), not just report its slope.
+`src/report/plot_loglog.py` runs this, and writes its output to `gamma_estimates.json`, for
 every model unconditionally, not just ones with a known closed form -- see
 that script's module docstring for why. Not wired into `compare_methods`
 (which is deliberately grid-agnostic): the article's exact closed-form $w_{k,m}$ weights,
@@ -118,7 +139,7 @@ the rejection path.
 
 `persistence.py` — sample+metadata save/load shared across every model. One run,
 one `<out_dir>/<tag>/` directory (`run_dir`), holding `samples.npz`
-(`save_samples`/`load_samples`, `{scale: array}` compressed) and `metadata.json`
+(`save_samples`/`load_samples`, `{scale: array}` compressed) and `samples_meta.json`
 (`write_metadata`/`load_metadata` — now also records `model`, the registry name
 used, alongside `params`/`scales`/`n`/`seed`/`timing_seconds`), plus `content_id`
 for deterministic hash-based tags and `normalize_scales_n` for scalar-or-sequence
@@ -134,15 +155,15 @@ build entirely in RAM: returns a writable on-disk memmap at
 `<run_dir>/samples/<scale>.npy`, filled in slices by the caller instead of assembled in
 memory and saved all at once. `load_samples` reads either layout transparently (flat
 `samples.npz` first, falling back to `samples/*.npy` loaded with `mmap_mode="r"`) — see
-`src/generate.py`'s chunked path below and `experiments/01_srw/README.md`'s
+`src/generate/generate.py`'s chunked path below and `experiments/01_srw/README.md`'s
 "Fixed-memory generation" section for why this exists (fixes the OOM on
 `Huge_test.json`-sized runs). Verified: 2 more cases in `test_persistence.py`
 (round-trip through `open_scale_writer`, and that a stray `samples/` dir never
 shadows an existing flat `samples.npz`).
 
 `models.py` — the `MODELS` registry (`ModelSpec`: `simulate(i, n, params, rng)`,
-optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate.py`,
-`src/measure_cost.py`, and `src/plot_loglog.py` dispatch through via a run's
+optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate/generate.py`,
+`src/estimate/measure_cost.py`, and `src/report/plot_loglog.py` dispatch through via a run's
 `"model"` name, instead of each experiment hardcoding its own simulator. This file
 is purely an importer: it adds the sibling `models/` directory to `sys.path` and
 imports each `models/<name>.py` as a bare top-level name (`srw`, `synthetic`) --
@@ -172,7 +193,7 @@ module identity (see its docstring). The actual per-model logic lives in
   (2026-08-20) is to keep $\gamma=1/2$, $\omega_1=1$ out of the code path and state
   them as README acceptance criteria instead, so the estimators are never handed the
   answer they are measuring (see `experiments/01_srw/README.md`). That absence is
-  what keeps `src/plot_loglog.py` from overlaying a reference curve or reporting a
+  what keeps `src/report/plot_loglog.py` from overlaying a reference curve or reporting a
   `true_gamma` for this model — not a special case in the driver. The gamma-hat
   estimators still run (comparing estimators against each other doesn't need a known
   truth); an explicit "exploratory" note is printed instead.
@@ -292,5 +313,32 @@ parameters, a $(\gamma,\omega_1)$ grid of truths, agreement between the two
 estimators on planted data, robustness to small multiplicative noise, and the
 mixed-parity failure mode pinned down explicitly).
 
-Not started yet — planned modules (see `PLAN.md` repo layout): `wilson.py`,
-`bootstrap.py`, `rng.py`.
+`cost_model.py` also carries the **budget-unit cross-check**: `declared_exponent`
+reads $d$ off a model's own `cost_hint`, `compare_cost_models` sets it against the
+affine fit of the wall clock, and `format_cost_comparison` prints both. Keeping both
+is the point — the declared count is exact where the clock is not (throughput varied
+8.6x across scales on this machine, making a time-based $\hat d$ 22.9% wrong globally
+and 49.4% wrong at the small scales), but only the clock can notice that a simulator
+has stopped being compute-bound. Agreement needs either $\lvert z\rvert\le3$ **or**
+a relative gap $\le5\%$: srw's declared $d=1$ is exact by construction, and against a
+measured $1.0028\pm0.0020$ the sigma test alone would flag a 0.3% discrepancy as a
+disagreement and train you to ignore the warning. Driven by
+`src/estimate/measure_cost.py`.
+
+`artifacts.py` — the naming registry: one place that decides what a run directory's
+files are called, and what a recipe is called. `result.json` used to be written by
+three producers with three schemas and `results.json` by a fourth, so telling them
+apart meant duck-typing a schema key or hardcoding a directory name — and two of the
+three genuinely cannot be separated by schema (both carry `cells`). `ARTIFACTS` maps
+kind to filename, `write_artifact` stamps provenance (`produced_by`, `recipe`,
+`created`) *inside* the file, and `read_artifact` still reads the old names behind a
+`DeprecationWarning`. `python3 tools/artifacts.py --migrate <root>` renames legacy
+files in place; `--list` prints the table. `RECIPES` does the same job for inputs:
+each recipe declares its `kind`, and `load_recipe(path, expect=...)` refuses a
+mismatch with an error that names the mistake rather than the missing key.
+`default_out_dir` resolves a driver's default output location to the *experiment's*
+`data/` — the recipe's grandparent now that recipes live in `recipes/`.
+
+Not started yet — planned modules (see `PLAN.md` repo layout): `bootstrap.py`,
+`rng.py` (ground rule 2's seeding is currently done inline with
+`SeedSequence.spawn` at each call site).

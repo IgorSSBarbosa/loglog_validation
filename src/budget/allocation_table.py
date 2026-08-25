@@ -19,9 +19,9 @@ instead costs a factor ~2.2-2.4 in RMSE at these budgets, which the --compare
 flag shows column by column.
 
 CLI:
-    python3 allocation_table.py                       # defaults: srw, d=1, omega1=1, rho=2, m=6
-    python3 allocation_table.py --compare             # add prop:opt's untuned numbers
-    python3 allocation_table.py --max-m0 20 --csv out.csv
+    python3 src/budget/allocation_table.py                       # defaults: srw, d=1, omega1=1, rho=2, m=6
+    python3 src/budget/allocation_table.py --compare             # add prop:opt's untuned numbers
+    python3 src/budget/allocation_table.py --max-m0 20 --csv out.csv
 """
 
 from __future__ import annotations
@@ -222,7 +222,7 @@ def measured_correction(run_dirs) -> dict:
     Same pooling as described in `measured_a1` -- this is where it actually
     happens; `measured_a1` is the a1-only view. omega_1 is returned too because
     it is what sets the predicted error-decay exponent
-    -omega1/(d + 2*omega1), which src/plot_allocation.py draws as the
+    -omega1/(d + 2*omega1), which src/report/plot_allocation.py draws as the
     "expected" reference against Experiment C's measured slope.
 
     Returns {'a1', 'a1_se', 'omega1', 'omega1_se', 'replicates', 'provenance',
@@ -314,7 +314,7 @@ def measured_cost_exponent(data_root) -> tuple[float, float | None, str]:
         if isinstance(aff, dict) and "d" in aff and aff.get("converged", True):
             ds.append(float(aff["d"]))
     if not ds:
-        return FALLBACK_D, None, "FALLBACK -- no cost-probe result.json found"
+        return FALLBACK_D, None, "FALLBACK -- no cost-probe cost_probe.json found"
     if len(ds) == 1:
         return ds[0], None, "measured, 1 cost probe (no stderr available)"
     se = float(np.std(ds, ddof=1) / sqrt(len(ds)))
@@ -354,7 +354,7 @@ def measured_throughput(result_json) -> tuple[float, str]:
     """Simulated steps per second, from Experiment C's own wall clock."""
     p = Path(result_json)
     if not p.exists():
-        return FALLBACK_THROUGHPUT, "FALLBACK -- no allocation result.json found"
+        return FALLBACK_THROUGHPUT, "FALLBACK -- no allocation_sweep.json found"
     r = json.loads(p.read_text())
     steps = sum(c["cost"] * r["replicates"] for c in r["cells"] if not c["skipped"])
     return steps / r["elapsed_seconds"], (

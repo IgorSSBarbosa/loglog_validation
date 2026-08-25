@@ -4,7 +4,7 @@ Per PLAN.md ("tools/ may not import from experiments/"), this module only
 knows about `{scale: samples}` dicts -- plain Python/NumPy, nothing about
 where the samples came from. Any model (synthetic, SRW, percolation, ...
 registered in tools/models.py) can hand it a dict shaped like what
-src/generate.py's `generate()` returns and get the same plot.
+src/generate/generate.py's `generate()` returns and get the same plot.
 
 The article's log-log plot technique (Section 2, eq. 232 and around line 275)
 plots E[Y_i] (or its empirical estimate Y_bar_i) against i on log-log axes,

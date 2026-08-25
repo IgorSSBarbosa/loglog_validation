@@ -1,7 +1,7 @@
 """Experiment B: estimate the correction-to-scaling exponent omega_1 from a
 saved run (plans/three_experiment_ladder.md section 3).
 
-Reads a run directory produced by src/generate.py and applies both of
+Reads a run directory produced by src/generate/generate.py and applies both of
 tools/correction.py's estimators to the same sample means:
 
   1. `fit_correction`      -- fits article eq. (232)'s one-correction
@@ -22,8 +22,8 @@ never draws samples -- point it at an existing run directory. Output goes to
 <run_dir>/omega1.json, alongside that run's samples.
 
 CLI:
-    python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1
-    python3 estimate_omega1.py -data <run_dir> --expect-omega1 1.0 --expect-gamma 0.5
+    python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1
+    python3 src/estimate/estimate_omega1.py -data <run_dir> --expect-omega1 1.0 --expect-gamma 0.5
 """
 
 from __future__ import annotations

@@ -71,24 +71,31 @@ $\sigma_k^2 = Var(\xi_k)$, $\xi_k = Y_{\rho^k}/\mathbb{E} Y_{\rho^k}$ (notation 
 
 ```
 loglog_validation/
-  PLAN.md  TODO.md  README.md  requirements.txt
+  PLAN.md  TODO.md  README.md  CATALOG.md  requirements.txt
   src/                          <- the scripts a human runs directly (user's own
-                                    framing, 2026-08-12): `python3 src/generate.py
-                                    ...`. tools/ holds what these call, not the
-                                    other way around -- src/ may import tools/,
-                                    tools/ may not import src/.
-    generate.py                  single shared sample-generator CLI/API, dispatches
+                                    framing, 2026-08-12): `python3 src/<layer>/x.py`.
+                                    tools/ holds what these call, not the other way
+                                    around -- src/ may import tools/, tools/ may not
+                                    import src/. Split into four layers by the
+                                    question each answers (2026-08-25).
+    generate/generate.py          single shared sample-generator CLI/API, dispatches
                                   on a recipe's "model" field into tools/models.py's
                                   MODELS registry instead of each experiment
                                   keeping its own copy
-    plot_loglog.py                single shared log-log plotter; only runs
-                                  tools/loglog.py's gamma-hat estimators when the
-                                  run's model has a known target_fn (currently only
-                                  "synthetic" -- SRW's gamma-estimation ladder is
-                                  still blocked, see experiments/01_srw/README.md)
-    measure_cost.py               single shared cost-model-exponent probe, same
-                                  MODELS-registry dispatch as generate.py
-    plot_cost.py                  single shared plot of measure_cost.py's output
+    estimate/measure_cost.py      cost-model-exponent probe, same MODELS dispatch;
+                                  cross-checks the wall clock against the model's
+                                  own declared cost_hint
+    estimate/estimate_omega1.py   Experiment B's analysis driver (omega_1, a_1)
+    estimate/check_coverage.py    checkpoint 0.4: are the error bars calibrated?
+                                  arms planted / planting / rate / wilson
+    budget/allocation_experiment.py  Experiment C: sweep (budget x m0), paired arms
+    budget/allocation_table.py    precision vs wall clock, from measured constants
+    budget/verify_prediction.py   run the tuned ladders for real, compare
+    report/plot_loglog.py         single shared log-log plotter; overlays a known
+                                  E Y_i curve only when the model has a target_fn
+                                  (currently only "synthetic")
+    report/plot_cost.py           plot of measure_cost.py's output
+    report/plot_allocation.py     Experiment C's two panels
   tools/                        <- shared, experiment-agnostic *helper* functions:
                                     called by src/'s scripts, or by each other, or
                                     by tests -- never run directly. May not import
@@ -99,57 +106,84 @@ loglog_validation/
                                     tracked -- user request 2026-08-12; kept on
                                     disk, run via `python3 -m pytest`, but absent
                                     from a fresh checkout/worktree).
-    loglog.py                    weighted OLS estimator (eq. 523-531)
-    wilson.py                    Wilson CI (eq. 720)
-    allocation.py                budget allocation rule (eq. 945-946) + cost accounting
+    loglog.py                    weighted OLS estimator (eq. 523-531) + the
+                                  closed-form weights (eq. 526) -- the canonical
+                                  definition, imported by allocation.py and wilson.py
+    correction.py                omega_1 and a_1: direct fit of eq. 232, bias decay
+    wilson.py                    Wilson CI (eq. 720), for gamma only
+    allocation.py                budget allocation rule (eq. 945-946) + cost
+                                  accounting + the tuned constant kappa the rate
+                                  theorem drops
+    cost_model.py                cost exponent d (pure + affine fits), timing
+                                  aggregators, declared-vs-measured cross-check
+    coverage.py                  calibration harness for error bars (checkpoint 0.4)
+    artifacts.py                 the naming registry: what every file on disk is
+                                  called, in (recipes, by kind) and out (run
+                                  artifacts, by content). Provenance goes INSIDE
+                                  each file, not in its name
     bootstrap.py                 resampling helpers for constants (sigma_inf^2, omega1, a1)
+                                  -- NOT WRITTEN YET
     rng.py                       independent-stream seeding (SeedSequence.spawn keyed by
-                                  (experiment, config_id, replicate_index)) — enforces
-                                  ground rule 2
+                                  (experiment, config_id, replicate_index)) -- enforces
+                                  ground rule 2. NOT WRITTEN YET; spawning is currently
+                                  done inline at each call site
     persistence.py                sample+metadata save/load, shared by every model: one
                                   run = one `<out_dir>/<tag>/` folder holding samples.npz
-                                  + metadata.json (not `io.py`: that name would shadow
+                                  + samples_meta.json (not `io.py`: that name would shadow
                                   the stdlib `io` module once tools/ is on sys.path)
     models.py                    MODELS registry (name -> ModelSpec: simulate, optional
-                                  target_fn/true_gamma_key) -- purely an importer;
-                                  one entry per models/<name>.py (see below), which
-                                  it reaches by adding models/ to sys.path and
+                                  cost_hint/target_fn/true_gamma_key) -- purely an
+                                  importer; one entry per models/<name>.py (see below),
+                                  which it reaches by adding models/ to sys.path and
                                   importing "srw"/"synthetic" as bare names, never
                                   through the literal name "models" (self-collision
                                   with this file's own identity as tools/models.py
                                   -- see its docstring)
+    loglog_plot.py               the shared charts
     tests/                       pytest unit tests, run against closed forms (see note
                                   above -- gitignored)
   models/                       <- per-model simulation logic, one file per
                                     registered model (user's own framing,
                                     2026-08-12), kept separate from both tools/ and
-                                    src/. Each exposes simulate(i, n, params, rng)
-                                    and, only when the article gives a known closed
-                                    form, target_fn(i, params).
+                                    src/. Each exposes simulate(i, n, params, rng),
+                                    optionally cost_hint(i, params), and -- only when
+                                    the article gives a known closed form --
+                                    target_fn(i, params).
     synthetic.py                  the closed-form model (SyntheticParams,
                                   NOISE_FAMILIES, mean_Y, eq. 232) -- has a
-                                  target_fn, currently the only one that does
-    srw.py                        srw(k, n, q, rng) -- no target_fn (no
-                                  article-sanctioned closed form yet)
+                                  target_fn, currently the only one that does;
+                                  cost_hint = 1, so d = 0 and it cannot exercise
+                                  the budget machinery
+    srw.py                        srw(k, n, q, rng) -- cost_hint(i) = i, exact, which
+                                  is what makes it the budget testbed. No target_fn:
+                                  E|S_k| is known exactly but is deliberately kept out
+                                  of the code path (user, 2026-08-20), stated as a
+                                  README acceptance criterion instead
+  derivations/                  <- standalone write-ups too long for a docstring:
+                                  the gamma MLE; the dropped allocation constant
+                                  and the 88%-coverage defect
   experiments/
-    00_synthetic/                planted-truth model, cheap — start here
-    01_srw/                      simple random walk (needs closed-form target for its
-                                  gamma-estimation ladder — open; its srw() simulator is
-                                  usable now for cost-model + sample-generation purposes,
-                                  see its README)
+    00_synthetic/                planted-truth model, cheap -- start here
+    01_srw/                      simple random walk: the cost probe, Experiment B
+                                  (omega_1), Experiment C (budget allocation) and
+                                  checkpoint 0.4 all live here
     02_rwre/                     random walk in random environment
     03_percolation_zd/           site percolation, Z^d, d = 2..6/7
     04_percolation_hierarchical/ Bethe lattice / hierarchical graphs
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
                                   current status (not started / in progress / passing)
-      samples_example.json         recipe(s) for src/generate.py (and, where relevant,
-                                  src/measure_cost.py) -- the model-specific simulator
-                                  itself lives in models/<name>.py, not here
+      recipes/<kind>_<name>.json  inputs, named for their kind and validated on load
+                                  (samples_*, cost_*, sweep_* -- see
+                                  tools/artifacts.py's RECIPES). The model-specific
+                                  simulator itself lives in models/<name>.py, not here
       data/                      this experiment's runs (gitignored), one `<tag>/`
-                                  folder per run, written by src/generate.py /
-                                  src/measure_cost.py -- never shared with another
-                                  experiment
+                                  folder per run -- never shared with another
+                                  experiment. Files are named for what they hold
+                                  (samples_meta.json, cost_probe.json, omega1.json,
+                                  allocation_sweep.json, prediction_check.json,
+                                  gamma_estimates.json, coverage.json), never
+                                  `result.json`
       images/                    this experiment's figures only (committed evidence,
                                   ground rule 1), never shared
 ```

@@ -37,7 +37,7 @@ Design notes:
   an estimator (see experiments/01_srw/README.md on why srw has no target_fn).
 
 CLI:
-    python3 allocation_experiment.py -meta ../experiments/01_srw/recipes/sweep_allocation.json \\
+    python3 src/budget/allocation_experiment.py -meta experiments/01_srw/recipes/sweep_allocation.json \\
         --tag allocation
 """
 
@@ -56,7 +56,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
-from artifacts import load_recipe, write_artifact  # noqa: E402
+from artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
 from allocation import (  # noqa: E402
     optimal_allocation,
     total_cost,
@@ -309,7 +309,7 @@ def _main(argv: list[str] | None = None) -> None:
         a1=cfg.get("a1"), cv=cfg.get("cv"),
     )
 
-    out_dir = args.out_dir or (args.meta.resolve().parent / "data")
+    out_dir = args.out_dir or default_out_dir(args.meta)
     rd = _run_dir(out_dir, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
     write_artifact(rd, "allocation_sweep", result,
@@ -381,7 +381,7 @@ def _main(argv: list[str] | None = None) -> None:
         else:
             print(f"  {label:<18}: need >=3 budgets, have {len(bs)}")
 
-    print(f"\noutput = {rd / 'result.json'}")
+    print(f"\noutput = {artifact_path(rd, 'allocation_sweep')}")
 
 
 if __name__ == "__main__":

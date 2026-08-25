@@ -7,7 +7,7 @@ from whether the ESTIMATES are right (they are; that was Experiment B).
 
 The error bar under test is the one the pipeline really quotes:
 
-    se = sd(per-replicate fits, ddof=1) / sqrt(R)      # src/allocation_table.py
+    se = sd(per-replicate fits, ddof=1) / sqrt(R)      # src/budget/allocation_table.py
     interval = estimate +/- q * se
 
 with R = 5. Both halves of that are suspect at R = 5 -- an sd from 5 points is
@@ -31,10 +31,10 @@ allocation_experiment.py's `true_gamma` -- truth may plant data and score a
 finished answer, never reach an estimator. See experiments/01_srw/README.md.
 
 CLI:
-    python3 check_coverage.py                      # planted arm, 500 trials
-    python3 check_coverage.py --trials 2000
-    python3 check_coverage.py --arm srw --trials 40
-    python3 check_coverage.py --arm both --json out.json
+    python3 src/estimate/check_coverage.py                      # planted arm, 500 trials
+    python3 src/estimate/check_coverage.py --trials 2000
+    python3 src/estimate/check_coverage.py --arm srw --trials 40
+    python3 src/estimate/check_coverage.py --arm both --json out.json
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def _planted_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _srw_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
-    """One replicate drawn for real, exactly as src/generate.py would."""
+    """One replicate drawn for real, exactly as src/generate/generate.py would."""
     spec = get_model("srw")
     y_bar, sigma_log = np.empty(len(SCALES)), np.empty(len(SCALES))
     for j, k in enumerate(SCALES):
@@ -214,7 +214,7 @@ def make_experiment(draw, n_per_scale, replicates: int = REPLICATES,
     """An `experiment(rng) -> {name: (estimate, se)}` for coverage_multi.
 
     Each call replays a whole Experiment B: `replicates` independent runs of
-    the ladder, combined exactly as src/allocation_table.py's
+    the ladder, combined exactly as src/budget/allocation_table.py's
     `measured_correction` combines them, and reported under BOTH combination
     rules so they can be compared on identical draws.
 

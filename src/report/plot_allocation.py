@@ -24,7 +24,7 @@ validated categorical slots 1-3, plus muted ink for references. Reusing an
 already-validated palette keeps every chart in this repo consistent.
 
 CLI:
-    python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
+    python3 src/report/plot_allocation.py -data experiments/01_srw/data/allocation
 """
 
 from __future__ import annotations
@@ -253,7 +253,7 @@ def plot_allocation(result: dict, expected: dict | None = None,
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-data", "--data", dest="data", required=True, type=Path,
-                        help="allocation_experiment.py run directory (holds result.json)")
+                        help="allocation_experiment.py run directory (holds allocation_sweep.json)")
     parser.add_argument("--estimator", default="closed_form",
                         choices=("closed_form", "all_points"))
     parser.add_argument("--group", default=None,
@@ -305,7 +305,7 @@ def _main(argv: list[str] | None = None) -> None:
     # handful of replicates, so the combined statistic is not standard normal
     # and the familiar |z| < 2 is the wrong cut-off. Welch-Satterthwaite gives
     # the effective dof; at R = 5 replicates a "2.5 sigma discrepancy" is in
-    # fact consistent. Measured in src/check_coverage.py -- normal-quantile
+    # fact consistent. Measured in src/estimate/check_coverage.py -- normal-quantile
     # intervals at R = 5 cover 88%, not 95%.
     comb, dof_eff = combine_se([(slope_se, None),
                                 (th_se, (expected_reps - 1) if expected_reps else None)])

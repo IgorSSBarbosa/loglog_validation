@@ -26,21 +26,20 @@ this rung tests only the *statistical* machinery, not model fidelity. Registered
 
 ## Running this experiment
 
-This experiment has no scripts of its own any more — `src/generate.py` and
-`src/plot_loglog.py` are single, shared drivers used by every experiment (see
+This experiment has no scripts of its own any more — `src/generate/generate.py` and
+`src/report/plot_loglog.py` are single, shared drivers used by every experiment (see
 `src/README.md`), dispatching on `samples_example.json`'s `"model": "synthetic"` field.
 Two kinds of JSON, not to be confused: the hand-authored **recipe**
 (`samples_example.json`, holding the agreed Phase-0 defaults: $\gamma=0.5$, $a_0=1$, one
 correction term $a_1=1,\omega_1=1$, $\sigma_\infty^2=0.04$, lognormal) is read-only and
 never modified by anything here; running it produces **output** — one `data/<tag>/`
 directory per run (gitignored — regenerable, not source), holding `samples.npz` +
-`metadata.json` (now also recording per-scale `timing_seconds`, the raw material for a
+`samples_meta.json` (now also recording per-scale `timing_seconds`, the raw material for a
 future meta-log-log plot of $\mathrm{cost}(i)$ vs $i$; see `tools/cost_model.py`).
 
 ```
-cd src   # repo root -> src/, see src/README.md
-python3 generate.py -meta ../experiments/00_synthetic/recipes/samples_example.json --tag demo_run
-python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
+python3 src/generate/generate.py -meta experiments/00_synthetic/recipes/samples_example.json --tag demo_run
+python3 src/report/plot_loglog.py -data experiments/00_synthetic/data/demo_run --estimates
 ```
 
 `plot_loglog.py` takes a **run directory** (`-data`), not a recipe or a bare file — one
@@ -48,12 +47,12 @@ recipe can produce many different runs (different tags/seeds), so pointing it at
 recipe would be ambiguous about which run's data you mean. `data/<tag>/plot.png` always
 overlays the all-points OLS fit (solid line, needs no known truth) and, since this
 model has a known closed form (`MODELS["synthetic"].target_fn`), also the reference
-$\mathbb{E} Y_i$ curve (dashed) for comparison. `data/<tag>/results.json` (four
+$\mathbb{E} Y_i$ curve (dashed) for comparison. `data/<tag>/gamma_estimates.json` (four
 $\hat\gamma$ estimators from `tools/loglog.py`: all-points OLS, two-point/$m{=}2$,
 drop-leading-$m_0$ sweep, and a maximum-likelihood estimator — see
 `derivations/mle_gamma_estimator.tex` for its derivation) is always written; the
 `--estimates` flag additionally saves `data/<tag>/estimates.png`, the four-estimator
-comparison chart (same folder as `samples.npz`/`metadata.json`/`plot.png` — everything
+comparison chart (same folder as `samples.npz`/`samples_meta.json`/`plot.png` — everything
 about one run in one place; `data/` is gitignored, copy a plot into `images/` to keep
 it as evidence) — see `tools/README.md` for what's implemented (as of checkpoint 0.2,
 also the article's own closed-form weighted estimator, not currently wired into

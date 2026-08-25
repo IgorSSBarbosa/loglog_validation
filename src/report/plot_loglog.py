@@ -2,7 +2,7 @@
 the run's own metadata to dispatch, instead of each experiment keeping its
 own copy of this driver.
 
-Thin glue: loads the samples src/generate.py already saved, and hands them
+Thin glue: loads the samples src/generate/generate.py already saved, and hands them
 to the generic tools/loglog_plot.py / tools/loglog.py (neither of which
 knows about any specific model). The raw-data plot always overlays the
 all-points OLS fit (solid line, gamma_hat in the legend) -- this needs no
@@ -22,7 +22,7 @@ result. The four-estimator comparison chart (estimates.png) is opt-in via
 --estimates, since unlike gamma_estimates.json it's a supplementary figure, not the
 numeric result itself (ground rule 1).
 
-Takes a **run directory** (`<out_dir>/<tag>/`, as src/generate.py writes),
+Takes a **run directory** (`<out_dir>/<tag>/`, as src/generate/generate.py writes),
 not a recipe -- a single recipe can produce many different runs (different
 tags/seeds), so pointing this at a recipe would be ambiguous about which
 run's data you mean. Metadata is read from `<run_dir>/samples_meta.json` if
@@ -41,8 +41,8 @@ not auto-populated by every run).
 Run (after generating some data, e.g. `generate.py -meta
 ../experiments/00_synthetic/recipes/samples_example.json --tag demo_run`):
 
-    python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
-    python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
+    python3 src/report/plot_loglog.py -data experiments/00_synthetic/data/demo_run
+    python3 src/report/plot_loglog.py -data experiments/00_synthetic/data/demo_run --estimates
 """
 
 from __future__ import annotations
@@ -67,11 +67,11 @@ from persistence import load_metadata, load_samples  # noqa: E402
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Plot Y_bar_i vs i (log-log) from a run directory src/generate.py wrote."
+        description="Plot Y_bar_i vs i (log-log) from a run directory src/generate/generate.py wrote."
     )
     parser.add_argument(
         "-data", "--data", dest="data", required=True, type=Path,
-        help="Run directory written by src/generate.py (e.g. ../experiments/00_synthetic/data/demo_run).",
+        help="Run directory written by src/generate/generate.py (e.g. ../experiments/00_synthetic/data/demo_run).",
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,

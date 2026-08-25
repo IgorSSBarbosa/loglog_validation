@@ -35,7 +35,7 @@ This module only measures and saves -- it never plots (mirrors
 generate.py/plot_loglog.py's split). See plot_cost.py for the log-log plot.
 
 CLI:
-    python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json --tag my_run
+    python3 src/estimate/measure_cost.py -meta experiments/01_srw/recipes/cost_probe.json --tag my_run
 """
 
 from __future__ import annotations
@@ -52,12 +52,14 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
-from artifacts import artifact_path, load_recipe  # noqa: E402
+from artifacts import artifact_path, default_out_dir, load_recipe  # noqa: E402
 from cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
     aggregate,
+    compare_cost_models,
     estimate_cost_affine,
     estimate_cost_exponent,
+    format_cost_comparison,
     median_ci,
 )
 from loglog import gamma_drop_leading  # noqa: E402
@@ -139,7 +141,7 @@ def _main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "-o", "--out-dir", dest="out_dir", type=Path, default=None,
-        help="Output directory for <tag>/. Defaults to a 'data' directory next to the recipe file.",
+        help="Output directory for <tag>/. Defaults to the experiment's data/ directory (the recipe's grandparent when it sits in recipes/).",
     )
     parser.add_argument("--tag", dest="tag", type=str, default="cost_probe")
     args = parser.parse_args(argv)
@@ -154,7 +156,7 @@ def _main(argv: list[str] | None = None) -> None:
 
     result = measure(model, scales, repeats, params, seed=seed, aggregator=aggregator)
 
-    out_dir = args.out_dir or (args.meta.resolve().parent / "data")
+    out_dir = args.out_dir or default_out_dir(args.meta)
     rd = _run_dir(out_dir, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
     out_path = artifact_path(rd, "cost_probe")
@@ -182,6 +184,18 @@ def _main(argv: list[str] | None = None) -> None:
               + ("  -- pure-power d_hat is unreliable here, prefer the affine one"
                  if share > 0.2 else ""))
 
+    spec = get_model(model)
+    if spec.cost_hint is not None:
+        cmp = compare_cost_models(result["scales"], result["elapsed"],
+                                  spec.cost_hint, params)
+        result["declared_vs_measured"] = cmp
+        out_path.write_text(json.dumps(result, indent=2, sort_keys=True))
+        print("\ndeclared cost vs the wall clock:")
+        print(format_cost_comparison(cmp))
+    else:
+        print(f"\nmodel {model!r} declares no cost_hint -- nothing to cross-check "
+              f"the measured d against (see tools/models.py's ModelSpec).")
+
     print("\nd_hat dropping leading m0 (finite-overhead check at small k):")
     for est in local_slopes:
         print(f"  m0={est['m0']}: scales={est['scales_used']}  d_hat={est['gamma_hat']:.4f}")
@@ -193,7 +207,7 @@ def _main(argv: list[str] | None = None) -> None:
           f"(ground truth d=1 only applies to "
           f"genuinely scale-costly models, e.g. srw -- see module docstring)")
     print(f"\noutput = {out_path}")
-    print(f"plot   = python3 plot_cost.py -data {rd}")
+    print(f"plot   = python3 src/report/plot_cost.py -data {rd}")
 
 
 if __name__ == "__main__":

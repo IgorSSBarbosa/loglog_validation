@@ -14,7 +14,7 @@ far, per current sign-off.
 
 Ground truth (gamma, a0, ...) is planted and known, so MODELS["synthetic"]
 supplies both `target_fn` (the exact E[Y_i] curve) and `true_gamma_key`,
-letting src/plot_loglog.py overlay the reference curve and run
+letting src/report/plot_loglog.py overlay the reference curve and run
 tools/loglog.py's gamma-hat estimators against it -- this is currently the
 only model that does, since it's the only one with a known closed form
 (contrast models/srw.py).

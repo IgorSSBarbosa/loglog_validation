@@ -119,7 +119,7 @@ option: numpy packs several small integers per 64-bit draw and *discards the lef
 bits at the end of each call*, so splitting rows into blocks consumes the bit stream
 differently from one unblocked call and silently changes the output (reproduced at
 $k=7$, $n=50$, `block_n=3`). That would have broken both `srw`'s own `block_n`
-invariance and `src/generate.py`'s chunked path, which depends on it — i.e. it would
+invariance and `src/generate/generate.py`'s chunked path, which depends on it — i.e. it would
 have quietly undone the OOM fix's correctness guarantee. A float32 uniform is one draw
 per step with no packing, so row-blocking stays exact. float32 costs nothing
 statistically here: 24 random mantissa bits, and for $q=1/2$ the comparison is an
@@ -178,7 +178,7 @@ exactly where the cost model was failing:
 
 Three independent routes now agree on $d=1$ for `srw`: the affine fit (1.0063), the
 `drop_leading` local-slope limit (0.9980 at $m_0=5$), and the known $\Theta(k)$ ground
-truth. Acceptance in `src/measure_cost.py` is therefore checked against the affine
+truth. Acceptance in `src/estimate/measure_cost.py` is therefore checked against the affine
 $\hat d$ whenever the fit is available.
 
 **Consequence for Experiment A:** the batched/amortized measurement below may now be
@@ -344,7 +344,7 @@ promises and no more. Experiment C measures whether simulation agrees.
 **Question:** with $(d,\omega_1)$ measured, does `tools/allocation.py`'s
 Proposition `prop:opt` allocation actually beat naive flat allocation at equal budget?
 
-`src/allocation_experiment.py` + `experiments/01_srw/recipes/sweep_allocation.json`. For each
+`src/budget/allocation_experiment.py` + `experiments/01_srw/recipes/sweep_allocation.json`. For each
 $(B, m_0)$ cell it sets $n$ to the largest uniform per-scale count the budget affords,
 draws $R$ independent replicates (`SeedSequence.spawn`, ground rule 2), and estimates
 $\gamma$ with the article's own closed-form $w_{k,m}$ weights (`gamma_closed_form`) —

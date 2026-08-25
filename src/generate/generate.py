@@ -16,17 +16,17 @@ Two kinds of JSON file appear here, and they are NOT the same file:
     material for a future meta-log-log plot of cost(i) vs i (article
     Assumption cost_is_power_law, cost(i) = i**d; see tools/cost_model.py).
 
-Downstream tools (src/plot_loglog.py) take a **run directory**
+Downstream tools (src/report/plot_loglog.py) take a **run directory**
 (`<out_dir>/<tag>/`), not a recipe -- a single recipe run with different
 tags/seeds produces many different run directories, so "give me a recipe"
 would be ambiguous about which run you mean.
 
 CLI usage (recipe is read-only; writes <out_dir>/<tag>/{samples.npz,
-samples_meta.json}; default out_dir is `data/` next to the recipe file itself,
+samples_meta.json}; default out_dir is the experiment’s `data/`,
 so each experiment's recipes keep landing in that experiment's own data/):
 
-    python3 generate.py -meta ../experiments/00_synthetic/recipes/samples_example.json
-    python3 generate.py -meta ../experiments/01_srw/recipes/samples_example.json --tag demo_run
+    python3 src/generate/generate.py -meta experiments/00_synthetic/recipes/samples_example.json
+    python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_example.json --tag demo_run
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import neyman_allocation, snr_allocation  # noqa: E402
-from artifacts import ARTIFACTS, artifact_path, load_recipe  # noqa: E402
+from artifacts import ARTIFACTS, artifact_path, default_out_dir, load_recipe  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402
     content_id,
@@ -297,7 +297,7 @@ def _main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "-o", "--out-dir", dest="out_dir", type=Path, default=None,
-        help="Output directory for <tag>/. Defaults to a 'data' directory next to the recipe file.",
+        help="Output directory for <tag>/. Defaults to the experiment's data/ directory (the recipe's grandparent when it sits in recipes/).",
     )
     parser.add_argument(
         "--tag", dest="tag", type=str, default=None,
@@ -324,7 +324,7 @@ def _main(argv: list[str] | None = None) -> None:
     seed_seq = np.random.SeedSequence(args.seed if args.seed is not None else cfg.get("seed"))
     resolved_seed = seed_seq.entropy
 
-    out_dir = args.out_dir or (args.meta.resolve().parent / "data")
+    out_dir = args.out_dir or default_out_dir(args.meta)
     samples = generate(
         model, scales_list, n_list, params, seed=resolved_seed, out_dir=out_dir, tag=args.tag, progress=True
     )

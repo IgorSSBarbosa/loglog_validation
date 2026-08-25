@@ -3,8 +3,8 @@
 This folder holds three separate, independent uses of the same `srw()` simulator
 (`models/srw.py`, registered as `MODELS["srw"]` in `tools/models.py`). Don't
 conflate them. As of this session, the scripts that drive all three are shared with
-every other experiment (`src/generate.py`, `src/plot_loglog.py`,
-`src/measure_cost.py`, `src/plot_cost.py` — see `src/README.md`); this folder now
+every other experiment (`src/generate/generate.py`, `src/report/plot_loglog.py`,
+`src/estimate/measure_cost.py`, `src/report/plot_cost.py` — see `src/README.md`); this folder now
 holds only recipes, README, `data/` (gitignored), and `images/` (committed evidence).
 
 ## Known ground truth for $Y_k=\lvert S_k\rvert$ — acceptance criteria
@@ -32,7 +32,7 @@ $\mathbb{E} Y_i = a_0 i^\gamma\exp(a_1 i^{-\omega_1}+\cdots)$:
 **These are acceptance criteria, not inputs.** By explicit decision (user, 2026-08-20 —
 see `plans/three_experiment_ladder.md` D1/D2) they are deliberately *not* wired into
 the code: `MODELS["srw"]` still has no `target_fn`/`true_gamma_key`, so
-`src/plot_loglog.py` still overlays no reference curve, reports no `true_gamma`, and
+`src/report/plot_loglog.py` still overlays no reference curve, reports no `true_gamma`, and
 still prints its "exploratory, not validated" note. The estimators are never handed
 the answer they are supposed to be measuring — the numbers above are checked by hand
 against a finished run instead. Do not add `target_fn` here without revisiting that
@@ -73,7 +73,7 @@ simulator.
 - `models/srw.py` — the simulator, `srw(k, n=1, q=0.5, rng=None, block_n=None)`,
   returning `n` i.i.d. realizations of $|S_k|$ as an array (vectorized over row-blocks
   of $n$; $k$ steps are genuinely drawn per sample, keeping the cost $\Theta(nk)$).
-  `src/measure_cost.py` calls it at the default `n=1` -- Assumption
+  `src/estimate/measure_cost.py` calls it at the default `n=1` -- Assumption
   `cost_is_power_law` defines $\mathrm{cost}(i)$ as the cost of simulating *one*
   sample -- `n>1` is what "Sample generation" below uses.
 - `tools/cost_model.py` — generic, experiment-agnostic estimator: `cost(i)=c\cdot i^d`
@@ -81,7 +81,7 @@ simulator.
   `estimate_cost_exponent` reuses `tools/loglog.py`'s OLS-slope machinery, behind a
   name-keyed registry (`COST_ESTIMATORS`) so a different estimation approach can be
   added later without touching callers.
-- `src/measure_cost.py` — the shared driver: times `MODELS[model].simulate(k, n=1,
+- `src/estimate/measure_cost.py` — the shared driver: times `MODELS[model].simulate(k, n=1,
   ...)` at a small grid of scales (`cost_probe.json`: `[256, 1024, 4096, 16384,
   65536, 262144, 1048576]`), 20 repeats each, aggregated by **median** (not mean --
   repeated timings all target the same true deterministic quantity, so noise only ever
@@ -110,9 +110,9 @@ simulator.
   finite-size correction. It agrees: the local slope climbs monotonically from 0.771
   (all 7 scales) to 0.998 ($m_0=5$), converging on the same $d=1$ the affine fit
   reports directly and the $\Theta(k)$ ground truth predicts.
-- `src/plot_cost.py` — separate from `measure_cost.py` (generation and plotting are
+- `src/report/plot_cost.py` — separate from `measure_cost.py` (generation and plotting are
   always distinct scripts in this repo). Reads `measure_cost.py`'s saved
-  `<tag>/result.json` directly (`elapsed_all` is already `{scale: array}`,
+  `<tag>/cost_probe.json` directly (`elapsed_all` is already `{scale: array}`,
   `tools/loglog_plot.py`'s exact required shape) and hands it to the same generic
   `loglog_plot`.
 
@@ -130,8 +130,8 @@ past the small-$k$ overhead-dominated points.
 
 Run (from `src/`):
 ```
-python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json --tag cost_probe
-python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
+python3 src/estimate/measure_cost.py -meta experiments/01_srw/recipes/cost_probe.json --tag cost_probe
+python3 src/report/plot_cost.py -data experiments/01_srw/data/cost_probe
 ```
 
 **Not done here:** checkpoint 0.5 itself (the actual error-decay-law experiment using
@@ -140,7 +140,7 @@ real (not toy) simulator.
 
 ## Sample generation — not blocked, exploratory (not Phase 1)
 
-`src/generate.py` -- the second consumer of `tools/persistence.py`'s save/load
+`src/generate/generate.py` -- the second consumer of `tools/persistence.py`'s save/load
 pattern (extracted from `experiments/00_synthetic/generator.py`, now the shared driver
 for every model) -- draws $n$ i.i.d. $|S_k|$ samples per scale $k$ via
 `MODELS["srw"].simulate` (i.e. `srw(k, n, q, rng)`), seeded and timed the same way, to
@@ -150,13 +150,13 @@ for `SyntheticParams`:
 
 ```
 cd ../../src    # or wherever src/ is relative to your cwd
-python3 generate.py -meta ../experiments/01_srw/recipes/samples_example.json --tag demo_run
-python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run --estimates
+python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_example.json --tag demo_run
+python3 src/report/plot_loglog.py -data experiments/01_srw/data/demo_run --estimates
 ```
 
 `plot_loglog.py` hands the saved samples to `tools/loglog_plot.py`'s generic
 `loglog_plot` (same tool 00_synthetic uses) and always runs `tools/loglog.py`'s
-four $\hat\gamma$ estimators (`compare_methods`), writing `results.json` --
+four $\hat\gamma$ estimators (`compare_methods`), writing `gamma_estimates.json` --
 comparing estimators against each other doesn't need a known ground truth, only
 comparing against one does. What it does **not** do: overlay a reference curve, or
 claim any of these numbers are checked against a known target -- `MODELS["srw"]`
@@ -181,9 +181,8 @@ which `tools/allocation.py`'s budget rule needs as an input, against the known
 $\omega_1=1$.
 
 ```bash
-cd src
-python3 generate.py -meta ../experiments/01_srw/recipes/samples_omega1.json --tag omega1
-python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 \
+python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_omega1.json --tag omega1
+python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1 \
         --expect-omega1 1.0 --expect-gamma 0.5
 ```
 
@@ -243,11 +242,10 @@ Reproduce (each replicate ~4 min, ~1.4 GB of samples; delete them afterwards, th
 `omega1.json` is the result):
 
 ```bash
-cd src
 for r in 1 2 3 4 5; do
   sed "s/20260820/2026082$r/; s/5e10/4e10/" ../experiments/01_srw/recipes/samples_omega1.json > /tmp/rep$r.json
-  python3 generate.py -meta /tmp/rep$r.json -o ../experiments/01_srw/data --tag omega1_rep$r
-  python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_rep$r
+  python3 src/generate/generate.py -meta /tmp/rep$r.json -o ../experiments/01_srw/data --tag omega1_rep$r
+  python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1_rep$r
   rm -rf ../experiments/01_srw/data/omega1_rep$r/samples   # keep omega1.json!
 done
 ```
@@ -266,8 +264,7 @@ $\Theta(i^3)$ cost — deferred, not attempted.
 testbed where $\gamma=1/2$, $d=1$ and $\omega_1=1$ are all known.
 
 ```bash
-cd src
-python3 allocation_experiment.py -meta ../experiments/01_srw/recipes/sweep_allocation.json --tag allocation
+python3 src/budget/allocation_experiment.py -meta experiments/01_srw/recipes/sweep_allocation.json --tag allocation
 ```
 
 The theorem makes two claims that can come apart, and they are tested separately:
@@ -287,7 +284,7 @@ eq. 523-526) — the one `prop:opt` is stated for, and this ladder is exactly th
 consecutive $\rho^k$ grid it requires. Generic OLS is recorded alongside. Every
 $(B,m_0,\text{replicate})$ cell draws fresh independent randomness
 (`SeedSequence.spawn`, ground rule 2). Samples are not persisted — the sweep draws far
-more than is worth storing, and the per-cell $\hat\gamma$ values in `result.json` are
+more than is worth storing, and the per-cell $\hat\gamma$ values in `allocation_sweep.json` are
 the result; the base seed is recorded and spawning is deterministic, so any cell
 regenerates exactly.
 
@@ -337,10 +334,10 @@ budget. A practitioner following the formula literally pays that.
 
 ### The two plots, and the RATE check against measured $\omega_1$ *and* $d$
 
-`src/plot_allocation.py` writes `<run_dir>/plot.png`:
+`src/report/plot_allocation.py` writes `<run_dir>/plot.png`:
 
 ```bash
-cd src && python3 plot_allocation.py -data ../experiments/01_srw/data/allocation
+python3 src/report/plot_allocation.py -data experiments/01_srw/data/allocation
 ```
 
 **Left — the POINT claim.** RMSE of $\hat\gamma$ against $m_0$, one curve per budget. The
@@ -394,8 +391,8 @@ measured slope se = 0.0343   (RMSE over R=40 draws carries ~1/sqrt(2R) relative 
 Measured $d$ comes from `data/cost_probe_reps/rep*` (8 independent probes, seconds each):
 
 ```bash
-cd src && for r in 0 1 2 3 4 5 6 7; do
-  python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json \
+for r in 0 1 2 3 4 5 6 7; do
+  python3 src/estimate/measure_cost.py -meta experiments/01_srw/recipes/cost_probe.json \
       -o ../experiments/01_srw/data --tag cost_probe_reps/rep$r
 done
 ```
@@ -476,13 +473,12 @@ budget guarantee holds either way, leaving rounding free to pick the nearer cand
 
 ### Planning table — what precision, for how long?
 
-`src/allocation_table.py` builds it from the measured results rather than assumed
+`src/budget/allocation_table.py` builds it from the measured results rather than assumed
 constants ($a_1$ from Experiment B, $c_v$ from its samples, throughput from Experiment
 C's wall clock):
 
 ```bash
-cd src
-python3 allocation_table.py --compare          # add --csv table.csv to save it
+python3 src/budget/allocation_table.py --compare          # add --csv table.csv to save it
 ```
 
 Each row is one integer $m_0$, at the budget where it is optimal:
@@ -595,7 +591,7 @@ averaging *those* would be meaningless rather than merely imprecise.
 Everything above reports *estimate $\pm$ uncertainty*, and the estimates have been
 checked against known truth. The uncertainties never had been. "$\omega_1 = 1.0155 \pm
 0.1050$" is also a claim: that re-running the experiment many times would land within
-$0.1050$ of truth about 68% of the time. `src/check_coverage.py` measures that
+$0.1050$ of truth about 68% of the time. `src/estimate/check_coverage.py` measures that
 (PLAN.md checkpoint 0.4) by replaying Experiment B's exact configuration — scales
 $8..256$, the real per-scale $n$, $R=5$ — 2000 times against srw's known truth and
 counting interval hits.
@@ -675,7 +671,7 @@ $1.7\times10^5$–$1.7\times10^8$. At $n=10^4$, 3000 draws per scale:
 #### What changed as a result
 
 The printed $\pm$ values are unchanged — a standard error is a fine thing to report.
-What changed is every place an se becomes a *decision*. `src/plot_allocation.py`'s
+What changed is every place an se becomes a *decision*. `src/report/plot_allocation.py`'s
 "consistent / DISCREPANT" rule used $\lvert z\rvert<2$, which is only right when the
 se is known exactly; here it is built partly from $\omega_1$'s replicate se. It now
 combines components with `tools/coverage.py`'s `combine_se` (Welch–Satterthwaite for
@@ -829,11 +825,10 @@ Same-configuration replicates live in one folder, one subfolder per replicate
 one-liner):
 
 ```bash
-cd src
 for r in 0 1 2 3 4; do
-  python3 generate.py -meta ../experiments/01_srw/recipes/samples_omega1.json \
+  python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_omega1.json \
       --tag omega1_b5e10/rep$r --seed $((20260900+r))
-  python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_b5e10/rep$r
+  python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1_b5e10/rep$r
   rm -rf ../experiments/01_srw/data/omega1_b5e10/rep$r/samples   # keep omega1.json!
 done
 ```
@@ -877,11 +872,11 @@ single run (`rep2`) is one step off, costing 19%.
 
 #### Are the predictions themselves right? The timing, essentially exactly
 
-`src/verify_prediction.py` runs each tuned ladder for real and compares
+`src/budget/verify_prediction.py` runs each tuned ladder for real and compares
 (~4 min at the defaults; keep the machine idle, it measures wall clock):
 
 ```bash
-cd src && python3 verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+python3 src/budget/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
 ```
 
 | $m_0$ | $n$ | predicted | measured | ratio | pred RMSE | meas RMSE | ratio |
@@ -914,7 +909,7 @@ exhausting memory: a single unblocked `srw(k, n, ...)` call built one `(n, k)` m
 in RAM (819 GiB at `k=1024, n=1e8` with the old `int64` dtype). Fixed at two layers
 (see `tools/README.md`'s `persistence.py`/`models.py` entries for the mechanics):
 `models/srw.py` now blocks its internal draw over `n` to a fixed byte budget, and
-`src/generate.py` streams any run whose total estimated size exceeds a byte budget
+`src/generate/generate.py` streams any run whose total estimated size exceeds a byte budget
 straight to on-disk per-scale arrays instead of assembling everything in RAM first.
 Both are exact for any block/chunk size (bit-identical to the unblocked path, same
 seed — see `models/srw.py`'s module docstring for why), not just "close enough".

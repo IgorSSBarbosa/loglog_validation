@@ -76,7 +76,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [x] ~~0.4 coverage calibration of the $\omega_1$/$a_1$/$\gamma$ error bars (done
       2026-08-22). **FOUND A REAL DEFECT**: every "95%" interval this repo had
-      published was an 88% interval. `src/check_coverage.py` replays Experiment B's
+      published was an 88% interval. `src/estimate/check_coverage.py` replays Experiment B's
       exact configuration (scales $8..256$, the real per-scale $n$, $R=5$) 2000 times
       against srw's known truth and counts interval hits; all six quantity/centre
       combinations came in at $0.877$--$0.891$ against a nominal $0.95$, and all six
@@ -102,7 +102,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       $\overline Y_i$ against the planted normal, run at deliberately small $n$ since
       normality of a sample mean only improves with $n$ -- all six scales pass,
       observed sd within 2% of exact). Fix applied where an se becomes a *decision*:
-      `src/plot_allocation.py`'s $|z|<2$ rule now uses `combine_se`'s
+      `src/report/plot_allocation.py`'s $|z|<2$ rule now uses `combine_se`'s
       Welch--Satterthwaite effective dof and cuts at $t(\mathrm{dof_{eff}})=2.111$;
       both existing verdicts are unchanged. Verified: `tools/tests/test_coverage.py`
       (33 cases -- an exactly-calibrated interval must measure 95%, a halved one and a
@@ -215,7 +215,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       cases) passing both together and with `test_measure_cost.py`/`test_srw.py` run in
       isolation; all four `src/` CLIs re-run end-to-end producing identical numbers
 - [x] ~~Generalize the estimator comparison to every model, not just `"synthetic"`
-      (user request, 2026-08-12): `src/plot_loglog.py`'s raw-data `plot.png` now always
+      (user request, 2026-08-12): `src/report/plot_loglog.py`'s raw-data `plot.png` now always
       overlays the all-points OLS fit (solid line, $\hat\gamma$ in the legend) — needs
       no known ground truth, just the data itself — in addition to the known
       $\mathbb{E} Y_i$ curve (dashed) when a `target_fn` exists. `tools/loglog.py`'s
@@ -244,7 +244,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       preserves numpy's row-major RNG draw order, so results are bit-identical to the
       unblocked path for the same seed at any block size; splitting $k$ would not have this
       property, see the module's docstring) bounded to a fixed byte budget regardless of how
-      large $n$ or $k$ get; `src/generate.py` streams any run whose total estimated size
+      large $n$ or $k$ get; `src/generate/generate.py` streams any run whose total estimated size
       exceeds a byte budget straight to on-disk per-scale arrays
       (`tools/persistence.py`'s new `open_scale_writer`/`load_samples` fallback,
       `<tag>/samples/<scale>.npy` instead of one `<tag>/samples.npz`) in chunks, with a
@@ -319,7 +319,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       all four within half a standard error -- over 5 independent replicates ($B=4\times10^{10}$
       each, scales $8..256$). New: `tools/correction.py` (two estimators: a direct fit of
       eq. (232)'s one-correction truncation, and a fit of how `gamma_drop_leading`'s bias
-      decays), `src/estimate_omega1.py` (the driver, writes `<run_dir>/omega1.json`), and
+      decays), `src/estimate/estimate_omega1.py` (the driver, writes `<run_dir>/omega1.json`), and
       recipe-level allocation rules in `generate.py` (`"n": {"rule": ..., "budget": ...}`).
       Three findings changed the design mid-flight, each documented where it bites:
       (a) **the planned Neyman allocation was wrong.** It minimizes the variance of
@@ -340,7 +340,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `load_samples` prefers `samples.npz` over `samples/`, so a stale file silently
       shadowed the fresh run~~
 - [x] ~~Experiment C — test Proposition `prop:opt`'s allocation (`plans/three_experiment_ladder.md`
-      §4, done 2026-08-20). `src/allocation_experiment.py` +
+      §4, done 2026-08-20). `src/budget/allocation_experiment.py` +
       `experiments/01_srw/recipes/sweep_allocation.json`. The planned single flat-$n$ control arm was
       generalized: `prop:opt` already fixes $n$ uniform, so what it really chooses is $m_0$, and
       the honest control is **every other $m_0$ at the same budget**. That also separates two

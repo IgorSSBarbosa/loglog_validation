@@ -16,8 +16,8 @@ Keep the machine otherwise idle: this measures wall clock, so a competing job
 invalidates the timing half of the answer (the RMSE half is unaffected).
 
 CLI:
-    python3 verify_prediction.py                       # ~4 min at the defaults
-    python3 verify_prediction.py --m0 3 4 5 --replicates 6 --tag my_check
+    python3 src/budget/verify_prediction.py                       # ~4 min at the defaults
+    python3 src/budget/verify_prediction.py --m0 3 4 5 --replicates 6 --tag my_check
 """
 
 from __future__ import annotations
@@ -183,7 +183,7 @@ def _main(argv: list[str] | None = None) -> None:
     print(f"\nRMSE at {result['replicates']} replicates is itself noisy: its own relative "
           f"sd is ~1/sqrt(2R) = {1 / sqrt(2 * result['replicates']):.0%},")
     print("so treat the accuracy column as an order-of-magnitude check, not a calibration.")
-    print(f"\noutput = {rd / 'result.json'}")
+    print(f"\noutput = {artifact_path(rd, 'prediction_check')}")
 
 
 if __name__ == "__main__":

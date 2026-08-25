@@ -1,18 +1,18 @@
 """Single, shared log-log plot of a cost-model probe's persisted timing data
-(src/measure_cost.py) -- one script, reused across every model, rather
+(src/estimate/measure_cost.py) -- one script, reused across every model, rather
 than a per-experiment copy.
 
 Thin glue, mirroring generate.py/plot_loglog.py's split: measure_cost.py
 only measures and saves, this script only loads and plots.
 
-Takes a **run directory** (`<out_dir>/<tag>/`, as src/measure_cost.py
-writes -- holding `result.json`, not the samples.npz+samples_meta.json pair
+Takes a **run directory** (`<out_dir>/<tag>/`, as src/estimate/measure_cost.py
+writes -- holding `cost_probe.json`, not the samples.npz+samples_meta.json pair
 generate.py's runs use, since a cost probe's own output is already one
 self-contained file). "elapsed_all" inside it is already {scale: array of
 repeat times}, tools/loglog_plot.py's exact required shape, so no
 reformatting is needed.
 
-Writes `<run_dir>/plot.png` -- the same folder as `result.json` -- matching
+Writes `<run_dir>/plot.png` -- the same folder as `cost_probe.json` -- matching
 plot_loglog.py's convention: everything about one run lives in one place,
 and since `data/` is gitignored, nothing here is auto-committed. Copy a
 specific plot into the experiment's `images/` folder when you want to keep
@@ -21,7 +21,7 @@ it as evidence (ground rule 1/6 -- committed deliberately, one at a time).
 Run (after measuring, e.g. `measure_cost.py -meta ../../experiments/01_srw/recipes/cost_probe.json
 --tag demo_run`):
 
-    python3 plot_cost.py -data ../experiments/01_srw/data/demo_run
+    python3 src/report/plot_cost.py -data experiments/01_srw/data/demo_run
 """
 
 from __future__ import annotations
@@ -43,15 +43,15 @@ from loglog_plot import loglog_plot  # noqa: E402
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Plot elapsed time vs scale (log-log) from a run directory src/measure_cost.py wrote."
+        description="Plot elapsed time vs scale (log-log) from a run directory src/estimate/measure_cost.py wrote."
     )
     parser.add_argument(
         "-data", "--data", dest="data", required=True, type=Path,
-        help="Run directory written by src/measure_cost.py (e.g. ../experiments/01_srw/data/cost_probe).",
+        help="Run directory written by src/estimate/measure_cost.py (e.g. ../experiments/01_srw/data/cost_probe).",
     )
     parser.add_argument(
         "-o", "--out", dest="out", type=Path, default=None,
-        help="Output PNG path; defaults to <run_dir>/plot.png (same folder as result.json).",
+        help="Output PNG path; defaults to <run_dir>/plot.png (same folder as cost_probe.json).",
     )
     args = parser.parse_args(argv)
 
@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
     if not result_path.exists():
         parser.error(
             f"no data at {result_path}.\n"
-            f"Measure some first: python3 measure_cost.py -meta <recipe.json> --tag <name>\n"
+            f"Measure some first: python3 src/estimate/measure_cost.py -meta <recipe.json> --tag <name>\n"
             f"then pass the printed run directory here."
         )
     result = json.loads(result_path.read_text())

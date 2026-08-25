@@ -29,7 +29,7 @@ sigma_se is known rather than estimated, and Phi(alpha) = 1.960 is legitimate.
 
 What you pay for it: this is a BOUND, not an interval with exact coverage. It
 adds |bias| bounds rather than recentring, so it overcovers -- by how much is a
-measurement, not a guess (`src/check_coverage.py --arm wilson`).
+measurement, not a guess (`src/estimate/check_coverage.py --arm wilson`).
 
 Validated against measurement (planted arm, Experiment B's grid, m0 = 2):
 sigma_se predicts the closed-form estimator's scatter to 1.1% (4.313e-4 against

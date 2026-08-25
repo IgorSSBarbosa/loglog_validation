@@ -234,7 +234,7 @@ same defect: $\Pr(|t_4|<1)=2F_{t_4}(1)-1=0.6261$.
 
 ## 11. Measured coverage
 
-`src/check_coverage.py` replays Experiment B's exact configuration (scales $8..256$, the
+`src/estimate/check_coverage.py` replays Experiment B's exact configuration (scales $8..256$, the
 real per-scale $n$, $R=5$) 2000 times against the known ground truth for $|S_k|$ and counts
 interval hits. Bounds on the coverage itself are Wilson score intervals.
 
@@ -274,7 +274,7 @@ pooling was at fault.
 
 Accordingly the printed $\pm$ values were left alone — a standard error is a perfectly good
 thing to report — and the fix was applied where a standard error becomes a **decision**. The
-consistency test in `src/plot_allocation.py` used $|z|<2$, valid only for an exactly known
+consistency test in `src/report/plot_allocation.py` used $|z|<2$, valid only for an exactly known
 se; here $z$ combines an analytic slope error with one derived from $\omega_1$'s replicate
 error. Components are now combined by Welch–Satterthwaite,
 
@@ -309,14 +309,14 @@ different model.
 
 ```bash
 # Part I: constants, tuned allocation, and the m0 sweep
-python3 src/allocation_experiment.py \
+python3 src/budget/allocation_experiment.py \
     -meta experiments/01_srw/recipes/sweep_wide.json --tag allocation_wide
-python3 src/plot_allocation.py -data experiments/01_srw/data/allocation_wide
-python3 src/allocation_table.py --compare
+python3 src/report/plot_allocation.py -data experiments/01_srw/data/allocation_wide
+python3 src/budget/allocation_table.py --compare
 
 # Part II: coverage calibration
-python3 src/check_coverage.py --arm planted  --trials 2000 --centre both
-python3 src/check_coverage.py --arm planting --trials 3000 --planting-n 10000
+python3 src/estimate/check_coverage.py --arm planted  --trials 2000 --centre both
+python3 src/estimate/check_coverage.py --arm planting --trials 3000 --planting-n 10000
 ```
 
 The constants themselves are `tools/allocation.py`'s `allocation_constants` /

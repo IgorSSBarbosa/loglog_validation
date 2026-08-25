@@ -1,7 +1,7 @@
 """Simple random walk simulator -- registered as MODELS["srw"] in tools/models.py.
 
 MODELS["srw"] deliberately has no target_fn/true_gamma_key, so
-src/plot_loglog.py never overlays a reference curve or reports a true_gamma
+src/report/plot_loglog.py never overlays a reference curve or reports a true_gamma
 for this model's data, and prints an explicit "exploratory, not validated"
 note alongside any gamma-hat it does compute (see that module's docstring).
 
@@ -71,7 +71,7 @@ def _draw_heads(rng: np.random.Generator, rows: int, k: int, q: float) -> np.nda
     the rows into blocks consumes the bit stream differently from one unblocked
     call and silently changes the output (verified 2026-08-20: k=7, n=50,
     block_n=3 diverges). That would break both srw()'s own block_n invariance
-    and src/generate.py's chunked path, which relies on it. A float32 uniform
+    and src/generate/generate.py's chunked path, which relies on it. A float32 uniform
     is one draw per step with no packing, so row-blocking is exact.
 
     float32 (not float64) halves the working set at no statistical cost here:
@@ -104,7 +104,7 @@ def srw(
     in tests).
 
     `rng` defaults to a fresh, unseeded Generator if omitted; pass an
-    explicit seeded one for reproducible runs. src/measure_cost.py calls
+    explicit seeded one for reproducible runs. src/estimate/measure_cost.py calls
     this with n=1 -- Assumption cost_is_power_law defines cost(i) as the
     cost of simulating *one* sample.
     """
