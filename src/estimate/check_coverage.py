@@ -53,6 +53,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
+sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
 
 from allocation_experiment import ladder, rate_exponent, rate_exponent_se  # noqa: E402
 from correction import fit_correction  # noqa: E402
@@ -70,6 +71,7 @@ from coverage import (  # noqa: E402
 )
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
+from generate import generate  # noqa: E402
 
 # Experiment B's actual configuration (experiments/01_srw/recipes/samples_omega1.json,
 # snr allocation at B = 5e10), replayed verbatim so the coverage measured here
@@ -118,15 +120,36 @@ def _planted_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
     return y_bar, se_mu / y_bar
 
 
+def _mean_and_sigma_log(s) -> tuple[float, float]:
+    """Both per-scale statistics the pipeline uses, in one pass over `s`.
+
+    sigma_log is the se of the mean delta-method'd onto the log scale using
+    the OBSERVED mean, not mu -- the estimator has no access to mu.
+    """
+    m = float(np.mean(s))
+    return m, float(np.std(s, ddof=1)) / sqrt(len(s)) / m
+
+
 def _srw_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
-    """One replicate drawn for real, exactly as src/generate/generate.py would."""
+    """One replicate drawn for real, consuming `rng` exactly as generate() does.
+
+    Deliberately NOT a call to src/generate/generate.py, unlike the ladder
+    draws in allocation_experiment and verify_prediction. Those own their
+    stream; this one is a callback the coverage harness drives from a single
+    long-lived Generator across thousands of trials, so it must take a live
+    `rng` rather than a seed -- the `draw(rng, n)` contract it shares with
+    `_planted_replicate`.
+
+    The equivalence with generate() is therefore an assertion, and assertions
+    in comments rot. It is pinned instead by
+    tools/tests/test_check_coverage.py::test_srw_replicate_matches_generate,
+    which requires the two to agree bit-for-bit on the same seed.
+    """
     spec = get_model("srw")
     y_bar, sigma_log = np.empty(len(SCALES)), np.empty(len(SCALES))
     for j, k in enumerate(SCALES):
-        s = spec.simulate(k, int(n_per_scale[j]), {"q": 0.5}, rng)
-        m = float(np.mean(s))
-        y_bar[j] = m
-        sigma_log[j] = float(np.std(s, ddof=1)) / sqrt(len(s)) / m
+        y_bar[j], sigma_log[j] = _mean_and_sigma_log(
+            spec.simulate(k, int(n_per_scale[j]), {"q": 0.5}, rng))
     return y_bar, sigma_log
 
 

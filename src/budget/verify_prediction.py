@@ -34,12 +34,15 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
 
 from artifacts import artifact_path, write_artifact  # noqa: E402
 from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import run_dir as _run_dir  # noqa: E402
+
+from generate import generate  # noqa: E402
 
 from allocation_table import (  # noqa: E402
     choose_group,
@@ -51,12 +54,18 @@ from allocation_table import (  # noqa: E402
 
 
 def run_ladder(model, params, m0, m, rho, n, seed_seq):
-    """One replicate of the ladder: returns (gamma_hat, elapsed_seconds)."""
-    spec = get_model(model)
-    rng = np.random.default_rng(seed_seq)
+    """One replicate of the ladder: returns (gamma_hat, elapsed_seconds).
+
+    Draws through `src/generate/generate.py`, so the elapsed time being
+    compared against the prediction is what a real run of that script costs,
+    not what a hand-rolled loop costs. `reduce=np.mean` retains one scale's
+    samples at a time; `seed_seq` is a spawned child and travels as
+    a SeedSequence (see tools/rng.py on why not as an int).
+    """
     scales = [int(round(rho ** k)) for k in range(m0 + 1, m0 + m + 1)]
     t0 = time.perf_counter()
-    y_bar = np.array([float(np.mean(spec.simulate(i, n, params, rng))) for i in scales])
+    means = generate(model, scales, n, params, seed=seed_seq, reduce=np.mean)
+    y_bar = np.array([float(means[i]) for i in scales])
     elapsed = time.perf_counter() - t0
     return float(gamma_closed_form(scales, y_bar, rho, m0)), elapsed
 

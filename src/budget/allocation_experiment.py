@@ -63,8 +63,11 @@ from allocation import (  # noqa: E402
     tuned_allocation,
 )
 from loglog import gamma_all_points, gamma_closed_form  # noqa: E402
-from models import get_model  # noqa: E402
 from persistence import run_dir as _run_dir  # noqa: E402
+from rng import spawn  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "src" / "generate"))   # the shared draw loop
+from generate import generate  # noqa: E402
 
 
 def ladder(m0: int, m: int, rho: float) -> list[int]:
@@ -103,13 +106,19 @@ def run_cell(
     n: int,
     seed_seq: np.random.SeedSequence,
 ) -> dict:
-    """One replicate: draw the ladder, return both gamma-hat estimates."""
-    spec = get_model(model)
-    rng = np.random.default_rng(seed_seq)
+    """One replicate: draw the ladder, return both gamma-hat estimates.
+
+    The draw itself is `src/generate/generate.py`'s, not a second copy of it --
+    `reduce=np.mean` because only the per-scale mean is ever used, which retains
+    one scale's array rather than the whole ladder's (381 MB -> 63 MB at this
+    sweep's largest cell). `seed_seq` is a
+    SPAWNED child (ground rule 2) and is handed over as a SeedSequence, never
+    as `seed_seq.entropy`: a child carries its parent's entropy, so the int
+    spelling would give every replicate the same stream (tools/rng.py).
+    """
     scales = ladder(m0, m, rho)
-    y_bar = np.empty(len(scales))
-    for j, i in enumerate(scales):
-        y_bar[j] = float(np.mean(spec.simulate(i, n, params, rng)))
+    means = generate(model, scales, n, params, seed=seed_seq, reduce=np.mean)
+    y_bar = np.array([float(means[i]) for i in scales])
     return {
         "closed_form": float(gamma_closed_form(scales, y_bar, rho, m0)),
         "all_points": float(gamma_all_points(scales, y_bar)),
@@ -152,7 +161,7 @@ def sweep(
     """
     seed_seq = np.random.SeedSequence(seed)
     # One independent stream per (budget, m0, replicate) cell -- ground rule 2.
-    streams = iter(seed_seq.spawn(len(budgets) * len(m0_values) * replicates))
+    streams = iter(spawn(seed_seq, len(budgets) * len(m0_values) * replicates))
 
     have_tuned = a1 is not None and cv is not None
     cells = []

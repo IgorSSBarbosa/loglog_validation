@@ -59,7 +59,7 @@ the functions they call live in `tools/`, and the simulators in `models/`.
 | `src/estimate` | what are $d$, $\omega_1$, $a_1$ — and is the stated $\pm$ honest? | samples | `cost_probe.json`, `omega1.json`, `coverage.json` |
 | `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json`, `prediction_check.json` |
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
-| `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, I/O | | |
+| `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
 
 ## Quickstart

@@ -46,6 +46,7 @@ sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import neyman_allocation, snr_allocation  # noqa: E402
 from artifacts import ARTIFACTS, artifact_path, default_out_dir, load_recipe  # noqa: E402
+from rng import as_seed_sequence, seed_record  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402
     content_id,
@@ -78,13 +79,14 @@ def generate(
     n,
     params: dict,
     *,
-    seed: int | None = None,
+    seed=None,
     out_dir: str | Path | None = None,
     tag: str | None = None,
     progress: bool = False,
+    reduce=None,
     max_chunk_bytes: int = 1_000_000_000,
     mem_flush_pct: float = 90.0,
-) -> dict[int, np.ndarray]:
+) -> dict:
     """Draw i.i.d. samples at each requested scale, via MODELS[model].simulate.
 
     Parameters
@@ -98,9 +100,18 @@ def generate(
         every scale; a sequence must match `scales` in length.
     params : dict
         Model-specific parameters, passed straight to MODELS[model].simulate.
-    seed : int, optional
-        RNG seed. If omitted, fresh OS entropy is drawn (but not recorded
-        anywhere unless out_dir is given).
+    seed : int, SeedSequence, dict, or None
+        RNG seed, in any spelling `tools/rng.py`'s `as_seed_sequence` accepts.
+        A **SeedSequence is passed through unchanged**, which is what lets a
+        caller obeying ground rule 2 hand over one of `SeedSequence.spawn`'s
+        children -- `allocation_experiment.sweep` pre-spawns one stream per
+        (budget, m0, replicate) cell and calls this function with it. Do NOT
+        try to pass a spawned child as an int via `child.entropy`: a child
+        carries its PARENT's entropy, so every sibling would collapse onto one
+        identical stream (see tools/rng.py's module docstring). If omitted,
+        fresh OS entropy is drawn (but not recorded anywhere unless out_dir is
+        given). The recorded form is `rng.seed_record`'s, which stays a bare
+        int for an un-spawned seed.
     out_dir : path, optional
         If given, the run is saved to `<out_dir>/<tag>/` (see
         tools/persistence.py) -- samples.npz + samples_meta.json, the latter
@@ -113,6 +124,18 @@ def generate(
         proceeds. Off by default so library callers (e.g. a Monte Carlo loop
         calling `generate` hundreds of times) aren't spammed; the CLI turns
         it on.
+    reduce : callable, optional
+        Applied to each scale's samples as soon as they are drawn, with the
+        raw array dropped immediately after. The point is memory: a caller
+        that only wants a statistic (`reduce=np.mean` -- what Experiment C's
+        sweep and verify_prediction use) then retains one scale's array at a
+        time instead of the whole ladder. Measured at the wide sweep's largest
+        cell (n=7,936,507 over m=6 srw scales): retention 381 MB -> 63 MB,
+        which moves total peak 725 MB -> 416 MB. The rest of that peak is
+        srw's own fixed working set (models/srw.py blocks its draw to a byte
+        budget), which `reduce` does not touch. Only valid with out_dir=None:
+        reducing and persisting at once would write summaries to a file named
+        samples.
     max_chunk_bytes : int, optional
         Working budget (bytes, conservatively assumed 8 bytes/sample) for
         one generation step. Only matters when out_dir is given: if the
@@ -134,21 +157,28 @@ def generate(
 
     Returns
     -------
-    dict[int, np.ndarray]
-        Maps each requested scale to its array of `n` i.i.d. samples. For a
-        chunked run, values are disk-backed memmaps rather than plain
-        in-RAM arrays (still valid np.ndarray for callers).
+    dict
+        Maps each requested scale to its array of `n` i.i.d. samples -- or,
+        when `reduce` is given, to `reduce(samples)`. For a chunked run,
+        values are disk-backed memmaps rather than plain in-RAM arrays (still
+        valid np.ndarray for callers).
     """
     spec = get_model(model)
     scales_list, n_list = normalize_scales_n(scales, n)
 
-    seed_seq = np.random.SeedSequence(seed)
+    if reduce is not None and out_dir is not None:
+        raise ValueError(
+            "reduce= and out_dir= are mutually exclusive: reducing discards the "
+            "samples, so persisting the result would write summaries to a file "
+            "named samples.npz. Pass one or the other.")
+
+    seed_seq = as_seed_sequence(seed)
     rng = np.random.default_rng(seed_seq)
 
     chunked = out_dir is not None and sum(n_list) * 8 > max_chunk_bytes
     rd = None
     if out_dir is not None:
-        stem = tag or content_id(params, scales_list, n_list, seed_seq.entropy)
+        stem = tag or content_id(params, scales_list, n_list, seed_record(seed_seq))
         rd = _run_dir(out_dir, stem)
 
     chunk_state = {"chunk_n": max(1, max_chunk_bytes // 8)}
@@ -177,11 +207,13 @@ def generate(
         mm.flush()
         return mm
 
-    samples: dict[int, np.ndarray] = {}
+    samples: dict = {}
     timings: dict[int, float] = {}
     for idx, (i, n_i) in enumerate(zip(scales_list, n_list), start=1):
         t0 = time.perf_counter()
-        samples[i] = _generate_scale_chunked(i, n_i) if chunked else spec.simulate(i, n_i, params, rng)
+        drawn = _generate_scale_chunked(i, n_i) if chunked else spec.simulate(i, n_i, params, rng)
+        samples[i] = drawn if reduce is None else reduce(drawn)
+        del drawn                      # the point of reduce=: drop it now, not at loop end
         timings[i] = time.perf_counter() - t0
         if progress:
             print(
@@ -214,7 +246,7 @@ def generate(
             params=params,
             scales=scales_list,
             n=n_list,
-            seed=seed_seq.entropy,
+            seed=seed_record(seed_seq),
             timing_seconds=timings,
         )
 

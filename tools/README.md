@@ -15,7 +15,7 @@ not a subfolder of it — see `models/README.md`) + one entry in `tools/models.p
 registry; `tools/models.py` itself is purely an importer/registry module, not where
 the simulation logic lives.
 
-Ten modules. The dependency graph is shallow on purpose — `loglog.py` is the only
+Eleven modules. The dependency graph is shallow on purpose — `loglog.py` is the only
 one several others import, because it owns the article's weight definition:
 
 | module | what it owns | imports |
@@ -27,6 +27,7 @@ one several others import, because it owns the article's weight definition:
 | `wilson.py` | eq. (720)'s four-term bound, **for $\gamma$ only** | `loglog` |
 | `coverage.py` | do our stated error bars actually cover? | — |
 | `artifacts.py` | what every file on disk is called, in or out | — |
+| `rng.py` | seeding, and how a seed is recorded so a run regenerates | — |
 | `persistence.py` | run directories, samples, metadata, content hashing | — |
 | `models.py` | the `MODELS` registry — a pure importer | `models/` |
 | `loglog_plot.py` | the two charts | — |
@@ -339,6 +340,27 @@ mismatch with an error that names the mistake rather than the missing key.
 `default_out_dir` resolves a driver's default output location to the *experiment's*
 `data/` — the recipe's grandparent now that recipes live in `recipes/`.
 
-Not started yet — planned modules (see `PLAN.md` repo layout): `bootstrap.py`,
-`rng.py` (ground rule 2's seeding is currently done inline with
-`SeedSequence.spawn` at each call site).
+`rng.py` — seeding, and the one way to record a seed. `as_seed_sequence` accepts
+an int, a `SeedSequence`, `None`, or a recorded dict; `seed_record` turns any of
+them back into something JSON-safe; `spawn` is ground rule 2's primitive. It exists
+because of one sharp trap, which it pins as a test: **a spawned child carries its
+parent's entropy**, not its own —
+
+```
+kid = SeedSequence(12345).spawn(4)[2]
+kid.entropy == 12345        # the PARENT's
+kid.spawn_key == (2,)       # the only distinguishing part
+```
+
+— so handing a child to an `int`-typed seed parameter as `kid.entropy`, the obvious
+workaround, silently collapses every replicate onto one identical stream. That is
+`presentation18-05-2026`'s pool-reuse bug in a new disguise: plausible numbers, no
+error, and comparisons between configurations that are quietly invalid.
+`SeedSequence(kid)` doesn't work either — it raises `TypeError`. Hence seeds travel
+as `SeedSequence` objects and are recorded as `{"entropy": ..., "spawn_key": [...]}`
+— except when `spawn_key` is empty, where the record stays a bare int so every
+`samples_meta.json` already on disk still loads unchanged. Verified:
+`tools/tests/test_rng.py` (9 cases, including the collapse itself, asserted in both
+directions).
+
+Not started yet — planned module (see `PLAN.md` repo layout): `bootstrap.py`.

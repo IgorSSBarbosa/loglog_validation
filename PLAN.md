@@ -123,10 +123,11 @@ loglog_validation/
                                   each file, not in its name
     bootstrap.py                 resampling helpers for constants (sigma_inf^2, omega1, a1)
                                   -- NOT WRITTEN YET
-    rng.py                       independent-stream seeding (SeedSequence.spawn keyed by
-                                  (experiment, config_id, replicate_index)) -- enforces
-                                  ground rule 2. NOT WRITTEN YET; spawning is currently
-                                  done inline at each call site
+    rng.py                       independent-stream seeding (SeedSequence.spawn) --
+                                  enforces ground rule 2. as_seed_sequence/seed_record
+                                  exist because a spawned child carries its PARENT's
+                                  entropy, so passing one as an int collapses every
+                                  replicate onto one stream (see its docstring)
     persistence.py                sample+metadata save/load, shared by every model: one
                                   run = one `<out_dir>/<tag>/` folder holding samples.npz
                                   + samples_meta.json (not `io.py`: that name would shadow

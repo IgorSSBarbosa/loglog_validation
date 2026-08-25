@@ -70,6 +70,15 @@ Recipe: `{"kind": "samples", "model": ..., "params": {...}, "scales": [...],
 about *why* those sample counts were chosen (see `tools/allocation.py`; `snr` is the
 right one for measuring $\omega_1$, `neyman` the documented wrong one).
 
+`seed` accepts an int, a `SeedSequence`, or `rng.seed_record`'s dict. The
+`SeedSequence` spelling is what lets a caller obeying ground rule 2 hand over one of
+`spawn`'s children — never as `child.entropy`, which would give every sibling the same
+stream (`tools/rng.py`). `reduce` applies a statistic to each scale as it is drawn and
+drops the samples: `reduce=np.mean` retains one scale's array instead of the whole
+ladder's (381 MB → 63 MB at Experiment C's largest cell), and is what makes it
+practical for the sweep to call this function rather than repeat its loop. It is
+refused together with `out_dir`, which would write summaries to a file named samples.
+
 Default output directory is the **experiment's** `data/`, resolved by
 `tools/artifacts.py`'s `default_out_dir` — since recipes live in
 `experiments/<exp>/recipes/`, that is the recipe's grandparent, not its sibling. Runs
@@ -144,8 +153,8 @@ answer, never reach an estimator.
 ## `budget/`
 
 `allocation_experiment.py` — Experiment C's driver: sweeps a (budget × $m_0$) grid,
-drawing $R$ independent replicates per cell (`SeedSequence.spawn`, ground rule 2) and
-estimating $\gamma$ with the article's own closed-form $w_{k,m}$ weights, to test
+drawing $R$ independent replicates per cell (`tools/rng.py`'s `spawn`, ground rule 2)
+and estimating $\gamma$ with the article's own closed-form $w_{k,m}$ weights, to test
 Proposition `prop:opt`. Runs **paired arms** — the same grid scored against `prop:opt`'s
 $m_0$ and against the tuned $m_0$ that puts the dropped constant back — so the two
 rules are compared on identical draws rather than on separate runs. Reports per-cell
@@ -241,6 +250,17 @@ Everything about one run lives in the same folder as `samples.npz`, and since `d
 is gitignored, nothing here is auto-committed — copy a specific plot into the
 experiment's `images/` folder when you want to keep it as evidence (ground rule 1/6 —
 committed deliberately, one at a time).
+
+**The draw itself is `generate()`'s, everywhere it can be.** `allocation_experiment`
+and `verify_prediction` used to hand-roll the same three-line ladder loop; both now
+call `generate(..., reduce=np.mean)`, pinned bit-for-bit by
+`test_run_cell_draws_through_generate` / `test_run_ladder_draws_through_generate` so
+the published sweep stays reproducible. Two draw sites are deliberately *not*
+converted: `measure_cost` times a single `simulate` call and must not pay `generate`'s
+bookkeeping, and `check_coverage._srw_replicate` is a callback the coverage harness
+drives from one long-lived `Generator`, so it takes an rng rather than a seed — its
+equivalence to `generate` is asserted by `test_srw_replicate_matches_generate` instead
+of by a comment.
 
 **Each driver bootstraps its own `sys.path`.** Two levels up from `src/<layer>/x.py` is
 the repo root, so each inserts `ROOT/"tools"` (plus a sibling layer where it needs one)

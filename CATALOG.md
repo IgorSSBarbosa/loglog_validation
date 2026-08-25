@@ -5,7 +5,7 @@ Written 2026-08-24 as step zero of a reorganization, refreshed 2026-08-25: the p
 current structure legible enough to change safely, **not** to defend it. Where the
 current placement looks wrong, the "Notes" column says so.
 
-Scope: `tools/`, `src/`, `models/` — 22 modules, ~5,800 lines, 109 module-level
+Scope: `tools/`, `src/`, `models/` — 23 modules, ~5,900 lines, 112 module-level
 public functions (§4 indexes the ones worth naming). Not covered: `tools/tests/`
 (gitignored, local-only), `experiments/*/` (recipes + data, no code), `derivations/`
 (LaTeX).
@@ -115,6 +115,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `wilson.py` | 276 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. | `loglog` |
 | `coverage.py` | 356 | `statistical tool` | Calibration harness: do our stated error bars cover? `coverage_test`, `coverage_multi`, `rescore`, `combine_se`, Welch–Satterthwaite dof. | — |
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
+| `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
 | `models.py` | 95 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
@@ -148,7 +149,7 @@ Split into four layers on 2026-08-25 (see §5.3).
 ## 4. Function index
 
 <details>
-<summary><b>tools/</b> — the public surface worth naming (64 module-level functions in all)</summary>
+<summary><b>tools/</b> — the public surface worth naming (67 module-level functions in all)</summary>
 
 | function | module | what it is |
 |---|---|---|
@@ -196,6 +197,7 @@ Split into four layers on 2026-08-25 (see §5.3).
 | `classify`, `migrate`, `find_artifacts` | artifacts | legacy rescue |
 | `RECIPES`, `load_recipe`, `recipe_kind`, `recipe_name` | artifacts | inputs, validated by `kind` on load |
 | `default_out_dir` | artifacts | the experiment's `data/`, not the recipe's sibling |
+| `as_seed_sequence`, `seed_record`, `spawn` | rng | ground rule 2's seeding, round-trippable |
 | `normalize_scales_n`, `run_dir`, `save_samples`, `open_scale_writer`, `load_samples`, `load_metadata`, `content_id`, `write_metadata` | persistence | run I/O |
 | `ModelSpec`, `get_model` | models | registry |
 | `loglog_points`, `loglog_plot`, `estimates_plot` | loglog_plot | charts |
