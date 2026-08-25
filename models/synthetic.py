@@ -121,3 +121,16 @@ def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
 def target_fn(i, params: dict) -> np.ndarray:
     """MODELS["synthetic"].target_fn: the exact E[Y_i] reference curve (article eq. 232)."""
     return mean_Y(i, params)
+
+
+def cost_hint(i: int, params: dict | None = None) -> float:
+    """Work for one sample: constant in i, so cost_hint(i) = 1.
+
+    The synthetic generator draws from a closed-form mean plus noise; the scale
+    enters the FORMULA, not the amount of work. So d = 0 for this model, and
+    that is correct rather than a defect: it is a statistical testbed, not a
+    cost testbed. Any budget allocation computed for it is degenerate (every
+    scale costs the same, so the cheapest ladder is always the deepest), which
+    is why the allocation experiments all run on srw instead.
+    """
+    return 1.0

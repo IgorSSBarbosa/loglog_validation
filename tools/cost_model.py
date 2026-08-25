@@ -157,10 +157,131 @@ def estimate_cost_affine(scales: Sequence, elapsed: Sequence) -> dict:
         bounds=([-np.inf, -np.inf, 0.0], [np.inf, np.inf, 8.0]),
     )
     log_a, log_b, d = fit.x
+
+    # Standard error of d from the Gauss-Newton covariance,
+    # sigma^2 (J^T J)^-1, with sigma^2 the residual variance on the log scale.
+    # Without it `compare_cost_models` cannot say whether a declared and a
+    # measured exponent actually disagree -- it would only ever report a gap.
+    d_se = None
+    dof = len(i) - 3
+    if dof > 0:
+        try:
+            jtj = fit.jac.T @ fit.jac
+            cov = np.linalg.inv(jtj) * float(fit.fun @ fit.fun) / dof
+            var_d = float(cov[2, 2])
+            if np.isfinite(var_d) and var_d > 0:
+                d_se = float(np.sqrt(var_d))
+        except np.linalg.LinAlgError:      # singular: d not identified here
+            d_se = None
+
     return {
         "a": float(np.exp(log_a)),
         "b": float(np.exp(log_b)),
         "d": float(d),
+        "d_se": d_se,
         "rel_rmse": float(np.sqrt(np.mean(fit.fun ** 2))),
         "converged": bool(fit.success),
     }
+
+
+# --------------------------------------------------------------------------
+# Declared vs measured cost: the cross-check
+# --------------------------------------------------------------------------
+
+def declared_exponent(scales: Sequence, cost_hint, params: dict | None = None
+                      ) -> float:
+    """The exponent d implied by a model's own cost_hint, by OLS on logs.
+
+    Exact for a true power law (srw's cost_hint(i) = i returns 1.0 to float
+    precision). A model whose cost is not a power law -- say a + b*i -- will
+    return the local slope over `scales`, which is the honest answer: that IS
+    the effective d over the window being planned for.
+    """
+    i = np.asarray(scales, dtype=float)
+    c = np.asarray([float(cost_hint(int(k), params or {})) for k in i])
+    if np.any(c <= 0):
+        raise ValueError(f"cost_hint must be positive; got {c.tolist()}")
+    if np.allclose(c, c[0]):
+        return 0.0                      # constant cost, e.g. the synthetic model
+    return float(np.polyfit(np.log(i), np.log(c), 1)[0])
+
+
+def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
+                        params: dict | None = None,
+                        tolerance_sigma: float = 3.0,
+                        tolerance_rel: float = 0.05) -> dict:
+    """Cross-check a model's declared cost against the wall clock.
+
+    Returns the declared d, the measured d (affine fit, which is the only one
+    that survives per-call overhead), their gap in units of the measured
+    stderr, and `agree`. The declared value is what an allocation should use --
+    it is exact where the clock is not -- but a real disagreement usually means
+    one of two things worth knowing:
+
+      * the cost_hint is wrong (the exploration is not the complexity you
+        thought), or
+      * the machine has stopped being compute-bound at large i (cache, memory
+        bandwidth, swap), so wall clock genuinely grows faster than work does.
+
+    Neither is detectable from either measurement alone, which is why both are
+    kept rather than picking one.
+    """
+    declared = declared_exponent(scales, cost_hint, params)
+    try:
+        aff = estimate_cost_affine(scales, elapsed)
+        measured, se, how = aff["d"], aff.get("d_se"), "affine a + b*i**d"
+    except ValueError as exc:                  # too few scales for 3 parameters
+        measured = estimate_cost_exponent(scales, elapsed)
+        se, how = None, f"pure power law ({exc})"
+
+    z = (measured - declared) / se if se else None
+    rel = abs(measured - declared) / abs(declared) if declared else float("inf")
+
+    # Two tolerances, and agreement needs only one of them. The sigma test
+    # alone is too strict here: `estimate_cost_affine`'s standard error is
+    # residual-based and treats timing noise as i.i.d., which it is not --
+    # cache behaviour, clock scaling and the affine model's own approximation
+    # error are all systematic. On srw, whose declared d = 1 is EXACT by
+    # construction, the measured 1.0063 +/- 0.0023 sits 2.76 sigma away: a
+    # 0.6% discrepancy inflated by an over-tight se. Flagging that as a
+    # disagreement would train the user to ignore the warning, which is worse
+    # than not having it. The relative floor says what actually matters for an
+    # allocation -- the offset moves only logarithmically in d, so sub-percent
+    # differences are irrelevant regardless of their significance.
+    agree = True
+    if z is not None:
+        agree = bool(abs(z) <= tolerance_sigma or rel <= tolerance_rel)
+
+    return {
+        "declared_d": declared,
+        "measured_d": measured,
+        "measured_se": se,
+        "measured_via": how,
+        "z": z,
+        "rel_gap": rel,
+        "agree": agree,
+        "tolerance_sigma": tolerance_sigma,
+        "tolerance_rel": tolerance_rel,
+    }
+
+
+def format_cost_comparison(cmp: dict) -> str:
+    """One block, warning first when the two disagree."""
+    lines = []
+    if not cmp["agree"]:
+        lines.append(
+            f"WARNING: declared and measured cost exponents differ by "
+            f"{abs(cmp['z']):.1f} sigma.")
+        lines.append("  Either cost_hint is wrong, or the machine is no longer "
+                     "compute-bound at the largest scales.")
+        lines.append("  Allocation uses the DECLARED value; "
+                     "pass --trust-measured to override.")
+    se = cmp["measured_se"]
+    lines.append(f"  declared d = {cmp['declared_d']:.4f}   (model's cost_hint)")
+    lines.append(f"  measured d = {cmp['measured_d']:.4f}"
+                 + (f" +/- {se:.4f}" if se else "")
+                 + f"   ({cmp['measured_via']})")
+    if cmp["z"] is not None:
+        lines.append(f"  gap = {cmp['z']:+.2f} sigma, {100 * cmp['rel_gap']:.2f}% relative"
+                     + ("" if cmp["agree"] else "   -> DISAGREE"))
+    return "\n".join(lines)

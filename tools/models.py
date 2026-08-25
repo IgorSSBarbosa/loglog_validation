@@ -37,19 +37,47 @@ import synthetic as model_synthetic  # noqa: E402
 
 @dataclass(frozen=True)
 class ModelSpec:
+    """What the rest of the repo needs to know about a model.
+
+    `simulate` is the only required field. `cost_hint` is what makes a model
+    plannable: see the note below on why it exists and what unit it is in.
+    """
+
     simulate: Callable[[int, int, dict, np.random.Generator], np.ndarray]
     target_fn: Callable[[np.ndarray, dict], np.ndarray] | None = None
     true_gamma_key: str | None = None
+    #: cost_hint(i, params) -> expected work for ONE sample at scale i, in the
+    #: model's own natural unit (walk steps, sites explored, lattice updates --
+    #: whatever the model actually counts). Only RATIOS across scales matter,
+    #: so the unit is free; a constant factor cancels in the allocation.
+    #:
+    #: Why declared rather than timed. Assumption cost_is_power_law wants
+    #: cost(i) = i**d, and wall clock does not satisfy it: a fixed per-call
+    #: overhead makes measured time affine, a + b*i**d. Measured on srw, which
+    #: is Theta(k) by construction so d = 1 exactly:
+    #:
+    #:     time, pure power law      d_hat = 0.771   (23% low)
+    #:     time, affine a + b*i**d   d_hat = 1.006
+    #:     declared step count       d     = 1.000   exactly, no fit
+    #:
+    #: and restricted to k <= 16384, the regime where omega_1 has to be
+    #: measured, the pure-time fit gives 0.506 -- 49% low, because the overhead
+    #: is 88% of the measurement at k = 256. Timing still runs, as a
+    #: cross-check (tools/cost_model.py's `compare_cost_models`); a declared
+    #: hint that disagrees with the clock is a warning, not a silent choice.
+    cost_hint: Callable[[int, dict], float] | None = None
 
 
 MODELS: dict[str, ModelSpec] = {
     "synthetic": ModelSpec(
         simulate=model_synthetic.simulate,
+        cost_hint=model_synthetic.cost_hint,
         target_fn=model_synthetic.target_fn,
         true_gamma_key="gamma",
     ),
     "srw": ModelSpec(
         simulate=model_srw.simulate,
+        cost_hint=model_srw.cost_hint,
         # No target_fn/true_gamma_key: no article-sanctioned closed form for
         # SRW yet (see models/srw.py, experiments/01_srw/README.md). This is
         # what keeps src/plot_loglog.py from overlaying a reference curve or

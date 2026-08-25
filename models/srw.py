@@ -127,3 +127,17 @@ def srw(
 def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarray:
     """MODELS["srw"].simulate: n i.i.d. samples of |S_i| at scale i (params: {"q": ...})."""
     return srw(i, n=n, q=params.get("q", 0.5), rng=rng)
+
+
+def cost_hint(i: int, params: dict | None = None) -> float:
+    """Work for one sample of |S_i|: exactly i steps.
+
+    Exact, not an estimate -- `srw` draws i uniforms per sample and sums them,
+    with no early exit. This is what makes srw a usable testbed for the budget
+    machinery: d = 1 is known rather than fitted, so a measured d can be scored
+    against it (see tools/models.py's ModelSpec.cost_hint for the numbers).
+
+    Deliberately NOT rng.binomial, which would make the cost constant in i and
+    void the whole cost model -- see this module's docstring.
+    """
+    return float(i)
