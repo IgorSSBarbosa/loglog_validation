@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
-from artifacts import write_artifact  # noqa: E402
+from artifacts import artifact_path, write_artifact  # noqa: E402
 from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
@@ -142,7 +142,7 @@ def _main(argv: list[str] | None = None) -> None:
     runs = group["runs"] if group else []
     a1, a1_se, a1_src = measured_a1(runs)
     cv, cv_src = measured_cv(runs[0]) if runs else measured_cv(root / "omega1")
-    tp_json = root / "allocation" / "result.json"
+    tp_json = artifact_path(root / "allocation", "allocation_sweep")
     tp, tp_src = measured_throughput(tp_json)
 
     print(f"constants: a1={a1:+.4f} ({a1_src}); cv={cv:.4f} ({cv_src});")

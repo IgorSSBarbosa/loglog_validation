@@ -11,7 +11,7 @@ model (tools/models.py) has a known closed form (`target_fn` -- currently
 only "synthetic"), the known E[Y_i] curve is *also* overlaid (dashed), for
 comparison against the fit.
 
-results.json (tools/loglog.py's compare_methods -- all four gamma-hat
+gamma_estimates.json (tools/loglog.py's compare_methods -- all four gamma-hat
 estimators, not just all-points) is always written, run for any model,
 regardless of whether a known target_fn exists -- comparing estimators
 against each other doesn't require a known ground truth, only comparing
@@ -19,19 +19,19 @@ against one does. When true_gamma is unknown (e.g. "srw" -- no
 article-sanctioned closed form yet, see experiments/01_srw/README.md), a
 note makes clear the numbers are exploratory, not a validated checkpoint
 result. The four-estimator comparison chart (estimates.png) is opt-in via
---estimates, since unlike results.json it's a supplementary figure, not the
+--estimates, since unlike gamma_estimates.json it's a supplementary figure, not the
 numeric result itself (ground rule 1).
 
 Takes a **run directory** (`<out_dir>/<tag>/`, as src/generate.py writes),
 not a recipe -- a single recipe can produce many different runs (different
 tags/seeds), so pointing this at a recipe would be ambiguous about which
-run's data you mean. Metadata is read from `<run_dir>/metadata.json` if
+run's data you mean. Metadata is read from `<run_dir>/samples_meta.json` if
 present, but isn't required -- missing metadata just means no model
 dispatch (no target_fn overlay, no true_gamma), not a failure to plot or
 fit.
 
-Writes `<run_dir>/plot.png` and `<run_dir>/results.json` -- the same folder
-as samples.npz/metadata.json -- and, with --estimates,
+Writes `<run_dir>/plot.png` and `<run_dir>/gamma_estimates.json` -- the same folder
+as samples.npz/samples_meta.json -- and, with --estimates,
 `<run_dir>/estimates.png`. Everything about one run lives in one place.
 `data/` is gitignored, so none of this is committed by default; copy a
 specific plot into the experiment's `images/` folder when you want to keep
@@ -39,13 +39,12 @@ it as evidence (ground rule 1/6 -- committed deliberately, one at a time,
 not auto-populated by every run).
 
 Run (after generating some data, e.g. `generate.py -meta
-../experiments/00_synthetic/example_config.json --tag demo_run`):
+../experiments/00_synthetic/recipes/samples_example.json --tag demo_run`):
 
     python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
     python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
 """
 
-from artifacts import artifact_path  # noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -59,6 +58,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import artifact_path  # noqa: E402
 from loglog import compare_methods  # noqa: E402
 from loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402
 from models import get_model  # noqa: E402
@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--estimates", dest="estimates", action="store_true",
         help="Also save the four-estimator comparison chart to <run_dir>/estimates.png "
-        "(tools/loglog_plot.py's estimates_plot). Off by default; results.json (the "
+        "(tools/loglog_plot.py's estimates_plot). Off by default; gamma_estimates.json (the "
         "underlying numbers, all four estimators) is written either way.",
     )
     args = parser.parse_args(argv)
@@ -107,7 +107,8 @@ def main(argv: list[str] | None = None) -> None:
         if spec.true_gamma_key is not None:
             true_gamma = params.get(spec.true_gamma_key)
     else:
-        print(f"note: no metadata at {args.data / 'metadata.json'} -- plotting data only, no reference curve")
+        print(f"note: no metadata at {artifact_path(args.data, 'samples_meta')}"
+              " -- plotting data only, no reference curve")
 
     scales, y_bar, _se, n = loglog_points(samples)
     results = compare_methods(scales, y_bar, n, true_gamma=true_gamma)
@@ -139,7 +140,7 @@ def main(argv: list[str] | None = None) -> None:
     drop = [e["gamma_hat"] for e in m["drop_leading"]["estimates"]]
     print(f"  drop_leading      : {['%.4f' % g for g in drop]}")
     mle = m["mle"]
-    flag = "" if mle["trustworthy"] else "  ** NOT TRUSTWORTHY, see diagnostics in results.json **"
+    flag = "" if mle["trustworthy"] else "  ** NOT TRUSTWORTHY, see diagnostics in gamma_estimates.json **"
     print(f"  mle               : {mle['gamma_hat']:.4f}{flag}")
 
     if true_gamma is None:

@@ -262,7 +262,7 @@ resolved hundreds of times over, and starves the large ones, where it has sunk
 below the noise (measured SNR 460 at $k=2$ down to 0.25 at $k=1024$).
 `snr_allocation` ($n_i\propto s_i^2 i^{2\omega_1}$, *increasing* in $i$)
 equalizes the correction term's signal-to-noise ratio across scales instead,
-and is what `experiments/01_srw/omega1_config.json` uses. Verified:
+and is what `experiments/01_srw/recipes/samples_omega1.json` uses. Verified:
 `tools/tests/test_allocation.py` (47 cases — $\theta_1+d\theta_2=1$ exactly,
 continuous allocation costs exactly $B$, discretized allocation never exceeds
 $B$ when feasible, the small-$B$ infeasibility case, both new rules' closed-form

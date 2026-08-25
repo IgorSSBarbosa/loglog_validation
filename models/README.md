@@ -20,7 +20,7 @@ $|S_k|$. Draws steps as `(block_n, k)` float32 blocks over the $n$ axis and
 accumulates row sums, instead of one $(n,k)$ matrix — bounds peak transient memory to
 a fixed byte budget (`_DEFAULT_WORKING_SET_BYTES`) regardless of how large $n$ gets
 (the old unblocked, `int64` version needed 819 GiB at $n=10^8,\,k=1024$ —
-`experiments/01_srw/Huge_test.json`, fixed 2026-08-19). Blocking is over $n$, not $k$,
+`experiments/01_srw/recipes/samples_huge.json`, fixed 2026-08-19). Blocking is over $n$, not $k$,
 deliberately: splitting the leading axis into sequential row ranges consumes numpy's
 row-major RNG stream in the same order a single unblocked call would, so results are
 bit-identical for the same seed at any block size — splitting over $k$ would not have

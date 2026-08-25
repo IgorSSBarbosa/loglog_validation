@@ -233,7 +233,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       (SRW's four estimators agree closely around $\hat\gamma\approx0.5$, consistent
       with the classical $\sqrt{2k/\pi}$ asymptotic, without any `target_fn` being
       registered for it)
-- [x] ~~Fix OOM on large-`n` SRW runs (user request, 2026-08-19): `experiments/01_srw/Huge_test.json`
+- [x] ~~Fix OOM on large-`n` SRW runs (user request, 2026-08-19): `experiments/01_srw/recipes/samples_huge.json`
       ($n=10^8$, scales up to $1024$) had to be killed for exhausting memory. Root cause: a
       single unblocked `srw(k, n, ...)` call drew one $(n,k)$ matrix (819 GiB at
       $k=1024,n=10^8$ with the old `int64` dtype) before `generate.py`'s loop ever regained
@@ -341,7 +341,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       shadowed the fresh run~~
 - [x] ~~Experiment C — test Proposition `prop:opt`'s allocation (`plans/three_experiment_ladder.md`
       §4, done 2026-08-20). `src/allocation_experiment.py` +
-      `experiments/01_srw/allocation_config.json`. The planned single flat-$n$ control arm was
+      `experiments/01_srw/recipes/sweep_allocation.json`. The planned single flat-$n$ control arm was
       generalized: `prop:opt` already fixes $n$ uniform, so what it really chooses is $m_0$, and
       the honest control is **every other $m_0$ at the same budget**. That also separates two
       claims a single-point measurement cannot distinguish. **RATE passes**: measured

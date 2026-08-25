@@ -6,7 +6,7 @@ Thin glue, mirroring generate.py/plot_loglog.py's split: measure_cost.py
 only measures and saves, this script only loads and plots.
 
 Takes a **run directory** (`<out_dir>/<tag>/`, as src/measure_cost.py
-writes -- holding `result.json`, not the samples.npz+metadata.json pair
+writes -- holding `result.json`, not the samples.npz+samples_meta.json pair
 generate.py's runs use, since a cost probe's own output is already one
 self-contained file). "elapsed_all" inside it is already {scale: array of
 repeat times}, tools/loglog_plot.py's exact required shape, so no
@@ -18,13 +18,12 @@ and since `data/` is gitignored, nothing here is auto-committed. Copy a
 specific plot into the experiment's `images/` folder when you want to keep
 it as evidence (ground rule 1/6 -- committed deliberately, one at a time).
 
-Run (after measuring, e.g. `measure_cost.py -meta cost_probe_config.json
+Run (after measuring, e.g. `measure_cost.py -meta ../../experiments/01_srw/recipes/cost_probe.json
 --tag demo_run`):
 
     python3 plot_cost.py -data ../experiments/01_srw/data/demo_run
 """
 
-from artifacts import artifact_path  # noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -38,6 +37,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
+from artifacts import artifact_path  # noqa: E402
 from loglog_plot import loglog_plot  # noqa: E402
 
 

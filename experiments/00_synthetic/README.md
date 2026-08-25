@@ -28,9 +28,9 @@ this rung tests only the *statistical* machinery, not model fidelity. Registered
 
 This experiment has no scripts of its own any more — `src/generate.py` and
 `src/plot_loglog.py` are single, shared drivers used by every experiment (see
-`src/README.md`), dispatching on `example_config.json`'s `"model": "synthetic"` field.
+`src/README.md`), dispatching on `samples_example.json`'s `"model": "synthetic"` field.
 Two kinds of JSON, not to be confused: the hand-authored **recipe**
-(`example_config.json`, holding the agreed Phase-0 defaults: $\gamma=0.5$, $a_0=1$, one
+(`samples_example.json`, holding the agreed Phase-0 defaults: $\gamma=0.5$, $a_0=1$, one
 correction term $a_1=1,\omega_1=1$, $\sigma_\infty^2=0.04$, lognormal) is read-only and
 never modified by anything here; running it produces **output** — one `data/<tag>/`
 directory per run (gitignored — regenerable, not source), holding `samples.npz` +
@@ -39,7 +39,7 @@ future meta-log-log plot of $\mathrm{cost}(i)$ vs $i$; see `tools/cost_model.py`
 
 ```
 cd src   # repo root -> src/, see src/README.md
-python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
+python3 generate.py -meta ../experiments/00_synthetic/recipes/samples_example.json --tag demo_run
 python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run --estimates
 ```
 

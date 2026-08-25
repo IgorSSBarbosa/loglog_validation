@@ -121,7 +121,7 @@ def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "-data", "--data", dest="data", required=True, type=Path,
-        help="Run directory written by generate.py (contains samples.npz/samples/ + metadata.json)",
+        help="Run directory written by generate.py (contains samples.npz/samples/ + samples_meta.json)",
     )
     parser.add_argument(
         "--expect-omega1", dest="expect_omega1", type=float, default=None,

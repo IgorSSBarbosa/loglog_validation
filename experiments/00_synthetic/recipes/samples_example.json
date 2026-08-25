@@ -1,13 +1,23 @@
 {
+  "kind": "samples",
   "model": "synthetic",
   "params": {
     "gamma": 0.5,
     "a0": 1.0,
-    "corrections": [[1.0, 1.0]],
+    "corrections": [
+      [
+        1.0,
+        1.0
+      ]
+    ],
     "sigma_inf2": 0.04,
     "family": "lognormal"
   },
-  "scales": [1024, 32768, 1048576],
+  "scales": [
+    1024,
+    32768,
+    1048576
+  ],
   "n": 5000,
   "seed": null
 }

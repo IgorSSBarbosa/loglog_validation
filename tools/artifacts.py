@@ -225,3 +225,73 @@ def _main(argv=None) -> None:
 
 if __name__ == "__main__":
     _main()
+
+
+# --------------------------------------------------------------------------
+# Recipes: the same problem on the INPUT side
+# --------------------------------------------------------------------------
+#
+# Configs had drifted the same way run outputs had, and worse, because the
+# names actively misled: `omega1_config.json` was a SAMPLES recipe, not an
+# omega_1 config, and `time_measure.json` was a cost probe. Nothing in a name
+# said which tool consumed it, and six files ended in `_config.json` while
+# four did not.
+#
+# Same rule as artifacts -- named for what they are -- with one addition that
+# matters more here than on the output side: a `kind` field INSIDE the file,
+# checked on load. Passing a cost-probe recipe to allocation_experiment used to
+# fail with a KeyError from somewhere deep in the sweep; now it fails
+# immediately, saying what it got and what it wanted.
+
+#: recipe kind -> (filename prefix, the tool that consumes it, required keys)
+RECIPES: dict[str, tuple[str, str, tuple[str, ...]]] = {
+    "samples":    ("samples", "src/generate/generate.py",
+                   ("model", "scales", "n")),
+    "cost_probe": ("cost", "src/estimate/measure_cost.py",
+                   ("model", "scales", "repeats")),
+    "sweep":      ("sweep", "src/budget/allocation_experiment.py",
+                   ("model", "budgets", "m0_values", "m", "rho")),
+}
+
+
+def recipe_kind(payload: dict) -> str | None:
+    """Which recipe kind a config holds: its `kind` field, else its schema."""
+    declared = payload.get("kind")
+    if declared in RECIPES:
+        return declared
+    for kind, (_, _, required) in RECIPES.items():
+        if set(required) <= set(payload):
+            return kind
+    return None
+
+
+def load_recipe(path, expect: str) -> dict:
+    """Read a recipe and refuse it if it is not of kind `expect`.
+
+    The check is the reason this function exists. Recipes look alike -- they
+    all start with `model` and `params` -- so a wrong one used to travel a long
+    way before failing on a missing key, with a traceback that named the key
+    rather than the mistake.
+    """
+    if expect not in RECIPES:
+        raise ValueError(f"unknown recipe kind {expect!r}; known: {sorted(RECIPES)}")
+    path = Path(path)
+    payload = json.loads(path.read_text())
+    got = recipe_kind(payload)
+    if got != expect:
+        _, tool, required = RECIPES[expect]
+        got_tool = RECIPES[got][1] if got in RECIPES else "no known tool"
+        raise ValueError(
+            f"{path} is a {got or 'unrecognized'} recipe, but {tool} needs a "
+            f"{expect!r} one.\n"
+            f"  this file is consumed by: {got_tool}\n"
+            f"  a {expect!r} recipe needs: {', '.join(required)}\n"
+            f"  missing here: {', '.join(sorted(set(required) - set(payload))) or 'nothing'}")
+    return payload
+
+
+def recipe_name(kind: str, name: str) -> str:
+    """Canonical recipe filename: <prefix>_<name>.json, e.g. samples_omega1.json."""
+    if kind not in RECIPES:
+        raise ValueError(f"unknown recipe kind {kind!r}; known: {sorted(RECIPES)}")
+    return f"{RECIPES[kind][0]}_{name}.json"

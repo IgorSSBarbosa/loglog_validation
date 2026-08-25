@@ -1,9 +1,15 @@
 {
+  "kind": "samples",
   "model": "srw",
   "params": {
     "q": 0.5
   },
-  "scales": [16, 64, 256, 1024],
+  "scales": [
+    16,
+    64,
+    256,
+    1024
+  ],
   "n": 2000,
   "seed": null
 }

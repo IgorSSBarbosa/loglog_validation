@@ -37,7 +37,7 @@ Design notes:
   an estimator (see experiments/01_srw/README.md on why srw has no target_fn).
 
 CLI:
-    python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json \\
+    python3 allocation_experiment.py -meta ../experiments/01_srw/recipes/sweep_allocation.json \\
         --tag allocation
 """
 
@@ -56,7 +56,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
-from artifacts import write_artifact  # noqa: E402
+from artifacts import load_recipe, write_artifact  # noqa: E402
 from allocation import (  # noqa: E402
     optimal_allocation,
     total_cost,
@@ -300,7 +300,7 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("--tag", dest="tag", type=str, default="allocation")
     args = parser.parse_args(argv)
 
-    cfg = json.loads(args.meta.read_text())
+    cfg = load_recipe(args.meta, "sweep")
     result = sweep(
         cfg["model"], cfg["params"], cfg["budgets"], cfg["m0_values"],
         m=cfg["m"], rho=cfg["rho"], d=cfg["d"], omega1=cfg["omega1"],

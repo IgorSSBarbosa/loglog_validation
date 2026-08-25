@@ -9,7 +9,7 @@ article's closed-form weighted sum eq. (523)-(526) whenever the scales *are* a
 consecutive rho^k grid (the weights w_{k,m} are exactly the OLS slope formula
 specialized to equally-spaced integer k); the general form is used here because
 not every experiment's scales are on such a grid (e.g. the current
-`example_config.json` spans 2**10, 2**15, 2**20 -- not consecutive).
+`samples_example.json` spans 2**10, 2**15, 2**20 -- not consecutive).
 
 The exact closed-form weights (eq. 526), `closed_form_weights`/`gamma_closed_form`
 below, are checkpoint 0.2's own acceptance criterion (see PLAN.md / TODO.md);

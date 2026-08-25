@@ -1,12 +1,20 @@
 {
+  "kind": "samples",
   "model": "srw",
   "params": {
     "q": 0.5
   },
-  "scales": [8, 16, 32, 64, 128, 256],
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
   "n": {
     "rule": "snr",
-    "budget": 5e10,
+    "budget": 50000000000.0,
     "d": 1.0,
     "omega1": 1.0
   },

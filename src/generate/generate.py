@@ -9,7 +9,7 @@ Two kinds of JSON file appear here, and they are NOT the same file:
     CLI's `-meta` argument takes a recipe and never modifies it -- rewriting
     a file the caller authored, out from under them, doesn't make sense.
   - "output metadata": written by `generate(..., out_dir=..., tag=...)` (and
-    by the CLI) to `<out_dir>/<tag>/metadata.json`, alongside the actual
+    by the CLI) to `<out_dir>/<tag>/samples_meta.json`, alongside the actual
     samples at `<out_dir>/<tag>/samples.npz` (see tools/persistence.py).
     Same shape as a recipe but `seed` always resolved to a concrete int, and
     "timing_seconds" (wall-clock draw time per scale) added -- the raw
@@ -22,11 +22,11 @@ tags/seeds produces many different run directories, so "give me a recipe"
 would be ambiguous about which run you mean.
 
 CLI usage (recipe is read-only; writes <out_dir>/<tag>/{samples.npz,
-metadata.json}; default out_dir is `data/` next to the recipe file itself,
+samples_meta.json}; default out_dir is `data/` next to the recipe file itself,
 so each experiment's recipes keep landing in that experiment's own data/):
 
-    python3 generate.py -meta ../experiments/00_synthetic/example_config.json
-    python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
+    python3 generate.py -meta ../experiments/00_synthetic/recipes/samples_example.json
+    python3 generate.py -meta ../experiments/01_srw/recipes/samples_example.json --tag demo_run
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import neyman_allocation, snr_allocation  # noqa: E402
+from artifacts import ARTIFACTS, artifact_path, load_recipe  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402
     content_id,
@@ -102,7 +103,7 @@ def generate(
         anywhere unless out_dir is given).
     out_dir : path, optional
         If given, the run is saved to `<out_dir>/<tag>/` (see
-        tools/persistence.py) -- samples.npz + metadata.json, the latter
+        tools/persistence.py) -- samples.npz + samples_meta.json, the latter
         including per-scale wall-clock time under "timing_seconds".
     tag : str, optional
         Run directory name. Defaults to a hash of the run's content, so an
@@ -226,7 +227,8 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
     data matches what the recorded recipe actually produces."""
     meta = load_metadata(run_dir)
     if meta is None:
-        raise FileNotFoundError(f"no metadata.json in {run_dir}")
+        raise FileNotFoundError(
+            f"no {ARTIFACTS['samples_meta']} in {run_dir}")
     return generate(meta["model"], meta["scales"], meta["n"], meta["params"], seed=meta["seed"])
 
 
@@ -284,8 +286,8 @@ def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Draw samples from a JSON recipe (any model registered in tools/models.py). "
-            "The recipe is never modified; output (samples.npz + metadata.json) is written "
-            "to --out-dir/<tag>/. See experiments/*/example_config.json for recipe shapes."
+            "The recipe is never modified; output (samples.npz + samples_meta.json) is written "
+            "to --out-dir/<tag>/. See experiments/*/samples_example.json for recipe shapes."
         )
     )
     parser.add_argument(
@@ -309,11 +311,11 @@ def _main(argv: list[str] | None = None) -> None:
         help="Override the recipe's seed. The point of this flag is replicates: the same recipe "
         "run at several seeds is exactly what 'independent replicates of one configuration' means "
         "(ground rule 2), and overriding here avoids editing (or copying) the recipe to vary it. "
-        "The resolved seed is always recorded in the run's metadata.json.",
+        "The resolved seed is always recorded in the run's samples_meta.json.",
     )
     args = parser.parse_args(argv)
 
-    cfg = json.loads(args.meta.read_text())
+    cfg = load_recipe(args.meta, "samples")
     model = cfg["model"]
     spec = get_model(model)
     params = cfg["params"]
@@ -347,7 +349,7 @@ def _main(argv: list[str] | None = None) -> None:
     print(f"\nseed     = {resolved_seed}")
     print(f"run_dir  = {rd}")
     print(f"data     = {data_path}")
-    print(f"metadata = {rd / 'metadata.json'}")
+    print(f"metadata = {artifact_path(rd, 'samples_meta')}")
     print(f"(recipe {args.meta} was not modified)")
 
 

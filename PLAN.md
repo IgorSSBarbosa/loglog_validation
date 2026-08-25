@@ -143,7 +143,7 @@ loglog_validation/
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
                                   current status (not started / in progress / passing)
-      example_config.json         recipe(s) for src/generate.py (and, where relevant,
+      samples_example.json         recipe(s) for src/generate.py (and, where relevant,
                                   src/measure_cost.py) -- the model-specific simulator
                                   itself lives in models/<name>.py, not here
       data/                      this experiment's runs (gitignored), one `<tag>/`

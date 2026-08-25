@@ -82,7 +82,7 @@ simulator.
   name-keyed registry (`COST_ESTIMATORS`) so a different estimation approach can be
   added later without touching callers.
 - `src/measure_cost.py` — the shared driver: times `MODELS[model].simulate(k, n=1,
-  ...)` at a small grid of scales (`cost_probe_config.json`: `[256, 1024, 4096, 16384,
+  ...)` at a small grid of scales (`cost_probe.json`: `[256, 1024, 4096, 16384,
   65536, 262144, 1048576]`), 20 repeats each, aggregated by **median** (not mean --
   repeated timings all target the same true deterministic quantity, so noise only ever
   adds delay; this is the one place this experiment departs from the sample-mean
@@ -130,7 +130,7 @@ past the small-$k$ overhead-dominated points.
 
 Run (from `src/`):
 ```
-python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag cost_probe
+python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json --tag cost_probe
 python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
 ```
 
@@ -144,13 +144,13 @@ real (not toy) simulator.
 pattern (extracted from `experiments/00_synthetic/generator.py`, now the shared driver
 for every model) -- draws $n$ i.i.d. $|S_k|$ samples per scale $k$ via
 `MODELS["srw"].simulate` (i.e. `srw(k, n, q, rng)`), seeded and timed the same way, to
-the same run-directory shape every model uses. Recipe (`example_config.json`) mirrors
+the same run-directory shape every model uses. Recipe (`samples_example.json`) mirrors
 `00_synthetic`'s exactly, with `"model": "srw"` and `"params": {"q": 0.5}` standing in
 for `SyntheticParams`:
 
 ```
 cd ../../src    # or wherever src/ is relative to your cwd
-python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
+python3 generate.py -meta ../experiments/01_srw/recipes/samples_example.json --tag demo_run
 python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run --estimates
 ```
 
@@ -182,7 +182,7 @@ $\omega_1=1$.
 
 ```bash
 cd src
-python3 generate.py -meta ../experiments/01_srw/omega1_config.json --tag omega1
+python3 generate.py -meta ../experiments/01_srw/recipes/samples_omega1.json --tag omega1
 python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 \
         --expect-omega1 1.0 --expect-gamma 0.5
 ```
@@ -210,7 +210,7 @@ and caps what any sample size can achieve:
 | $\hat\omega_1$ ceiling | 0.959 | 0.987 | 0.996 | 0.999 | 1.000 |
 
 But dropping small scales shrinks the correction signal, so the allocation has to
-compensate with more samples at the larger scales. `omega1_config.json` uses
+compensate with more samples at the larger scales. `samples_omega1.json` uses
 $8\dots256$ (ceiling $\approx0.995$).
 
 **Precision is the binding constraint, and it is variance, not bias.** The estimator is
@@ -245,7 +245,7 @@ Reproduce (each replicate ~4 min, ~1.4 GB of samples; delete them afterwards, th
 ```bash
 cd src
 for r in 1 2 3 4 5; do
-  sed "s/20260820/2026082$r/; s/5e10/4e10/" ../experiments/01_srw/omega1_config.json > /tmp/rep$r.json
+  sed "s/20260820/2026082$r/; s/5e10/4e10/" ../experiments/01_srw/recipes/samples_omega1.json > /tmp/rep$r.json
   python3 generate.py -meta /tmp/rep$r.json -o ../experiments/01_srw/data --tag omega1_rep$r
   python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_rep$r
   rm -rf ../experiments/01_srw/data/omega1_rep$r/samples   # keep omega1.json!
@@ -267,7 +267,7 @@ testbed where $\gamma=1/2$, $d=1$ and $\omega_1=1$ are all known.
 
 ```bash
 cd src
-python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
+python3 allocation_experiment.py -meta ../experiments/01_srw/recipes/sweep_allocation.json --tag allocation
 ```
 
 The theorem makes two claims that can come apart, and they are tested separately:
@@ -395,14 +395,14 @@ Measured $d$ comes from `data/cost_probe_reps/rep*` (8 independent probes, secon
 
 ```bash
 cd src && for r in 0 1 2 3 4 5 6 7; do
-  python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json \
+  python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json \
       -o ../experiments/01_srw/data --tag cost_probe_reps/rep$r
 done
 ```
 
 ### Extending to lower budgets (2026-08-21) — the RATE law tightens to 0.3 sigma
 
-`allocation_wide_config.json` repeats the sweep over **six** budgets,
+`sweep_wide.json` repeats the sweep over **six** budgets,
 $10^4\dots10^9$, with $m_0\in\{0,\dots,11\}$ and 40 replicates (~58 min).
 Widening the span is the right lever: $\mathrm{se(slope)}$ carries
 $1/\sqrt{S_{xx}}$, and going from 3 budgets over 2 decades to 6 over 5 decades
@@ -831,7 +831,7 @@ one-liner):
 ```bash
 cd src
 for r in 0 1 2 3 4; do
-  python3 generate.py -meta ../experiments/01_srw/omega1_config.json \
+  python3 generate.py -meta ../experiments/01_srw/recipes/samples_omega1.json \
       --tag omega1_b5e10/rep$r --seed $((20260900+r))
   python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1_b5e10/rep$r
   rm -rf ../experiments/01_srw/data/omega1_b5e10/rep$r/samples   # keep omega1.json!

@@ -310,7 +310,7 @@ different model.
 ```bash
 # Part I: constants, tuned allocation, and the m0 sweep
 python3 src/allocation_experiment.py \
-    -meta experiments/01_srw/allocation_wide_config.json --tag allocation_wide
+    -meta experiments/01_srw/recipes/sweep_wide.json --tag allocation_wide
 python3 src/plot_allocation.py -data experiments/01_srw/data/allocation_wide
 python3 src/allocation_table.py --compare
 

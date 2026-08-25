@@ -344,7 +344,7 @@ promises and no more. Experiment C measures whether simulation agrees.
 **Question:** with $(d,\omega_1)$ measured, does `tools/allocation.py`'s
 Proposition `prop:opt` allocation actually beat naive flat allocation at equal budget?
 
-`src/allocation_experiment.py` + `experiments/01_srw/allocation_config.json`. For each
+`src/allocation_experiment.py` + `experiments/01_srw/recipes/sweep_allocation.json`. For each
 $(B, m_0)$ cell it sets $n$ to the largest uniform per-scale count the budget affords,
 draws $R$ independent replicates (`SeedSequence.spawn`, ground rule 2), and estimates
 $\gamma$ with the article's own closed-form $w_{k,m}$ weights (`gamma_closed_form`) —

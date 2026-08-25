@@ -3,7 +3,7 @@ src/measure_cost.py) and consumed by src/plot_loglog.py/src/plot_cost.py.
 
 Each run gets its own directory, named by `tag`: `<out_dir>/<tag>/samples.npz`
 (a compressed {scale: array of n i.i.d. samples} archive) alongside
-`<out_dir>/<tag>/metadata.json` (model, params, scales, n, seed, timing,
+`<out_dir>/<tag>/samples_meta.json` (model, params, scales, n, seed, timing,
 created) -- one run, one self-contained folder, rather than a flat
 `<out_dir>/<tag>.npz` + `<out_dir>/<tag>.json` pair. Once there are dozens of
 runs (different tags, different models) this keeps `data/` from turning into
@@ -52,7 +52,7 @@ def normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:
 
 
 def run_dir(out_dir: str | Path, tag: str) -> Path:
-    """The directory a run's samples.npz + metadata.json live in: <out_dir>/<tag>/."""
+    """The directory a run's samples.npz + samples_meta.json live in: <out_dir>/<tag>/."""
     return Path(out_dir) / tag
 
 
@@ -110,7 +110,7 @@ def load_samples(run_dir: str | Path) -> dict[int, np.ndarray]:
 
 
 def load_metadata(run_dir: str | Path) -> dict | None:
-    """Load <run_dir>/metadata.json. Returns None (not an error) if there's no
+    """Load <run_dir>/samples_meta.json. Returns None (not an error) if there's no
     metadata file -- metadata is optional context (e.g. for a target_fn
     overlay), never required just to plot data."""
     path = artifact_path(Path(run_dir), "samples_meta")

@@ -1,4 +1,5 @@
 {
+  "kind": "sweep",
   "model": "srw",
   "params": {
     "q": 0.5

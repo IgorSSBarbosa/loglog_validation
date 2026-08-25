@@ -10,8 +10,8 @@ of each experiment keeping its own copy.
 cd src
 
 # 1. Generate samples
-python3 generate.py -meta ../experiments/00_synthetic/example_config.json --tag demo_run
-python3 generate.py -meta ../experiments/01_srw/example_config.json --tag demo_run
+python3 generate.py -meta ../experiments/00_synthetic/recipes/samples_example.json --tag demo_run
+python3 generate.py -meta ../experiments/01_srw/recipes/samples_example.json --tag demo_run
 
 # 2. Plot them (log-log) -- add --estimates for the 4-estimator comparison chart
 python3 plot_loglog.py -data ../experiments/00_synthetic/data/demo_run
@@ -19,17 +19,17 @@ python3 plot_loglog.py -data ../experiments/01_srw/data/demo_run --estimates
 
 # 3. Measure the cost-model exponent d (only meaningful for models whose cost
 #    genuinely grows with scale, e.g. srw)
-python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag cost_probe
+python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json --tag cost_probe
 
 # 4. Plot that timing data
 python3 plot_cost.py -data ../experiments/01_srw/data/cost_probe
 
 # 5. Estimate the correction-to-scaling exponent omega_1 from a run (Experiment B)
-python3 generate.py -meta ../experiments/01_srw/omega1_config.json --tag omega1
+python3 generate.py -meta ../experiments/01_srw/recipes/samples_omega1.json --tag omega1
 python3 estimate_omega1.py -data ../experiments/01_srw/data/omega1 --expect-omega1 1.0
 
 # 6. Test the budget-allocation rule prop:opt (Experiment C)
-python3 allocation_experiment.py -meta ../experiments/01_srw/allocation_config.json --tag allocation
+python3 allocation_experiment.py -meta ../experiments/01_srw/recipes/sweep_allocation.json --tag allocation
 
 # 7. Plan a run: precision vs wall-clock, using the tuned allocation
 python3 allocation_table.py --list          # which run groups are available

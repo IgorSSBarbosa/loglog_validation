@@ -71,7 +71,7 @@ from coverage import (  # noqa: E402
 from loglog import gamma_closed_form  # noqa: E402
 from models import get_model  # noqa: E402
 
-# Experiment B's actual configuration (experiments/01_srw/omega1_config.json,
+# Experiment B's actual configuration (experiments/01_srw/recipes/samples_omega1.json,
 # snr allocation at B = 5e10), replayed verbatim so the coverage measured here
 # is the coverage of the interval that was really reported.
 SCALES = [8, 16, 32, 64, 128, 256]

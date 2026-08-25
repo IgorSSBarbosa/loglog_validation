@@ -35,7 +35,7 @@ This module only measures and saves -- it never plots (mirrors
 generate.py/plot_loglog.py's split). See plot_cost.py for the log-log plot.
 
 CLI:
-    python3 measure_cost.py -meta ../experiments/01_srw/cost_probe_config.json --tag my_run
+    python3 measure_cost.py -meta ../experiments/01_srw/recipes/cost_probe.json --tag my_run
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
-from artifacts import artifact_path  # noqa: E402
+from artifacts import artifact_path, load_recipe  # noqa: E402
 from cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
     aggregate,
@@ -144,7 +144,7 @@ def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("--tag", dest="tag", type=str, default="cost_probe")
     args = parser.parse_args(argv)
 
-    cfg = json.loads(args.meta.read_text())
+    cfg = load_recipe(args.meta, "cost_probe")
     model = cfg["model"]
     params = cfg["params"]
     scales = cfg["scales"]
