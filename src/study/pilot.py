@@ -64,6 +64,29 @@ def study_dir(root: Path, name: str) -> Path:
     return Path(root) / name
 
 
+def _refuse_starved_scales(scales, n) -> None:
+    """Stop before drawing anything if the allocation left a scale with n < 2.
+
+    A single draw has no standard error, and sigma_log is what the log-log fit
+    weights by -- so a starved scale does not merely add a weak point, it puts
+    a NaN into the fit. Checked here rather than discovered in summarize_scale
+    because by then the expensive scales have already been drawn.
+    """
+    counts = n if isinstance(n, (list, tuple)) else [n] * len(scales)
+    starved = [int(i) for i, c in zip(scales, counts) if int(c) < 2]
+    if not starved:
+        return
+    raise SystemExit(
+        f"the allocation gives n < 2 at {len(starved)} scale(s): {starved}.\n"
+        f"  A single draw has no spread, so those scales cannot be summarized and\n"
+        f"  the fit they feed would be NaN. The ladder is too wide for the budget.\n"
+        f"  Any of these fixes it:\n"
+        f"    - raise the recipe's \"budget\"\n"
+        f"    - drop the smallest scales (they cost almost nothing and get almost\n"
+        f"      nothing under the snr rule, which spends where the correction is)\n"
+        f'    - set "min_n": 2, accepting that it overspends the stated budget')
+
+
 def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
     """One replicate, summarized: y_bar, sigma_log and cv per scale.
 
@@ -113,6 +136,7 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     # unidentified (0.06 +/- 0.18 measured), while snr at the same wall clock
     # gives 0.98 +/- 0.28.
     n = resolve_n(recipe)
+    _refuse_starved_scales(scales, n)
 
     reps = list(existing or [])
     base = seed if seed is not None else recipe.get("seed")

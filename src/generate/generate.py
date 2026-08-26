@@ -46,6 +46,7 @@ sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 
 from allocation import neyman_allocation, snr_allocation  # noqa: E402
 from artifacts import ARTIFACTS, artifact_path, default_out_dir, load_recipe  # noqa: E402
+from cost_model import declared_exponent  # noqa: E402
 from rng import as_seed_sequence, seed_record  # noqa: E402
 from models import get_model  # noqa: E402
 from persistence import (  # noqa: E402
@@ -264,6 +265,62 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
     return generate(meta["model"], meta["scales"], meta["n"], meta["params"], seed=meta["seed"])
 
 
+#: Why each allocation-rule input exists, printed when a recipe omits one.
+#: These are DESIGN inputs: they decide how the budget is split across scales
+#: and never enter any fit. The pilot measures omega1 and d from the samples;
+#: what these choose is only where the pilot spends them.
+DESIGN_INPUTS = {
+    "d": ('"d": 1.0',
+          "d is Assumption cost_is_power_law's exponent: how the cost of ONE sample\n"
+          "  grows with the scale, cost(i) = i**d. It converts the budget into sample\n"
+          "  counts and nothing else. A model that declares a `cost_hint` supplies it\n"
+          "  automatically -- this model does not, so state it."),
+    "omega1": ('"omega1": 1.0',
+               "omega1 here is a DESIGN input, not an estimate. It sets the SHAPE of the\n"
+               "  allocation, n_i ~ i**(2*omega1), and never reaches an estimator: the fit\n"
+               "  sees only the drawn samples. Use 1.0 if you have no idea -- the rule needs\n"
+               "  the right sign of the trend, not the right value (see snr_allocation)."),
+}
+
+
+def _design_input(n: dict, key: str, rule: str):
+    """One allocation-rule input, or an error that says what it is and why.
+
+    SystemExit, not a bare exception: a recipe missing a key is the author's
+    mistake, not a crash, and a traceback buries the one line that would fix
+    it. Same convention as constants.require (tools/constants.py).
+    """
+    if key in n:
+        return float(n[key])
+    example, why = DESIGN_INPUTS[key]
+    raise SystemExit(
+        f"the {rule!r} allocation rule needs {key!r} in the recipe's \"n\", and this "
+        f"recipe has none.\n"
+        f'  add it:  "n": {{"rule": "{rule}", "budget": ..., {example}}}\n'
+        f"  {why}")
+
+
+def resolve_d(cfg: dict, n: dict, rule: str) -> tuple[float, str]:
+    """The cost exponent an allocation should spend against, and where it came from.
+
+    Taken from the MODEL when it declares a `cost_hint`, which is exact and
+    removes the input from the recipe entirely -- srw's cost_hint says
+    Theta(k), so d = 1 by construction rather than by anyone's assertion. Only
+    a model that declares nothing has to be told.
+
+    An explicit `"d"` in the recipe still wins: a model can be right about its
+    own arithmetic and still not be what the machine is bound by.
+    """
+    if "d" in cfg.get("n", {}):
+        return float(n["d"]), "recipe"
+    spec = get_model(cfg["model"])
+    if spec.cost_hint is not None:
+        return (declared_exponent(cfg["scales"], spec.cost_hint,
+                                  cfg.get("params", {})),
+                f"declared by {cfg['model']}'s cost_hint")
+    return _design_input(n, "d", rule), "recipe"
+
+
 def resolve_n(cfg: dict):
     """Recipe `"n"`: a scalar, an explicit per-scale list, or an allocation rule.
 
@@ -280,28 +337,36 @@ def resolve_n(cfg: dict):
     `snr` (n_i ~ i^(2*omega1), and so needs an extra "omega1" design input)
     equalizes the signal-to-noise ratio of the CORRECTION term -- which is
     what Experiment B actually estimates, and what `neyman` gets wrong.
+
+    A rule's inputs are DESIGN inputs and are treated as such: `d` comes from
+    the model's own declared cost when it has one, `omega1` must be stated, and
+    a missing one is an error naming what it is -- never a silent default. They
+    decide how the budget is SPLIT and never reach an estimator.
     """
     n = cfg["n"]
     if not isinstance(n, dict):
         return n
 
     rule = n.get("rule")
+    if rule not in ("neyman", "snr"):
+        raise SystemExit(
+            f"unknown allocation rule {rule!r} in the recipe's \"n\"; "
+            f"known: 'neyman', 'snr'"
+        )
+    d, d_from = resolve_d(cfg, n, rule)
     common = dict(
         budget=float(n["budget"]),
-        d=float(n["d"]),
+        d=d,
         sigma=n.get("sigma"),
         min_n=int(n.get("min_n", 1)),
     )
     if rule == "neyman":
         alloc = neyman_allocation(cfg["scales"], **common)
-    elif rule == "snr":
-        alloc = snr_allocation(cfg["scales"], omega1=float(n["omega1"]), **common)
     else:
-        raise ValueError(
-            f"unknown allocation rule {rule!r} in recipe 'n'; known: 'neyman', 'snr'"
-        )
+        alloc = snr_allocation(cfg["scales"],
+                               omega1=_design_input(n, "omega1", rule), **common)
     print(
-        f"allocation rule={rule!r} budget={alloc['budget']:.4g} d={n['d']} -> "
+        f"allocation rule={rule!r} budget={alloc['budget']:.4g} d={d:g} ({d_from}) -> "
         f"cost={alloc['cost']:.4g} ({alloc['exhausted']:.1%} of budget)"
     )
     if alloc["exhausted"] > 1.0:
@@ -311,6 +376,22 @@ def resolve_n(cfg: dict):
             file=sys.stderr,
         )
     print(f"  n per scale: {dict(zip(alloc['scales'], alloc['n']))}")
+    starved = [int(i) for i, c in zip(alloc["scales"], alloc["n"]) if c < 2]
+    if starved:
+        sys.stdout.flush()      # keep the warning below the table it refers to
+        # n_i = 1 has no spread, and every consumer of these samples needs one
+        # (sigma_log weights the log-log fit). Better said here, where the
+        # remedy is obvious, than as a NaN three steps downstream.
+        print(
+            f"  warning: {len(starved)} scale(s) got n < 2 -- {starved}.\n"
+            f"  A single draw has no standard error, so these scales cannot be "
+            f"summarized.\n"
+            f"  The ladder is too wide for the budget: under {rule!r}, n spans "
+            f"{max(alloc['n']) / max(min(alloc['n']), 1):.3g}x across it. "
+            f"Raise the budget, drop\n  the smallest scales, or set "
+            f'"min_n": 2 (which will overspend the stated budget).',
+            file=sys.stderr,
+        )
     return alloc["n"]
 
 

@@ -79,6 +79,18 @@ Recipe: `{"kind": "samples", "model": ..., "params": {...}, "scales": [...],
 about *why* those sample counts were chosen (see `tools/allocation.py`; `snr` is the
 right one for measuring $\omega_1$, `neyman` the documented wrong one).
 
+A rule's `d` and `omega1` are **design inputs**: they decide how the budget is *split*
+across scales and never reach an estimator — the fit sees only the drawn samples.
+They are still not allowed to be silent. `d` is taken from the model's own declared
+`cost_hint` when it has one (srw's says $\Theta(k)$, so $d=1$ by construction and the
+key can be omitted); an explicit `"d"` overrides it. `omega1` has no such source and
+must be stated — omitting it is an error naming what the input is, not a `KeyError`.
+Recipes are also checked for **starved scales**: under `snr`, $n_i\propto i^{2\omega_1}$
+spans $(i_{\max}/i_{\min})^{2\omega_1}$ across the ladder, so a wide ladder on a small
+budget floors the smallest scales at $n=1$ — which has no standard error, and
+$\sigma_{\log}$ is what the log-log fit weights by. The allocation warns, and
+`pilot.py` refuses before drawing anything.
+
 `seed` accepts an int, a `SeedSequence`, or `rng.seed_record`'s dict. The
 `SeedSequence` spelling is what lets a caller obeying ground rule 2 hand over one of
 `spawn`'s children — never as `child.entropy`, which would give every sibling the same

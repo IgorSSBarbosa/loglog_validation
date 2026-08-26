@@ -77,6 +77,38 @@ file is regenerated on every `--accept`, so edit the *pilot* recipe and re-plan
 rather than editing it — a hand edit there silently decouples the run from the
 `plan.json` it is reported against.
 
+## Choosing the pilot's ladder
+
+Two forces pull in opposite directions, and the ladder is where they meet.
+
+$\omega_1$ is identified by the correction term $a_1 i^{-\omega_1}$, which is
+**largest at small $i$** and dies out at large $i$. So the ladder has to reach
+down far enough for the correction to be visible at all: a pilot on
+$128..8192$ measures $\hat\omega_1 = 6.8 \pm 2.2$ and $\hat a_1 = 10^{14}$ — the
+correction is below the noise everywhere on that ladder, and the fit is
+free to invent anything.
+
+But the `snr` rule spends $n_i \propto i^{2\omega_1}$, so the sample counts span
+$(i_{\max}/i_{\min})^{2\omega_1}$ across the ladder. Widening it is expensive
+*fast*:
+
+| ladder | $B=10^8$ | $B=10^{10}$ |
+|---|---|---|
+| $2..64$ (6) | 1,335 … 1,367,192 | 133,514 … 136,719,271 |
+| $8..256$ (6, the repo's pilot) | 333 … 341,798 | 33,378 … 34,179,817 |
+| $8..512$ (7) | 41 … 170,898 | 4,172 … 17,089,851 |
+| $2..8192$ (13) | **1** … 10,681 | **1** … 1,068,115 |
+
+At $n_i = 1$ there is no standard error, so those scales cannot be summarized
+at all — `pilot.py` refuses before drawing anything rather than putting a NaN
+into the fit. Note that $2..8192$ is starved even at $10^{10}$: the fix is not
+a bigger budget, it is a narrower ladder.
+
+**Keep it to about 6 scales** (`plan.py`'s default `--m 6`), starting small
+enough that the correction is resolved, and buy precision with the *budget*
+rather than with ladder width. The final run's ladder is chosen for you —
+`plan.py` picks $m_0$ and hands `run.py` a ladder of $m$ scales from it.
+
 ## The pilot cannot determine $\omega_1$, and says so
 
 This is the single most important thing to know about the workflow.

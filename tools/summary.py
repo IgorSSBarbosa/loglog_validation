@@ -37,10 +37,24 @@ SUMMARY_FIELDS = ("y_bar", "sigma_log", "cv")
 def summarize_scale(draws) -> tuple[float, float, float]:
     """(y_bar, sigma_log, cv) for one scale's draws, in a single pass.
 
-    `ddof=1` because these are estimates from a sample, not a population.
+    `ddof=1` because these are estimates from a sample, not a population --
+    which is also why a single draw is refused rather than summarized: two of
+    the three numbers are spreads, and a spread of one point does not exist.
+    An allocation that puts n=1 on a scale has starved it, and the log-log fit
+    weights by sigma_log, so a NaN there silently poisons the whole fit.
     """
     s = np.asarray(draws, dtype=float)
+    if s.size < 2:
+        raise ValueError(
+            f"a summary needs at least 2 draws; got {s.size}. The allocation "
+            f"starved this scale -- raise the budget, drop the smallest scales, "
+            f'or set "min_n": 2 in the recipe\'s "n".')
     mean = float(s.mean())
+    if mean == 0.0:
+        raise ValueError(
+            f"all {s.size} draws at this scale are zero, so y_bar = 0 and the "
+            f"log-log fit has nothing to take a logarithm of. Almost always the "
+            f"same starved-scale problem: too few draws at too small a scale.")
     sd = float(s.std(ddof=1))
     return mean, float(sd / (np.sqrt(s.size) * mean)), float(sd / mean)
 
