@@ -110,7 +110,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 |---|---|---|---|---|
 | `loglog.py` | 253 | `statistical tool` | Four $\hat\gamma$ estimators + the article's closed-form eq. (526) weights. **The canonical weight definition** — `allocation.py` and `wilson.py` import it. | — |
 | `correction.py` | 215 | `statistical tool` | Two $\omega_1$ estimators: direct fit of eq. (232), and bias-decay fit. Non-convex in $\omega_1$, hence multi-restart. | — |
-| `allocation.py` | 405 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
+| `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
 | `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. | `loglog` |
 | `wilson.py` | 276 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. | `loglog` |
 | `coverage.py` | 356 | `statistical tool` | Calibration harness: do our stated error bars cover? `coverage_test`, `coverage_multi`, `rescore`, `combine_se`, Welch–Satterthwaite dof. | — |
@@ -129,11 +129,11 @@ Split into four layers on 2026-08-25 (see §5.3).
 | `generate/generate.py` | 357 | `experiment`, `tool` | Draw samples per a recipe. Allocation rules (`snr`/`neyman`), chunked output for large $n$. | `allocation`, `models`, `persistence` |
 | `estimate/measure_cost.py` | 214 | `experiment`, `budget tool` | **Experiment A**: time `simulate()` per scale, fit $d$, and score it against the model's declared `cost_hint`. | `cost_model`, `loglog`, `models`, `persistence` |
 | `estimate/estimate_omega1.py` | 198 | `experiment`, `statistical tool` | **Experiment B**: $\omega_1$, $a_1$, $\gamma$, $a_0$ from one run. | `correction`, `loglog`, `persistence` |
-| `budget/allocation_experiment.py` | 388 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
-| `estimate/check_coverage.py` | 435 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation_experiment`, … |
+| `budget/allocation_experiment.py` | 348 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
+| `estimate/check_coverage.py` | 461 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation`, `generate`, … |
 | `budget/allocation_table.py` | 630 | `budget tool`, `statistical tool` | Planning: precision vs wall clock. Discovers run groups, pools replicates, reports provenance. **Largest module — see §5.** | `allocation`, `correction`, `persistence` |
 | `budget/verify_prediction.py` | 190 | `experiment`, `budget tool` | Runs tuned ladders for real; predicted vs measured seconds and RMSE. | `allocation`, `allocation_table`, `loglog`, … |
-| `report/plot_allocation.py` | 325 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
+| `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
 | `report/plot_cost.py` | 88 | `plot tool` | Cost-probe timings. | `loglog_plot` |
 
@@ -169,6 +169,9 @@ Split into four layers on 2026-08-25 (see §5.3).
 | `allocation_constants` | allocation | $C_b$, $C_s$, $G$, $\kappa$, offset |
 | `tuned_allocation` | allocation | eq. (946) + restored constant |
 | `predict_error` | allocation | bias/sd/RMSE for a given ladder |
+| `ladder` | allocation | **def:alloc**'s scale set; rejects rounding collisions |
+| `n_for_budget` | allocation | largest uniform $n$ within $B$ |
+| `rate_exponent`, `rate_exponent_se` | allocation | eq. (941)/(966) decay slope + its own error |
 | `snr_allocation` | allocation | $n_i\propto i^{2\omega_1}$ — right for $\omega_1$ |
 | `neyman_allocation` | allocation | $n_i\propto i^{-d/2}$ — kept as the documented *wrong* answer |
 | `estimate_cost_exponent` | cost_model | pure power-law $d$ |
@@ -212,12 +215,9 @@ Split into four layers on 2026-08-25 (see §5.3).
 | `generate`, `reproduce` | generate | draw / regenerate from a recipe |
 | `measure` | measure_cost | time `simulate()` per scale |
 | `estimate` | estimate_omega1 | both $\omega_1$ estimates for a run |
-| `ladder` | allocation_experiment | `def:alloc` scales; rejects rounding collisions |
-| `n_for_budget` | allocation_experiment | largest uniform $n$ within $B$ |
 | `run_cell` | allocation_experiment | one replicate |
 | `sweep` | allocation_experiment | the $m_0\times B$ grid, both arms |
 | `summarize` | allocation_experiment | per-budget arm scoring |
-| `rate_exponent`, `rate_exponent_se` | allocation_experiment | decay slope + its own error |
 | `exact_mean`, `exact_sd` | check_coverage | srw truth (scoring only) |
 | `make_experiment` | check_coverage | replay Experiment B, both centres |
 | `make_wilson_experiment` | check_coverage | eq. (720) coverage arm |
@@ -240,7 +240,7 @@ Things the table makes visible, offered as input to a future restructuring.
 **Items 3 and part of 6 have since been acted on** (2026-08-25) and are kept here
 with their outcome, rather than deleted, so the reasoning stays readable.
 
-1. **`src/budget/allocation_table.py` is 627 lines and does three jobs**: discovering
+1. **`src/budget/allocation_table.py` is 630 lines and does three jobs**: discovering
    run groups on disk, extracting measured constants with provenance, and
    rendering tables. The first two are library work that `plot_allocation.py`,
    `verify_prediction.py` and `check_coverage.py` all reach into `src/` to get —

@@ -403,3 +403,73 @@ def optimal_allocation(B: float, d: float, omega1: float, rho: float, m: int) ->
         "theta_feasible": feasible(theta1, theta2, d),
         "integer_feasible": integer_feasible,
     }
+
+
+# ---------------------------------------------------------------------------
+# The ladder itself, and how fast its error falls with the budget.
+#
+# These lived in src/budget/allocation_experiment.py until 2026-08-25, where
+# two other src/ modules had to reach sideways into a driver to use them
+# (CATALOG.md section 5.1). They are generic allocation math with no dependence
+# on the sweep: `ladder` is Definition def:alloc's scale set, and the rate pair
+# measures eq. (941)/(966)'s decay exponent from any (budget, error) series.
+# ---------------------------------------------------------------------------
+
+def ladder(m0: int, m: int, rho: float) -> list[int]:
+    """The scales of Definition def:alloc: rho**k for k = m0+1, ..., m0+m.
+
+    Rounds to integers, and refuses to return a grid where that rounding has
+    collided. At rho = 1.5, m0 = 0, m = 6 the naive result is
+    [2, 2, 3, 5, 8, 11]: two scales equal, so the ladder has m-1 distinct
+    points while every downstream formula assumes m. `gamma_closed_form` would
+    catch it -- its grid check rejects anything that is not exactly rho**k --
+    but only after the samples had been drawn, and `total_cost` would already
+    have charged for the duplicate. Raise here instead.
+    """
+    if m < 2:
+        raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
+    scales = [int(round(rho ** k)) for k in range(m0 + 1, m0 + m + 1)]
+    if len(set(scales)) != len(scales):
+        raise ValueError(
+            f"rho={rho} with m0={m0}, m={m} rounds to a grid with repeated "
+            f"scales {scales}; use an integer rho (or a larger m0) so that "
+            f"rho**k are distinct integers")
+    return scales
+
+
+def n_for_budget(budget: float, m0: int, m: int, rho: float, d: float) -> int:
+    """Largest uniform per-scale n whose ladder cost stays within `budget`."""
+    return int(budget / total_cost(1.0, m0, m, rho, d))
+
+
+def rate_exponent(budgets, rmses) -> float:
+    """Slope of log(rmse) vs log(budget) -- the measured error-decay exponent."""
+    import numpy as np
+
+    x, y = np.log(np.asarray(budgets, float)), np.log(np.asarray(rmses, float))
+    return float(np.polyfit(x, y, 1)[0])
+
+
+def rate_exponent_se(budgets, replicates: int) -> float:
+    """Standard error of `rate_exponent`, from the noise in each RMSE.
+
+    An RMSE estimated from R replicates is itself a random quantity: it is
+    sqrt of a mean of squares, so its RELATIVE standard deviation is about
+    1/sqrt(2R), and hence sd(log RMSE) ~ 1/sqrt(2R) too. The slope of an OLS
+    line through points with that much scatter has
+
+        se(slope) = sd(log rmse) / sqrt(Sxx),   Sxx = sum (log B - mean log B)^2
+
+    Derived from the known noise rather than from the fit residuals on
+    purpose: these sweeps use 3-4 budgets, so a residual-based estimate would
+    have 1-2 degrees of freedom and be nearly useless. Without this the
+    measured exponent looks exact, and comparing it to a predicted one with
+    error bars silently overstates any disagreement.
+    """
+    import numpy as np
+
+    x = np.log(np.asarray(budgets, float))
+    sxx = float(((x - x.mean()) ** 2).sum())
+    if sxx <= 0 or replicates < 1:
+        return float("nan")
+    return float((1.0 / math.sqrt(2 * replicates)) / math.sqrt(sxx))

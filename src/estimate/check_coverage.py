@@ -1,4 +1,4 @@
-"""Checkpoint 0.4: are this repo's error bars calibrated?
+"""Check if the error bars of this repo are calibrated using SRW
 
 Runs Experiment B's estimation pipeline end to end, hundreds of times, against
 srw's known ground truth, and counts how often the interval it reports actually
@@ -52,10 +52,14 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
-sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
 sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
 
-from allocation_experiment import ladder, rate_exponent, rate_exponent_se  # noqa: E402
+from allocation import (  # noqa: E402
+    ladder,
+    n_for_budget,
+    rate_exponent,
+    rate_exponent_se,
+)
 from correction import fit_correction  # noqa: E402
 from wilson import (  # noqa: E402
     format_interval,
@@ -288,7 +292,6 @@ def make_rate_experiment(budgets, replicates: int, d: float, omega1: float,
     not by being noisy. Worth its own arm.
     """
     from allocation import optimal_allocation
-    from allocation_experiment import n_for_budget
 
     truth_slope = -omega1 / (d + 2 * omega1)
 

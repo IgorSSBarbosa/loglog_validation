@@ -22,7 +22,7 @@ one several others import, because it owns the article's weight definition:
 |---|---|---|
 | `loglog.py` | four $\hat\gamma$ estimators + eq. (526) weights — **the canonical definition** | — |
 | `correction.py` | two $\omega_1$ estimators (direct fit of eq. 232, and bias decay) | — |
-| `allocation.py` | `prop:opt` (eq. 945–946), `lem:budget` costs, the tuned constant $\kappa$, `snr`/`neyman` | `loglog` |
+| `allocation.py` | `prop:opt` (eq. 945–946), `lem:budget` costs, the tuned constant $\kappa$, `snr`/`neyman`, the `ladder` itself and its decay rate | `loglog` |
 | `cost_model.py` | cost exponent $d$: pure + affine fits, timing aggregators, declared-vs-measured | `loglog` |
 | `wilson.py` | eq. (720)'s four-term bound, **for $\gamma$ only** | `loglog` |
 | `coverage.py` | do our stated error bars actually cover? | — |
@@ -284,7 +284,16 @@ resolved hundreds of times over, and starves the large ones, where it has sunk
 below the noise (measured SNR 460 at $k=2$ down to 0.25 at $k=1024$).
 `snr_allocation` ($n_i\propto s_i^2 i^{2\omega_1}$, *increasing* in $i$)
 equalizes the correction term's signal-to-noise ratio across scales instead,
-and is what `experiments/01_srw/recipes/samples_omega1.json` uses. Verified:
+and is what `experiments/01_srw/recipes/samples_omega1.json` uses. `ladder` builds Definition `def:alloc`'s scale set $\rho^k$, $k=m_0+1..m_0+m$, and
+refuses a grid whose rounding has collided ($\rho=1.5$, $m_0=0$, $m=6$ rounds to
+$[2,2,3,5,8,11]$ -- $m-1$ distinct points where every downstream formula assumes
+$m$). `n_for_budget` inverts `total_cost`. `rate_exponent`/`rate_exponent_se`
+measure eq. (941)/(966)'s decay exponent from any (budget, error) series, the second
+deriving its error bar from the known $1/\sqrt{2R}$ noise in an RMSE rather than
+from 3-4 fit residuals. These four lived in `src/budget/allocation_experiment.py`
+until 2026-08-25, where `check_coverage` and `plot_allocation` had to reach sideways
+into a driver to use them (CATALOG.md §5.1); they are generic allocation math with
+no dependence on the sweep. Verified:
 `tools/tests/test_allocation.py` (47 cases — $\theta_1+d\theta_2=1$ exactly,
 continuous allocation costs exactly $B$, discretized allocation never exceeds
 $B$ when feasible, the small-$B$ infeasibility case, both new rules' closed-form
