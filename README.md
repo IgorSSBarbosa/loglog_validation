@@ -49,7 +49,10 @@ flowchart LR
     end
 
     RCP --> PI
+    PN -. "writes the final recipe" .-> RCP
     RCP --> GEN --> PL
+    PI -. calls .-> GEN
+    RN -. calls .-> GEN
     RCP --> MC --> PC
     GEN --> EO
     MC -- d --> AT
@@ -65,6 +68,12 @@ flowchart LR
 Solid arrows carry data or measured constants. `src/` holds the eight pipeline
 drivers, `calibration/` the two that check the pipeline itself; the functions they all
 call live in `tools/`, and the simulators in `models/`.
+
+There is exactly **one sampler** — `generate.py`. `pilot.py` and `run.py` do not draw
+samples themselves; each calls it once, differing only in what it does with the
+result (measure the constants, or execute an accepted plan). That is why the dotted
+arrow closes the loop: `plan.py --accept` writes its allocation back out as an
+ordinary recipe, so the planned run is the same kind of thing as any other run.
 
 | layer | asks | reads | writes |
 |---|---|---|---|

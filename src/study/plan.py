@@ -38,7 +38,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src" / "budget"))
 
 from allocation import allocation_constants, ladder, predict_error, tuned_allocation  # noqa: E402
-from artifacts import artifact_path, read_artifact, write_artifact  # noqa: E402
+from artifacts import (  # noqa: E402
+    artifact_path,
+    read_artifact,
+    recipe_name,
+    recipes_dir,
+    write_artifact,
+)
 from constants import format_table, load, require  # noqa: E402
 
 from allocation_table import human_time, input_sensitivity  # noqa: E402
@@ -121,6 +127,53 @@ def error_budget(consts, *, d, omega1, rho, m, a1, cv) -> list[dict]:
     return out
 
 
+def final_recipe(source: dict, plan: dict, study: str) -> dict:
+    """The accepted plan, written out as a samples recipe.
+
+    This is the handoff. `plan.json` describes a decision -- m0, the RMSE it
+    should buy, the constants it was made from -- and is not runnable; the
+    recipe is the same allocation in the one format every driver in the repo
+    already reads, so the planned run is not a special case:
+
+        python3 src/generate/generate.py -meta <this file>     # draw it
+        python3 src/study/run.py --study <name> ...            # ...or draw it
+                                                               # with replicates
+                                                               # and summaries
+
+    Model and params come from `source`, the pilot's own recipe, so the final
+    run is guaranteed to draw the same thing the constants were measured on.
+    `seed` is null: a plan fixes the allocation, not the randomness, and
+    ground rule 2 (PLAN.md) says every configuration draws fresh.
+    """
+    return {
+        "kind": "samples",
+        "model": source["model"],
+        "params": source.get("params", {}),
+        "scales": list(plan["scales"]),
+        "n": int(plan["n"]),
+        "seed": None,
+        "replicates": int(plan.get("replicates", 1)),
+        "_generated_by": "src/study/plan.py",
+        "_study": study,
+        "_note": [
+            "GENERATED -- rewritten every time this study's plan is accepted.",
+            "Edit the pilot recipe and re-plan rather than editing this file;",
+            "run.py reads it back, so a hand edit here silently decouples the",
+            "run from the plan.json it is reported against.",
+        ],
+    }
+
+
+def write_final_recipe(data_root, study: str, source: dict, plan: dict) -> Path:
+    """Put the final recipe beside the experiment's hand-authored ones."""
+    d = recipes_dir(data_root)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / recipe_name("samples", f"{study}_final")
+    path.write_text(json.dumps(final_recipe(source, plan, study),
+                               indent=2, sort_keys=True))
+    return path
+
+
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--study", required=True)
@@ -156,11 +209,9 @@ def _main(argv=None) -> None:
     a1 = require(consts, "a1").value
     cv = require(consts, "cv").value
 
-    tp = a.throughput
-    if tp is None:
-        pj = artifact_path(sd, "pilot")
-        pilot = json.loads(pj.read_text()) if pj.exists() else {}
-        tp = pilot.get("throughput")
+    pj = artifact_path(sd, "pilot")
+    pilot = json.loads(pj.read_text()) if pj.exists() else {}
+    tp = a.throughput if a.throughput is not None else pilot.get("throughput")
     if tp is None:
         raise SystemExit(
             "no throughput measured. The pilot records one from its own draw;\n"
@@ -226,12 +277,21 @@ def _main(argv=None) -> None:
               f"t({R - 1}) widening")
 
     if a.accept:
+        if "recipe" not in pilot:
+            raise SystemExit(
+                f"{pj} has no 'recipe', so the plan cannot say WHAT to draw.\n"
+                f"  Re-run the pilot with -meta <recipe> to record it.")
         pl["constants_at_plan_time"] = {k: vars(v) for k, v in consts.items()}
         pl["rho"], pl["m"], pl["throughput"] = a.rho, a.m, tp
+        rp = write_final_recipe(a.data_root, a.study, pilot["recipe"], pl)
+        pl["recipe_path"] = str(rp)
         write_artifact(sd, "plan", pl, produced_by="src/study/plan.py")
         print(f"\naccepted -> {artifact_path(sd, 'plan')}")
+        print(f"recipe   -> {rp}")
         print(f"next: python3 src/study/run.py --study {a.study} "
               f"--data-root {a.data_root}")
+        print(f"  or, for a single un-replicated draw with the samples kept:")
+        print(f"      python3 src/generate/generate.py -meta {rp}")
     else:
         print("\nnothing was drawn and no plan was written.")
         print(f"  To accept:  python3 src/study/plan.py --study {a.study} "

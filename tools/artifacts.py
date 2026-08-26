@@ -313,6 +313,19 @@ def default_out_dir(recipe_path) -> Path:
     return base / "data"
 
 
+def recipes_dir(data_root) -> Path:
+    """Where an experiment's recipes live, given its `data/`.
+
+    The inverse of `default_out_dir`: that maps recipes/ -> data/, this maps
+    data/ -> recipes/. Needed since src/study/plan.py started WRITING a recipe
+    (the final run's), and a generated recipe belongs beside the hand-authored
+    ones -- `generate.py -meta` then resolves its own output directory back to
+    the same data/ the study lives in, with no --out-dir to remember.
+    """
+    root = Path(data_root).resolve()
+    return root.parent / RECIPE_DIR
+
+
 def recipe_name(kind: str, name: str) -> str:
     """Canonical recipe filename: <prefix>_<name>.json, e.g. samples_omega1.json."""
     if kind not in RECIPES:
