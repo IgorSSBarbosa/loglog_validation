@@ -47,14 +47,30 @@ This is the single most important thing to know about the workflow.
 Measured on srw at scales $8..256$, $\hat\omega_1$ from one pilot, across
 independent seeds:
 
-| pilot | wall clock | $\hat\omega_1$ across seeds | truth |
-|---|---|---|---|
-| $B=10^8$, R=3 | 2.3 s | 0.05, 0.07, 0.27, **0.81**, **0.98**, 2.07, 2.49, 13.0 | 1 |
-| $B=10^9$, R=3 | 21 s | 0.07, 0.07, 0.36, **0.97**, **1.07**, 1.43, 1.93, 2.32 | 1 |
+| pilot | wall clock | $\hat\omega_1$ across 8 seeds | median | spread (MAD) |
+|---|---|---|---|---|
+| $B=10^8$, R=3 | 2.3 s | 0.05, 0.07, 0.27, 0.81, 0.98, 2.07, 2.49, **13.0** | 0.90 | 0.84 |
+| $B=10^9$, R=3 | 21 s | 0.07, 0.07, 0.36, 0.97, 1.07, 1.43, 1.93, 2.32 | 1.02 | 0.79 |
+| $B=5\times10^9$, R=3 | 109 s | 0.35, 0.53, 0.58, 0.79, 1.09, 1.32, 1.58, 1.88 | 0.94 | 0.40 |
 
-The median is right (0.89, 1.02) — the estimator is not biased. **Any single
-short pilot is a lottery.** Experiment B needed $B = 5\times10^{10}$ and 6
-replicates to reach $0.984 \pm 0.111$.
+Truth is $1$. **The median is right at every budget** — the estimator is not
+biased, and no amount of averaging pilots would reveal a problem. What is wrong
+is the spread of any *single* one.
+
+It does converge, at about the rate theory says: between the last two rows the
+MAD shrinks like $B^{-0.42}$, against the $B^{-1/2}$ of a well-behaved estimator.
+(The first row is too broad to fit — its MAD is meaningless when one draw lands
+at 13.) Extrapolating that rate, reaching $\mathrm{se}(\hat\omega_1)\approx0.1$
+needs $B\approx10^{11}$ at $R=3$ — **tens of minutes, not a pilot**. Experiment B
+in fact used $B = 5\times10^{10}$ with 6 replicates to reach $0.984 \pm 0.111$,
+which is the same place by a different route.
+
+So the practical guidance is not "run a longer pilot until $\omega_1$ is sharp".
+It is: accept that a pilot bounds $\omega_1$ loosely, let `plan` tell you what
+that costs, and spend the compute on the final run instead — the optimum in
+$m_0$ is quadratic, so being a step off costs only ~1.1x in RMSE. A badly
+*unidentified* pilot is a different matter, and that is what the strongest
+verdict is for.
 
 So `plan` refuses to pretend. It prints an error budget — how far each
 constant's own standard error moves the optimal $m_0$, and what that costs in
