@@ -45,6 +45,8 @@ from persistence import run_dir as _run_dir  # noqa: E402
 
 from generate import generate  # noqa: E402
 
+from constants import format_table, measured, require  # noqa: E402
+
 from allocation_table import (  # noqa: E402
     choose_group,
     discover_groups,
@@ -150,13 +152,24 @@ def _main(argv: list[str] | None = None) -> None:
     groups = discover_groups(root)
     group = choose_group(groups, requested=args.group, interactive=False)
     runs = group["runs"] if group else []
-    a1, a1_se, a1_src = measured_a1(runs)
-    cv, cv_src = measured_cv(runs[0]) if runs else measured_cv(root / "omega1")
+    a1_v, a1_se, a1_src = measured_a1(runs)
+    cv_v, cv_src = measured_cv(runs[0]) if runs else measured_cv(root / "omega1")
     tp_json = artifact_path(root / "allocation", "allocation_sweep")
-    tp, tp_src = measured_throughput(tp_json)
+    tp_v, _, tp_src = measured_throughput(tp_json)
 
-    print(f"constants: a1={a1:+.4f} ({a1_src}); cv={cv:.4f} ({cv_src});")
-    print(f"           throughput={tp:.3g} steps/s ({tp_src})")
+    # Same discipline as the table being checked: no fallbacks, so a missing
+    # constant stops here rather than silently sizing a real timed run.
+    found = {n: measured(v, se, src)
+             for n, v, se, src in (("a1", a1_v, a1_se, a1_src),
+                                   ("cv", cv_v, None, cv_src),
+                                   ("throughput", tp_v, None, tp_src))
+             if v is not None}
+    a1 = require(found, "a1").value
+    cv = require(found, "cv").value
+    tp = require(found, "throughput").value
+
+    print("constants")
+    print(format_table(found, order=("a1", "cv", "throughput")))
     if group:
         print(f"run group: {group['name']!r} ({group['replicates']} replicate(s))")
     print(f"\nrunning {len(args.m0)} ladders x {args.replicates} replicates "

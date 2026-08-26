@@ -273,6 +273,9 @@ def _main(argv: list[str] | None = None) -> None:
         if groups:
             expected = measured_correction(groups[0]["runs"])
             d_hat, d_se, d_src = measured_cost_exponent(args.data.parent)
+            if d_hat is None:                     # no cost probe: fall back to
+                d_hat, d_src = result["d"], (     # the sweep's own design value,
+                    f"sweep recipe's design value (no cost probe found)")  # named as such
             expected["d"], expected["d_se"] = d_hat, d_se
             expected["predicted_rate"] = predicted_rate(
                 expected["omega1"], d_hat,

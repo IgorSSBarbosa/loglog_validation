@@ -15,7 +15,7 @@ not a subfolder of it — see `models/README.md`) + one entry in `tools/models.p
 registry; `tools/models.py` itself is purely an importer/registry module, not where
 the simulation logic lives.
 
-Eleven modules. The dependency graph is shallow on purpose — `loglog.py` is the only
+Twelve modules. The dependency graph is shallow on purpose — `loglog.py` is the only
 one several others import, because it owns the article's weight definition:
 
 | module | what it owns | imports |
@@ -28,6 +28,7 @@ one several others import, because it owns the article's weight definition:
 | `coverage.py` | do our stated error bars actually cover? | — |
 | `artifacts.py` | what every file on disk is called, in or out | — |
 | `rng.py` | seeding, and how a seed is recorded so a run regenerates | — |
+| `constants.py` | meta-constants with their errors and provenance; no fallbacks | — |
 | `persistence.py` | run directories, samples, metadata, content hashing | — |
 | `models.py` | the `MODELS` registry — a pure importer | `models/` |
 | `loglog_plot.py` | the two charts | — |
@@ -371,5 +372,22 @@ as `SeedSequence` objects and are recorded as `{"entropy": ..., "spawn_key": [..
 `samples_meta.json` already on disk still loads unchanged. Verified:
 `tools/tests/test_rng.py` (9 cases, including the collapse itself, asserted in both
 directions).
+
+`constants.py` — every number that reaches an allocation decision ($d$, $\omega_1$,
+$a_1$, cv, throughput) is an *estimate*, and this module refuses to let one travel
+anonymously. A constant is **measured** (value, error where one exists, and a
+provenance string naming the file), a **user override** (stamped, and printed
+`<-- NOT MEASURED`), or **absent** — and absent is a `SystemExit` naming both the flag
+that supplies it and the command that would measure it.
+
+It exists because of a real defect. `allocation_table.py` used to define
+`FALLBACK_D = 1.0` and `FALLBACK_CV = sqrt(pi/2 - 1)` — srw's **exact truths** — so on
+srw the table printed the right answer whether or not anything had been measured. Worse,
+`--d` and `--omega1` *defaulted* to `1.0` with no provenance marker at all, so every
+table this repo published silently used $\omega_1=1$ while Experiment B's own runs
+measured $0.907$, $0.986$, $1.198$, $0.486$. The agreement was partly the default.
+`se=None` (one replicate, no spread) is deliberately distinct from absent, and
+`format_table` renders the two differently. Verified: `tools/tests/test_constants.py`
+(9 cases).
 
 Not started yet — planned module (see `PLAN.md` repo layout): `bootstrap.py`.

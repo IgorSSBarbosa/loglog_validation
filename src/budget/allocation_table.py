@@ -48,17 +48,24 @@ from allocation import (  # noqa: E402
     total_cost,
     tuned_allocation,
 )
+from constants import (  # noqa: E402
+    Constant,
+    format_table,
+    measured,
+    override,
+    require,
+)
 from correction import fit_correction  # noqa: E402
 from persistence import load_samples  # noqa: E402
 
-# Fallbacks, used only when the corresponding measured run is absent. Each is
-# the value this repo actually measured, so the table degrades to "last known
-# good" rather than to a guess.
-FALLBACK_A1 = -0.2748          # Experiment B, 5 replicates (truth -1/4)
-FALLBACK_CV = sqrt(3.14159265358979 / 2 - 1)   # half-normal limit for |S_k|
-FALLBACK_THROUGHPUT = 1.53e8   # steps/second, Experiment C's sweep
-FALLBACK_D = 1.0               # srw is Theta(k) by construction
-FALLBACK_OMEGA1 = 1.0155      # Experiment B, 5 replicates (truth 1)
+# There are no fallback constants any more, deliberately -- see tools/constants.py
+# for the full argument. Briefly: the old FALLBACK_D = 1.0 and
+# FALLBACK_CV = sqrt(pi/2 - 1) were srw's EXACT truths, so on srw the table
+# printed the right answer whether or not anything had been measured; and
+# --d / --omega1 defaulted to 1.0 with no provenance marker, so every table
+# this repo published silently used omega1 = 1 while Experiment B's own runs
+# measured 0.907, 0.986, 1.198, 0.486. A missing constant is now an error that
+# names the flag and the command that would produce it.
 
 
 def _fit_summary(d: Path) -> dict | None:
@@ -241,8 +248,7 @@ def measured_correction(run_dirs) -> dict:
                 "a1_triple": (a1, a1_se, prov)}
 
     if not loaded:
-        return _out(FALLBACK_A1, None, FALLBACK_OMEGA1, None,
-                    "FALLBACK -- no omega1.json found", 0)
+        return _out(None, None, None, None, "no omega1.json found", 0)
 
     a1s = [r["direct_fit"]["a1"] for r in loaded]
     oms = [r["direct_fit"]["omega1"] for r in loaded]
@@ -274,7 +280,7 @@ def measured_correction(run_dirs) -> dict:
                 f"-- this retains a nonlinear bias, see measured_a1's docstring)", R)
 
 
-def measured_cv(run_dir) -> tuple[float, str]:
+def measured_cv(run_dir) -> tuple[float | None, str]:
     """Coefficient of variation sd(Y_i)/E(Y_i), averaged over scales.
 
     Also reports the spread across scales: the allocation math assumes cv is
@@ -282,7 +288,7 @@ def measured_cv(run_dir) -> tuple[float, str]:
     """
     rd = Path(run_dir)
     if not (rd / "samples.npz").exists() and not (rd / "samples").is_dir():
-        return FALLBACK_CV, "FALLBACK -- no samples found"
+        return None, "no samples found"
     s = load_samples(rd)
     per_scale = [float(np.std(v, ddof=1) / np.mean(v)) for _, v in sorted(s.items())]
     return float(np.mean(per_scale)), (
@@ -314,7 +320,7 @@ def measured_cost_exponent(data_root) -> tuple[float, float | None, str]:
         if isinstance(aff, dict) and "d" in aff and aff.get("converged", True):
             ds.append(float(aff["d"]))
     if not ds:
-        return FALLBACK_D, None, "FALLBACK -- no cost-probe cost_probe.json found"
+        return None, None, "no cost_probe.json found"
     if len(ds) == 1:
         return ds[0], None, "measured, 1 cost probe (no stderr available)"
     se = float(np.std(ds, ddof=1) / sqrt(len(ds)))
@@ -350,14 +356,18 @@ def predicted_rate(omega1: float, d: float, *, omega1_se=None, d_se=None) -> dic
             "contributions": parts, "omega1": omega1, "d": d}
 
 
-def measured_throughput(result_json) -> tuple[float, str]:
-    """Simulated steps per second, from Experiment C's own wall clock."""
+def measured_throughput(result_json) -> tuple[float | None, None, str]:
+    """Simulated steps per second, from Experiment C's own wall clock.
+
+    Returns (value, se, provenance) for symmetry with the other measured_*
+    helpers; there is no se -- it is one wall-clock ratio, not a spread.
+    """
     p = Path(result_json)
     if not p.exists():
-        return FALLBACK_THROUGHPUT, "FALLBACK -- no allocation_sweep.json found"
+        return None, None, "no allocation_sweep.json found"
     r = json.loads(p.read_text())
     steps = sum(c["cost"] * r["replicates"] for c in r["cells"] if not c["skipped"])
-    return steps / r["elapsed_seconds"], (
+    return steps / r["elapsed_seconds"], None, (
         f"measured, {steps:.3g} steps in {r['elapsed_seconds']:.0f}s"
     )
 
@@ -404,6 +414,60 @@ def offset_uncertainty(d, omega1, rho, m, a1, cv, a1_se) -> dict | None:
     r = 2 * omega1 / d
     penalty = sqrt((rho ** (-2 * spread * omega1) + r * rho ** (d * spread)) / (1 + r))
     return {"offset": base, "lo": lo, "hi": hi, "spread": spread, "penalty": penalty}
+
+
+def input_sensitivity(name: str, se: float, *, d, omega1, rho, m, a1, cv) -> dict:
+    """How far ONE input's own standard error moves the plan, and what it costs.
+
+    Generalizes `offset_uncertainty`, which only ever varied a1. That was the
+    wrong one to single out: a1 enters the offset only through
+    log_rho(|a1'|/|a1|), so even a 25% error barely moves m0, whereas omega1
+    sits in theta2 = 1/(d + 2*omega1) AND in the exponent rho^(-m0*omega1), and
+    is by far the hardest of the three to measure. Reporting the a1 line alone
+    made the plan look better determined than it is.
+
+    Returns the shift in the tuned m0 and the RMSE penalty of being that far
+    off. The penalty is the same quadratic-flatness formula as
+    `offset_uncertainty`'s -- near the optimum a shift of delta costs
+    sqrt((rho^(-2*delta*omega1) + (2*omega1/d)*rho^(d*delta)) / (1 + 2*omega1/d)),
+    which is why a whole step of m0 is worth only about 1.1x.
+    """
+    kw = dict(rho=rho, m=m, a1=a1, cv=cv)
+    base = allocation_constants(d, omega1, **kw)["offset"]
+
+    def offset_at(**bump):
+        args = {"d": d, "omega1": omega1, **kw, **bump}
+        return allocation_constants(args["d"], args["omega1"], args["rho"],
+                                    args["m"], args["a1"], args["cv"])["offset"]
+
+    shifts = []
+    for sign in (+1, -1):
+        try:
+            if name == "a1":
+                v = abs(a1) + sign * se
+                if v <= 0:
+                    continue
+                shifts.append(offset_at(a1=-v if a1 < 0 else v))
+            elif name == "omega1":
+                v = omega1 + sign * se
+                if v <= 0:
+                    continue
+                shifts.append(offset_at(omega1=v))
+            elif name == "d":
+                v = d + sign * se
+                if v <= 0:
+                    continue
+                shifts.append(offset_at(d=v))
+            else:
+                return {"delta_m0": 0.0, "penalty": 1.0, "offset": base}
+        except (ValueError, ZeroDivisionError):
+            continue
+
+    delta = max((abs(o - base) for o in shifts), default=0.0)
+    r = 2 * omega1 / d
+    penalty = sqrt((rho ** (-2 * delta * omega1) + r * rho ** (d * delta)) / (1 + r))
+    signed = max(shifts, key=lambda o: abs(o - base), default=base) - base
+    return {"delta_m0": signed, "penalty": penalty, "offset": base}
 
 
 def build_budget_rows(budgets, *, d, omega1, rho, m, a1, cv, throughput):
@@ -479,8 +543,10 @@ def _write_csv(path, rows) -> None:
 
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--d", type=float, default=1.0, help="cost exponent (Experiment A)")
-    parser.add_argument("--omega1", type=float, default=1.0, help="correction exponent (Experiment B)")
+    parser.add_argument("--d", type=float, default=None,
+                        help="cost exponent; measured from cost_probe.json when absent")
+    parser.add_argument("--omega1", type=float, default=None,
+                        help="correction exponent; measured from omega1.json when absent")
     parser.add_argument("--rho", type=float, default=2.0, help="scale ratio")
     parser.add_argument("--m", type=int, default=6, help="number of scales in the window")
     parser.add_argument("--min-m0", type=int, default=0)
@@ -532,40 +598,49 @@ def _main(argv: list[str] | None = None) -> None:
               f"({group['replicates']} replicate(s)); "
               f"{len(groups) - 1} other group(s) available -- see --list\n")
 
-    if args.a1 is not None:
-        a1, a1_se, a1_src = args.a1, None, "override"
-    else:
-        a1, a1_se, a1_src = measured_a1(runs)
+    # Every constant is assembled the same way: an explicit override wins,
+    # otherwise the measurement, otherwise nothing at all. `require` turns the
+    # last case into an error naming the flag and the command that produces it
+    # -- see tools/constants.py for why silence was worse than a crash here.
     cv_run = runs[0] if runs else root / "omega1"
-    cv, cv_src = (args.cv, "override") if args.cv is not None else measured_cv(cv_run)
+    corr = measured_correction(runs)
     tp_json = artifact_path(root / "allocation", "allocation_sweep")
     if not tp_json.exists() and artifact_path(root.parent / "allocation",
                                               "allocation_sweep").exists():
         tp_json = artifact_path(root.parent / "allocation", "allocation_sweep")
-    tp, tp_src = (args.throughput, "override") if args.throughput is not None else \
-        measured_throughput(tp_json)
+    d_val, d_se, d_src = measured_cost_exponent(root)
+    cv_val, cv_src = measured_cv(cv_run)
+    tp_val, tp_se, tp_src = measured_throughput(tp_json)
 
-    c = allocation_constants(args.d, args.omega1, args.rho, args.m, a1, cv)
+    found = {}
+    for name, val, se, src in (
+            ("d", d_val, d_se, d_src),
+            ("omega1", corr["omega1"], corr["omega1_se"], corr["provenance"]),
+            ("a1", corr["a1"], corr["a1_se"], corr["provenance"]),
+            ("cv", cv_val, None, cv_src),
+            ("throughput", tp_val, tp_se, tp_src)):
+        given = getattr(args, name, None)
+        if given is not None:
+            found[name] = override(given, name)
+        elif val is not None:
+            found[name] = measured(val, se, src)
 
-    fellback = [n for n, src in (("a1", a1_src), ("cv", cv_src), ("throughput", tp_src))
-                if src.startswith("FALLBACK")]
-    if fellback:
-        print("!" * 78)
-        print(f"WARNING: no measured data found for {', '.join(fellback)} under")
-        print(f"  {root}")
-        print("Using this repo's last-known-good constants instead. If you meant to point")
-        print("at a run directory, pass the directory that CONTAINS omega1.json; if at the")
-        print("parent of several runs, pass the one containing omega1/ or omega1_rep*/.")
-        print("The table below is still self-consistent, but it does NOT describe that data.")
-        print("!" * 78 + "\n")
+    consts = {n: require(found, n) for n in ("d", "omega1", "a1", "cv", "throughput")}
+    d, omega1 = consts["d"].value, consts["omega1"].value
+    a1, a1_se = consts["a1"].value, consts["a1"].se
+    omega1_se = consts["omega1"].se
+    cv, tp = consts["cv"].value, consts["throughput"].value
+
+    c = allocation_constants(d, omega1, args.rho, args.m, a1, cv)
 
     print("inputs")
-    print(f"  a1         = {a1:+.4f}"
-          + (f" +/- {a1_se:.4f}" if a1_se else " " * 11)
-          + f"  ({a1_src})")
-    print(f"  cv         = {cv:.4f}       ({cv_src})")
-    print(f"  throughput = {tp:.3g} steps/s  ({tp_src})")
-    print(f"  d = {args.d}   omega1 = {args.omega1}   rho = {args.rho}   m = {args.m}")
+    print(format_table(consts))
+    print(f"  {'rho':<11}{args.rho:>10.4f}              (design choice)")
+    print(f"  {'m':<11}{args.m:>10d}              (design choice)")
+    if any(k.is_override for k in consts.values()):
+        print("\n  Lines marked NOT MEASURED were supplied by hand. They are as good as\n"
+              "  your knowledge of them; nothing here checked them against data.")
+
     print("\nderived constants (tools/allocation.py: allocation_constants)")
     print(f"  Cb = {c['Cb']:.6f}   |bias| = Cb * rho^(-m0*omega1)")
     print(f"  Cs = {c['Cs']:.6f}   sd     = Cs * n^(-1/2)")
@@ -573,22 +648,30 @@ def _main(argv: list[str] | None = None) -> None:
     print(f"  m0_tuned = theta2*log_rho(B) {c['offset']:+.3f}"
           f"   <- prop:opt omits this offset")
     print(f"  at the optimum, |bias|/sd = sqrt(d/(2*omega1)) = "
-          f"{sqrt(args.d / (2 * args.omega1)):.4f}")
+          f"{sqrt(d / (2 * omega1)):.4f}")
 
-    unc = offset_uncertainty(args.d, args.omega1, args.rho, args.m, a1, cv, a1_se)
-    if unc:
-        print(f"\nsensitivity to a1 (+/- 1 se): offset moves by at most "
-              f"{unc['spread']:.3f} in m0,")
-        print(f"  which costs at most {unc['penalty']:.4f}x in RMSE -- the optimum is "
-              f"quadratic, so it is flat.")
-    else:
-        print("\nsensitivity: no stderr for a1 (needs >= 2 replicates), so the offset's")
-        print("  uncertainty is not quantified here. Run replicates to get it.")
+    print("\nerror budget -- how far each input's own uncertainty moves the plan")
+    print(f"  {'input':<11}{'+/- 1 se':>12}{'moves m0 by':>14}{'worst-case RMSE':>18}")
+    for name in ("omega1", "a1", "d"):
+        k = consts[name]
+        if k.se is None:
+            print(f"  {name:<11}{'--':>12}{'not quantified (needs >= 2 replicates)':>32}")
+            continue
+        sens = input_sensitivity(name, k.se, d=d, omega1=omega1, rho=args.rho,
+                                 m=args.m, a1=a1, cv=cv)
+        print(f"  {name:<11}{k.se:>12.4f}{sens['delta_m0']:>+14.2f}"
+              f"{sens['penalty']:>17.4f}x")
+    print("  (the optimum is quadratic in m0, so it is flat: a whole step of m0"
+          " costs ~1.1x)")
+    if all(consts[n].se is None for n in ("omega1", "a1", "d")):
+        print("  Nothing here has a standard error: every constant came from a single\n"
+              "  run or was supplied by hand. Run replicates to quantify this.")
+
     print()
 
     if args.by_budget:
         budgets = [10.0 ** e for e in range(args.min_log10_budget, args.max_log10_budget + 1)]
-        rows = build_budget_rows(budgets, d=args.d, omega1=args.omega1, rho=args.rho,
+        rows = build_budget_rows(budgets, d=d, omega1=omega1, rho=args.rho,
                                  m=args.m, a1=a1, cv=cv, throughput=tp)
         head = f"{'budget (time)':>16} {'m0':>4} {'n':>16} {'RMSE(gamma)':>13}"
         print(head)
@@ -602,7 +685,7 @@ def _main(argv: list[str] | None = None) -> None:
         print("along the budget axis. Scales for row m0 are rho^(m0+1)..rho^(m0+%d)." % args.m)
         return
 
-    rows = build_rows(range(args.min_m0, args.max_m0 + 1), d=args.d, omega1=args.omega1,
+    rows = build_rows(range(args.min_m0, args.max_m0 + 1), d=d, omega1=omega1,
                       rho=args.rho, m=args.m, a1=a1, cv=cv, throughput=tp,
                       compare=args.compare)
 
