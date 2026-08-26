@@ -46,8 +46,21 @@ def loglog_points(samples: Mapping[int, Sequence[float]]):
     se is the standard error of the mean, std(samples[i], ddof=1) / sqrt(n_i).
     n is the per-scale sample count -- needed by tools.loglog.gamma_mle, which
     (unlike the OLS-based estimators) uses it directly in the model's variance.
+
+    Each value may also be a SUMMARY `(y_bar, se, n)` triple instead of the
+    draws themselves. A planned run can be 10^7 samples on each of 6 scales,
+    which nothing downstream needs to keep -- src/study/run.py stores the three
+    numbers per scale and discards the rest -- and a chart built from summaries
+    must be the same chart, not a second implementation of it.
     """
     scales = np.array(sorted(samples))
+    first = samples[scales[0]] if len(scales) else None
+    summarized = (isinstance(first, tuple) and len(first) == 3)
+    if summarized:
+        y_bar = np.array([samples[i][0] for i in scales], dtype=np.float64)
+        se = np.array([samples[i][1] for i in scales], dtype=np.float64)
+        n = np.array([samples[i][2] for i in scales], dtype=np.int64)
+        return scales, y_bar, se, n
     y_bar = np.array([np.mean(samples[i]) for i in scales], dtype=np.float64)
     n = np.array([len(samples[i]) for i in scales], dtype=np.int64)
     se = np.array(

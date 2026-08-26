@@ -5,7 +5,7 @@ those scripts (and each other) call (user's own framing, 2026-08-12). One shared
 of each action, used by every experiment via a recipe's `"model"` field (dispatched
 through `tools/models.py`'s registry), instead of each experiment keeping its own copy.
 
-Eight drivers in four layers, named for the question they answer:
+Twelve drivers in five layers, named for the question they answer:
 
 ```
 src/
@@ -13,7 +13,12 @@ src/
   estimate/   measure_cost.py  estimate_omega1.py         measure the constants
   budget/     allocation_experiment.py  allocation_table.py    spend a budget well
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
+  study/      pilot.py  plan.py  run.py  report.py    the whole thing, end to end
 ```
+
+**If you just want $\hat\gamma$ for a model, use `src/study/` and read
+`src/study/README.md`.** The four layers below are the pieces it orchestrates;
+running them by hand is for when you want a specific piece, not the whole answer.
 
 Scripts whose subject is **this repo's own machinery** rather than a model live in
 `calibration/` instead — `check_coverage.py` (are the error bars honest?) and

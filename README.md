@@ -34,12 +34,21 @@ flowchart LR
         VP["verify_prediction.py<br/><i>predicted vs real</i>"]
     end
 
+    subgraph study["src/study — the four-step workflow"]
+        PI["pilot.py<br/><i>measure the constants</i>"]
+        PN["plan.py<br/><i>propose, don't run</i>"]
+        RN["run.py<br/><i>execute the plan</i>"]
+        RP["report.py<br/><b>γ̂ ± error</b> + plot"]
+        PI --> PN --> RN --> RP
+    end
+
     subgraph report["src/report"]
         PL["plot_loglog.py<br/><b>γ̂</b> + plot.png"]
         PC["plot_cost.py"]
         PA["plot_allocation.py"]
     end
 
+    RCP --> PI
     RCP --> GEN --> PL
     RCP --> MC --> PC
     GEN --> EO
@@ -63,6 +72,7 @@ call live in `tools/`, and the simulators in `models/`.
 | `src/estimate` | what are $d$, $\omega_1$, $a_1$ — and is the stated $\pm$ honest? | samples | `cost_probe.json`, `omega1.json`, `coverage.json` |
 | `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json` |
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
+| `src/study` | **start here**: pilot → plan → run → report, carrying constants for you | a recipe | `constants.json`, `report.md`, `details.md` |
 | `calibration/` | are our **own** stated numbers honest — the ± and the ETA? | the pipeline itself | `coverage.json`, `prediction_check.json` |
 | `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
@@ -73,13 +83,26 @@ call live in `tools/`, and the simulators in `models/`.
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# draw samples from a recipe, then plot them and read off gamma-hat
-python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_example.json --tag demo
-python3 src/report/plot_loglog.py -data experiments/01_srw/data/demo
+D=experiments/01_srw/data
 
-# how long must a run take, for what precision?
-python3 src/budget/allocation_table.py --compare
+# 1. cheap pilot: measures d, omega1, a1, cv and this machine's throughput
+python3 src/study/pilot.py -meta experiments/01_srw/recipes/samples_pilot.json \
+        --study mystudy --replicates 3
+
+# 2. what would a longer run cost? proposes, draws nothing
+python3 src/study/plan.py --study mystudy --data-root $D --time 90s
+python3 src/study/plan.py --study mystudy --data-root $D --time 90s --accept
+
+# 3. execute it, then read the answer
+python3 src/study/run.py    --study mystudy --data-root $D
+python3 src/study/report.py --study mystudy --data-root $D
 ```
+
+No constant is ever retyped between steps — the study directory carries them,
+each with its error and its provenance. `plan` prints an error budget and a
+verdict on whether the pilot is good enough to act on, then **stops**; accepting
+is a separate command. See `src/study/README.md`, especially on why a short
+pilot cannot determine $\omega_1$.
 
 `src/README.md` is the full command reference, one section per driver.
 `CATALOG.md` maps every module and function with its classification.

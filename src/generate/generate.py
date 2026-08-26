@@ -264,7 +264,7 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
     return generate(meta["model"], meta["scales"], meta["n"], meta["params"], seed=meta["seed"])
 
 
-def _resolve_n(cfg: dict):
+def resolve_n(cfg: dict):
     """Recipe `"n"`: a scalar, an explicit per-scale list, or an allocation rule.
 
     The rule form keeps a recipe reproducible and self-describing -- it records
@@ -351,7 +351,7 @@ def _main(argv: list[str] | None = None) -> None:
     model = cfg["model"]
     spec = get_model(model)
     params = cfg["params"]
-    scales_list, n_list = normalize_scales_n(cfg["scales"], _resolve_n(cfg))
+    scales_list, n_list = normalize_scales_n(cfg["scales"], resolve_n(cfg))
 
     seed_seq = np.random.SeedSequence(args.seed if args.seed is not None else cfg.get("seed"))
     resolved_seed = seed_seq.entropy

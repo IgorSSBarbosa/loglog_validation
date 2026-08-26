@@ -93,6 +93,15 @@ loglog_validation/
                                   (currently only "synthetic")
     report/plot_cost.py           plot of measure_cost.py's output
     report/plot_allocation.py     Experiment C's two panels
+    study/pilot.py                step 1: a cheap run measuring d, omega1, a1,
+                                  cv and this machine's throughput
+    study/plan.py                 step 2: what a longer run would cost, plus an
+                                  error budget and a verdict on whether the
+                                  pilot is good enough to act on. Proposes;
+                                  never draws
+    study/run.py                  step 3: execute the accepted plan
+    study/report.py               step 4: gamma +/- error, the log-log plot,
+                                  and a details file (d, omega1, a1, a0)
   calibration/                  <- checks whose subject is THIS REPO's machinery
                                     rather than a model (2026-08-25). Distinct from
                                     tools/tests/ (gitignored, seconds, closed forms):
@@ -125,6 +134,9 @@ loglog_validation/
     cost_model.py                cost exponent d (pure + affine fits), timing
                                   aggregators, declared-vs-measured cross-check
     coverage.py                  calibration harness for error bars (checkpoint 0.4)
+    constants.py                 meta-constants with their errors and
+                                  provenance. No fallbacks: a constant is
+                                  measured, an explicit override, or an error
     artifacts.py                 the naming registry: what every file on disk is
                                   called, in (recipes, by kind) and out (run
                                   artifacts, by content). Provenance goes INSIDE

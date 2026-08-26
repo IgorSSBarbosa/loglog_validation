@@ -41,6 +41,10 @@ ARTIFACTS: dict[str, str] = {
     "gamma_estimates":  "gamma_estimates.json",   # was results.json
     "omega1":           "omega1.json",            # unchanged, already correct
     "coverage":         "coverage.json",          # check_coverage --json
+    "pilot":            "pilot.json",             # src/study/pilot.py
+    "plan":             "plan.json",              # src/study/plan.py
+    "final":            "final.json",             # src/study/run.py
+    "answer":           "answer.json",            # src/study/report.py -- gamma +/- se
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
@@ -72,7 +76,9 @@ def _looks_like(kind: str, payload: dict) -> bool:
     if kind == "samples_meta":
         return "scales" in keys and "n" in keys and "cells" not in keys
     if kind == "omega1":
-        return "direct_fit" in keys
+        return "direct_fit" in keys and "per_replicate" not in keys
+    if kind == "pilot":
+        return "per_replicate" in keys
     return False
 
 

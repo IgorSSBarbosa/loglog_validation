@@ -1,0 +1,20 @@
+{
+  "kind": "samples",
+  "model": "srw",
+  "params": {"q": 0.5},
+  "scales": [8, 16, 32, 64, 128, 256],
+  "n": {"rule": "snr", "budget": 1e8, "d": 1.0, "omega1": 1.0},
+  "seed": null,
+  "_note": [
+    "n uses the 'snr' rule, not a flat count. This matters more than the budget:",
+    "omega_1 is estimated from the correction a1*i^-omega1, whose size SHRINKS",
+    "with i, so a flat n over-samples the small scales (where the correction is",
+    "already resolved hundreds of times over) and starves the large ones (where",
+    "it has sunk below the noise). A flat n=20000 pilot on this ladder returned",
+    "omega1 = 0.06 +/- 0.18; the snr rule at the same wall clock returns",
+    "0.98 +/- 0.28. See tools/allocation.py's snr_allocation.",
+    "",
+    "The rule's own 'omega1' is a DESIGN input, not an estimate -- it shapes the",
+    "sample counts, and the fit is insensitive to getting it roughly right."
+  ]
+}
