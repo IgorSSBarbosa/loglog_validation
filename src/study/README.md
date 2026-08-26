@@ -52,18 +52,38 @@ independent seeds:
 | $B=10^8$, R=3 | 2.3 s | 0.05, 0.07, 0.27, 0.81, 0.98, 2.07, 2.49, **13.0** | 0.90 | 0.84 |
 | $B=10^9$, R=3 | 21 s | 0.07, 0.07, 0.36, 0.97, 1.07, 1.43, 1.93, 2.32 | 1.02 | 0.79 |
 | $B=5\times10^9$, R=3 | 109 s | 0.35, 0.53, 0.58, 0.79, 1.09, 1.32, 1.58, 1.88 | 0.94 | 0.40 |
+| $B=10^{10}$, R=3 | 220 s | 0.72, 0.72, 1.22, 1.23 *(4 seeds)* | 0.97 | sd 0.29 |
+| $B=10^{10}$, R=6 | 402 s | 0.76, 0.81, 1.00, 1.07 *(4 seeds)* | 0.91 | sd 0.15 |
 
 Truth is $1$. **The median is right at every budget** — the estimator is not
 biased, and no amount of averaging pilots would reveal a problem. What is wrong
 is the spread of any *single* one.
 
-It does converge, at about the rate theory says: between the last two rows the
-MAD shrinks like $B^{-0.42}$, against the $B^{-1/2}$ of a well-behaved estimator.
-(The first row is too broad to fit — its MAD is meaningless when one draw lands
-at 13.) Extrapolating that rate, reaching $\mathrm{se}(\hat\omega_1)\approx0.1$
-needs $B\approx10^{11}$ at $R=3$ — **tens of minutes, not a pilot**. Experiment B
-in fact used $B = 5\times10^{10}$ with 6 replicates to reach $0.984 \pm 0.111$,
-which is the same place by a different route.
+It does converge, at about the rate theory says. Fitting the $10^9$ and
+$5\times10^9$ rows gives a spread shrinking like $B^{-0.42}$, against the
+$B^{-1/2}$ of a well-behaved estimator. (The first row is too broad to fit — a
+MAD is meaningless when one draw lands at 13.)
+
+That fit then **predicts a point it was not built from**: at $B=10^{10}$ it
+expects a spread of $0.297$, and the measured sd over 4 fresh seeds is $0.291$.
+So the rate is real, not a two-point artefact.
+
+Extrapolating it, reaching $\mathrm{se}(\hat\omega_1)\approx0.1$ needs
+$B\approx1.3\times10^{11}$ at $R=3$ — **tens of minutes, not a pilot**.
+Experiment B in fact used $B = 5\times10^{10}$ with 6 replicates to reach
+$0.984 \pm 0.111$, which is the same place by a different route.
+
+**The se the pilot reports is honest**, which matters because it is the number
+`plan`'s verdict is computed from. Comparing the stated se against the actual
+scatter over independent seeds at $B=10^{10}$:
+
+| | stated se | actual sd | ratio |
+|---|---|---|---|
+| R=3 | 0.242 | 0.291 | 0.83 |
+| R=6 | 0.184 | 0.147 | 1.26 |
+
+Both straddle 1 within what 4 seeds can resolve, so the error bar is not
+systematically optimistic. `plan` is warning on a real quantity.
 
 So the practical guidance is not "run a longer pilot until $\omega_1$ is sharp".
 It is: accept that a pilot bounds $\omega_1$ loosely, let `plan` tell you what
