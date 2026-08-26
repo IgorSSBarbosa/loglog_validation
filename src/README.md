@@ -104,9 +104,13 @@ chunked path matching the in-RAM path exactly for the same seed).
 
 ## `estimate/`
 
-`measure_cost.py` — the shared cost-model-exponent probe, same registry dispatch as
-`generate.py` (times `MODELS[model].simulate(i, n=1, ...)` instead of drawing real
-samples). Only meaningful for models whose cost genuinely grows with scale (e.g.
+`measure_cost.py` — the standalone cost-model-exponent probe, same registry dispatch
+as `generate.py` (times `MODELS[model].simulate(i, n=1, ...)` instead of drawing real
+samples). The timing and the fitting are `tools/cost_model.py`'s `time_over_scales`
+and `fit_cost_probe`, shared with the pilot's probe in `src/study/pilot.py` — the two
+differ only in choosing their scales, and this one's ladder *is* the experiment: a
+named grid, its per-scale confidence intervals, and the acceptance check below. Only
+meaningful for models whose cost genuinely grows with scale (e.g.
 `"srw"`); pointed at `"synthetic"` it will just measure $d\approx0$, an expected,
 uninteresting result. Repeated timings at each scale are collapsed by the aggregator
 named in the recipe's optional `"aggregator"` key (`tools/cost_model.py`'s

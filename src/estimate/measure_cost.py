@@ -55,12 +55,11 @@ sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 from artifacts import artifact_path, default_out_dir, load_recipe  # noqa: E402
 from cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
-    aggregate,
     compare_cost_models,
-    estimate_cost_affine,
-    estimate_cost_exponent,
+    fit_cost_probe,
     format_cost_comparison,
     median_ci,
+    time_over_scales,
 )
 from loglog import gamma_drop_leading  # noqa: E402
 from models import get_model  # noqa: E402
@@ -81,6 +80,13 @@ def measure(
     """Time MODELS[model].simulate(k, n=1, params, rng) `repeats` times at
     each k in `scales`; estimate d from the per-scale aggregated elapsed time.
 
+    Timing and fitting are tools/cost_model.py's `time_over_scales` and
+    `fit_cost_probe` -- the same two the pilot's probe uses, which differs
+    only in choosing its own scales instead of taking a ladder (see
+    src/study/pilot.py's measure_cost_exponent). What this driver adds is the
+    ladder as the EXPERIMENT: a named grid, its per-scale confidence
+    intervals, and the acceptance check below.
+
     Reports two fits of the same timings:
 
     - `d_hat`: the pure power law cost(i) = c * i**d of Assumption
@@ -96,38 +102,23 @@ def measure(
     seed_seq = np.random.SeedSequence(seed)
     rng = np.random.default_rng(seed_seq)
 
-    elapsed_all: dict[int, list[float]] = {}
-    elapsed_agg: list[float] = []
-    elapsed_min: list[float] = []
-    for k in scales:
-        times = []
-        for _ in range(repeats):
-            t0 = time.perf_counter()
-            spec.simulate(k, 1, params, rng)
-            times.append(time.perf_counter() - t0)
-        elapsed_all[k] = times
-        elapsed_agg.append(aggregate(times, aggregator))
-        elapsed_min.append(min(times))
-
-    d_hat = estimate_cost_exponent(scales, elapsed_agg)
-    try:
-        affine = estimate_cost_affine(scales, elapsed_agg)
-    except ValueError as exc:  # too few scales for 3 free parameters
-        affine = {"error": str(exc)}
+    probe = time_over_scales(spec, scales, params, rng, repeats, aggregator)
+    fit_cost_probe(probe, spec.cost_hint, params)
+    times = {k: probe["elapsed_all"][str(k)] for k in probe["scales"]}
 
     return {
         "model": model,
         "params": params,
-        "scales": list(scales),
+        "scales": probe["scales"],
         "repeats": repeats,
         "seed": seed_seq.entropy,
         "aggregator": aggregator,
-        "elapsed": elapsed_agg,
-        "elapsed_ci": [list(median_ci(elapsed_all[k])) for k in scales],
-        "elapsed_min": elapsed_min,
-        "elapsed_all": {str(k): v for k, v in elapsed_all.items()},
-        "d_hat": d_hat,
-        "affine": affine,
+        "elapsed": probe["elapsed"],
+        "elapsed_ci": [list(median_ci(times[k])) for k in probe["scales"]],
+        "elapsed_min": [min(times[k]) for k in probe["scales"]],
+        "elapsed_all": {str(k): times[k] for k in probe["scales"]},
+        "d_hat": probe["d_hat"],
+        "affine": probe["affine"],
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
 

@@ -6,7 +6,7 @@ E[Y_i] = a0 * i**gamma (eq. 232), so d is recoverable the same way gamma is --
 standing in for Y_i.
 
 `COST_ESTIMATORS` is a name -> function registry (mirrors
-experiments/00_synthetic/generator.py's NOISE_FAMILIES) so a different
+models/synthetic.py's NOISE_FAMILIES) so a different
 estimation approach can be added later as one more entry, without touching
 callers.
 """
@@ -14,6 +14,7 @@ callers.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -285,3 +286,146 @@ def format_cost_comparison(cmp: dict) -> str:
         lines.append(f"  gap = {cmp['z']:+.2f} sigma, {100 * cmp['rel_gap']:.2f}% relative"
                      + ("" if cmp["agree"] else "   -> DISAGREE"))
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# Timing a model: the two probes
+# --------------------------------------------------------------------------
+#
+# There are exactly two ways this repo measures cost(i), and they differ only
+# in WHICH scales get timed:
+#
+#   time_over_scales  times a ladder you name  -- src/estimate/measure_cost.py,
+#                     the standalone probe, where the ladder is the experiment.
+#   climb_to_target   doubles the scale until one call is slow enough --
+#                     src/study/pilot.py, where the ladder is not free: the
+#                     pilot's own scales are chosen so the CORRECTION term is
+#                     visible, which means SMALL, and a single simulate() call
+#                     there is almost entirely Python/NumPy dispatch.
+#
+# Both hand the same {scales, elapsed, times, repeats, aggregator} to
+# `fit_cost_probe`, so the fitting, the overhead diagnostic and the
+# declared-vs-measured cross-check are written once. Before this split the two
+# callers had their own timing loop and their own fit, and only one of them
+# had learned that the pure power law is unusable at small k.
+
+#: Repeats per scale. Small on purpose: the affine fit needs the SHAPE of
+#: cost(i) across scales, not a precise absolute time at any one of them.
+PROBE_REPEATS = 5
+
+#: How slow a single call must get before the climb stops. Below roughly this,
+#: the fixed ~10-25us of per-call dispatch is a visible share of the
+#: measurement; timing srw's own pilot ladder (8..256) returned d = 8.0 +/- 280.
+PROBE_TARGET_SECONDS = 2e-3
+
+#: Ceilings on the climb, so a model with a steep cost cannot hang its caller.
+PROBE_MAX_DOUBLINGS = 24
+PROBE_TIME_BUDGET = 20.0
+
+#: Fewest rungs worth fitting: `estimate_cost_affine` has 3 free parameters.
+PROBE_MIN_SCALES = 4
+
+
+def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
+                  aggregator: str = DEFAULT_AGGREGATOR) -> tuple[float, list[float]]:
+    """Time `spec.simulate(i, 1, params, rng)` `repeats` times.
+
+    Returns (aggregated seconds, the raw timings). One warm-up call is thrown
+    away first: the first call through a code path pays import, branch
+    prediction and allocator costs that no later call does, and at these
+    durations that single outlier moves a mean noticeably.
+
+    Timed one call at a time rather than as a batch divided by `repeats`, so
+    the aggregator (median by default) can do its job -- jitter here is
+    one-sided, and a mean hands the whole of any hiccup to the estimate.
+    """
+    spec.simulate(i, 1, params, rng)                     # warm the code path
+    times = []
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        spec.simulate(i, 1, params, rng)
+        times.append(time.perf_counter() - t0)
+    return aggregate(times, aggregator), times
+
+
+def _probe(scales, times_by_scale, repeats, aggregator, **extra) -> dict:
+    """The common probe payload both timing strategies return."""
+    return {"scales": [int(k) for k in scales],
+            "elapsed": [aggregate(times_by_scale[k], aggregator) for k in scales],
+            "elapsed_all": {str(k): times_by_scale[k] for k in scales},
+            "repeats": repeats, "aggregator": aggregator, **extra}
+
+
+def time_over_scales(spec, scales, params: dict, rng, repeats: int = PROBE_REPEATS,
+                     aggregator: str = DEFAULT_AGGREGATOR) -> dict:
+    """Time a ladder of scales you choose. The standalone probe's strategy."""
+    times_by_scale = {int(k): time_at_scale(spec, int(k), params, rng, repeats,
+                                            aggregator)[1]
+                      for k in scales}
+    return _probe([int(k) for k in scales], times_by_scale, repeats, aggregator)
+
+
+def climb_to_target(spec, params: dict, rng, start: int,
+                    repeats: int = PROBE_REPEATS,
+                    aggregator: str = DEFAULT_AGGREGATOR,
+                    target_seconds: float = PROBE_TARGET_SECONDS,
+                    max_doublings: int = PROBE_MAX_DOUBLINGS,
+                    time_budget: float = PROBE_TIME_BUDGET) -> dict:
+    """Double the scale from `start` until one call takes `target_seconds`.
+
+    The pilot's strategy, and the reason it exists: a probe must be run where
+    the WORK dominates the per-call overhead, and that is generally nowhere
+    near the scales a log-log ladder wants to sample. d is a property of the
+    model, not of the window, so measuring it further out costs nothing.
+
+    Stops on whichever comes first: the target, `max_doublings` rungs, or
+    `time_budget` seconds -- but never before `PROBE_MIN_SCALES` rungs, which
+    is what the affine fit needs. `reached_target` reports which happened.
+    """
+    scales, times_by_scale = [], {}
+    i = int(start)
+    t_start = time.perf_counter()
+    for _ in range(max_doublings):
+        agg, times = time_at_scale(spec, i, params, rng, repeats, aggregator)
+        scales.append(i)
+        times_by_scale[i] = times
+        if agg >= target_seconds and len(scales) >= PROBE_MIN_SCALES:
+            break
+        if time.perf_counter() - t_start > time_budget:
+            break
+        i *= 2
+    out = _probe(scales, times_by_scale, repeats, aggregator,
+                 target_seconds=target_seconds)
+    out["reached_target"] = bool(out["elapsed"] and
+                                 out["elapsed"][-1] >= target_seconds)
+    return out
+
+
+def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:
+    """Fit d from a probe, both ways, plus the overhead diagnostic.
+
+    Adds to `probe` (and returns it):
+
+      d_hat            the pure power law cost(i) = c*i**d, Assumption
+                       cost_is_power_law (eq. 353) taken literally
+      affine           cost(i) = a + b*i**d, or {"error": ...} on too few rungs
+      overhead_share   a / elapsed[0]: how much of the cheapest measurement was
+                       dispatch rather than work. Above ~0.2, `d_hat` is
+                       measuring the overhead and only `affine["d"]` is usable
+      declared_d       what the model's own cost_hint implies, when it has one.
+                       Exact where a clock is not, so allocations prefer it;
+                       kept beside the measurement so the two can disagree
+                       visibly rather than silently
+    """
+    scales, elapsed = probe["scales"], probe["elapsed"]
+    probe["d_hat"] = estimate_cost_exponent(scales, elapsed)
+    try:
+        probe["affine"] = estimate_cost_affine(scales, elapsed)
+    except ValueError as exc:              # too few scales for 3 parameters
+        probe["affine"] = {"error": str(exc)}
+    a = probe["affine"].get("a")
+    probe["overhead_share"] = (float(a / elapsed[0])
+                               if a is not None and elapsed and elapsed[0] else None)
+    if cost_hint is not None:
+        probe["declared_d"] = declared_exponent(scales, cost_hint, params or {})
+    return probe

@@ -141,8 +141,8 @@ real (not toy) simulator.
 ## Sample generation — not blocked, exploratory (not Phase 1)
 
 `src/generate/generate.py` -- the second consumer of `tools/persistence.py`'s save/load
-pattern (extracted from `experiments/00_synthetic/generator.py`, now the shared driver
-for every model) -- draws $n$ i.i.d. $|S_k|$ samples per scale $k$ via
+pattern (extracted from the since-removed `00_synthetic/generator.py`, and now the shared
+driver for every model) -- draws $n$ i.i.d. $|S_k|$ samples per scale $k$ via
 `MODELS["srw"].simulate` (i.e. `srw(k, n, q, rng)`), seeded and timed the same way, to
 the same run-directory shape every model uses. Recipe (`samples_example.json`) mirrors
 `00_synthetic`'s exactly, with `"model": "srw"` and `"params": {"q": 0.5}` standing in

@@ -15,7 +15,7 @@ not a subfolder of it — see `models/README.md`) + one entry in `tools/models.p
 registry; `tools/models.py` itself is purely an importer/registry module, not where
 the simulation logic lives.
 
-Twelve modules. The dependency graph is shallow on purpose — `loglog.py` is the only
+Thirteen modules. The dependency graph is shallow on purpose — `loglog.py` is the only
 one several others import, because it owns the article's weight definition:
 
 | module | what it owns | imports |
@@ -23,7 +23,7 @@ one several others import, because it owns the article's weight definition:
 | `loglog.py` | four $\hat\gamma$ estimators + eq. (526) weights — **the canonical definition** | — |
 | `correction.py` | two $\omega_1$ estimators (direct fit of eq. 232, and bias decay) | — |
 | `allocation.py` | `prop:opt` (eq. 945–946), `lem:budget` costs, the tuned constant $\kappa$, `snr`/`neyman`, the `ladder` itself and its decay rate | `loglog` |
-| `cost_model.py` | cost exponent $d$: pure + affine fits, timing aggregators, declared-vs-measured | `loglog` |
+| `cost_model.py` | cost exponent $d$: the two timing probes, pure + affine fits, aggregators, declared-vs-measured | `loglog` |
 | `wilson.py` | eq. (720)'s four-term bound, **for $\gamma$ only** | `loglog` |
 | `coverage.py` | do our stated error bars actually cover? | — |
 | `artifacts.py` | what every file on disk is called, in or out | — |
@@ -31,6 +31,7 @@ one several others import, because it owns the article's weight definition:
 | `constants.py` | meta-constants with their errors and provenance; no fallbacks | — |
 | `persistence.py` | run directories, samples, metadata, content hashing | — |
 | `models.py` | the `MODELS` registry — a pure importer | `models/` |
+| `summary.py` | what a replicate *is* once its draws are gone: $\overline Y_i$, its log-scale se, and the cv | — |
 | `loglog_plot.py` | the two charts | — |
 
 Full detail, one section per module, below.
@@ -223,6 +224,20 @@ estimate downward — badly, when small scales are included ($\hat d=0.10$ on
 `time_measure`, where the truth is $1$; the affine fit recovers $0.95$). Fitted
 in log space, since costs span orders of magnitude across a scale grid.
 
+The **timing** half lives here too, because there turned out to be exactly two ways
+this repo measures $\mathrm{cost}(i)$, differing only in *which* scales get timed.
+`time_over_scales` times a ladder you name — `src/estimate/measure_cost.py`'s
+strategy, where the ladder is the experiment. `climb_to_target` doubles the scale
+until one call takes `PROBE_TARGET_SECONDS` — `src/study/pilot.py`'s, where the
+ladder is not free: a pilot's scales are chosen so the *correction* term is visible,
+which means small, and timing srw's own $8..256$ returned $d=8.0\pm280$. $d$ is a
+property of the model, not of the window, so measuring it further out costs nothing.
+Both return the same payload and both feed `fit_cost_probe`, which does the two fits,
+the `overhead_share` diagnostic and the declared-vs-measured cross-check — written
+once instead of once per caller. `time_at_scale` throws away a warm-up call before
+timing anything, and times calls individually rather than as a batch divided by
+`repeats`, so the aggregator can do its job.
+
 `AGGREGATORS`/`aggregate`/`median_ci` collapse repeated timings at one scale.
 Repeated timings target the same deterministic quantity, so their noise is
 one-sided (jitter only ever adds delay) — which is why `min` is the classic
@@ -234,7 +249,10 @@ has a distribution-free confidence interval from the order statistics
 the estimate (min 0.884 / median 0.888 / iqmean 0.887 / mean 0.850 / q95 0.811
 on `cost_probe`) — it buys the interval, not a different number.
 
-Verified: `tools/tests/test_cost_model.py` — exact recovery of $d$ on
+Verified: `tools/tests/test_cost_model.py` — the two probes' shared payload shape,
+that the climb doubles, stops at its target, never stops below the affine fit's
+four-point minimum, and honours its wall-clock budget rather than hanging; then
+exact recovery of $d$ on
 noiseless power-law curves; exact recovery of *all three* of $(a,b,d)$ on
 planted affine curves, alongside a check that the pure fit is genuinely biased
 low on the same data; aggregator behaviour on a sample with a planted outlier;
@@ -391,3 +409,27 @@ measured $0.907$, $0.986$, $1.198$, $0.486$. The agreement was partly the defaul
 (9 cases).
 
 Not started yet — planned module (see `PLAN.md` repo layout): `bootstrap.py`.
+
+---
+
+`summary.py` — the three numbers a replicate is reduced to, defined once.
+
+`summarize_scale(draws)` returns $(\overline Y_i,\ \sigma_{\log},\ \mathrm{cv})$ for
+one scale in a single pass: the sample mean, its standard error *on the log scale*
+$\mathrm{sd}/(\sqrt n\,\overline Y_i)$ — which is what the log-log fit weights by —
+and $\mathrm{sd}/\overline Y_i$, which is what an allocation needs.
+`replicate_summary(stats, scales)` transposes `{scale: triple}` into one list per
+name, ordered by `scales` rather than by the mapping's key order.
+
+Those three are the entire interface between drawing and fitting: nothing downstream
+(`correction.fit_correction`, `report.analyse`, `plan.py`) ever looks at a raw draw.
+That is what lets `run.py` pass `summarize_scale` straight to
+`generate(..., reduce=)` and never write a sample to disk — a planned run is
+routinely hundreds of MB per replicate.
+
+The module exists because the definition was written twice, verbatim, in
+`src/study/pilot.py` and `src/study/run.py`. Deliberately free of any dependency on
+`src/`: a summary is a fact about an array, not about how the array was obtained.
+Verified: `tools/tests/test_summary.py` (5 cases — the closed forms, that
+$\sigma_{\log}$ falls like $1/\sqrt n$ while cv does not, plain-`float` output for
+JSON, and scale ordering).

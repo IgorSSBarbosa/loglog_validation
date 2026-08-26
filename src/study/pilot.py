@@ -45,27 +45,18 @@ sys.path.insert(0, str(ROOT / "src" / "estimate"))
 from artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
 from constants import format_table, measured, save  # noqa: E402
 from correction import fit_correction  # noqa: E402
-from cost_model import estimate_cost_affine  # noqa: E402
+from cost_model import PROBE_REPEATS, climb_to_target, fit_cost_probe  # noqa: E402
 from models import get_model  # noqa: E402
-from persistence import load_samples  # noqa: E402
 from rng import spawn  # noqa: E402
+from summary import replicate_summary, summarize_scale  # noqa: E402
 
 from generate import generate, resolve_n  # noqa: E402
 
-#: Repeats per scale when timing the cost. Small: the affine fit needs the
-#: shape of cost(i), not a precise absolute time.
-COST_REPEATS = 5
-
-#: A single simulate(k, n=1, ...) call pays a fixed ~10-25 us of Python/NumPy
-#: dispatch that does not scale with k at all. Below this, that overhead IS the
-#: measurement: timing the pilot's own ladder (8..256 for srw) returned
-#: d = 8.0 +/- 280. The probe therefore climbs away from the sample scales
-#: until one call is slow enough for the work to dominate.
-COST_TARGET_SECONDS = 2e-3
-
-#: Ceiling on the climb, so a model with a steep cost cannot hang the pilot.
-COST_MAX_DOUBLINGS = 24
-COST_TIME_BUDGET = 20.0
+#: Seed for the cost probe. Fixed, and deliberately not the pilot's own: the
+#: probe measures how long simulate() TAKES, not what it returns, so it needs
+#: no independence from the sample draws -- and a fixed seed keeps a re-run of
+#: the pilot from moving d for reasons unrelated to the machine.
+COST_PROBE_SEED = 0
 
 
 def study_dir(root: Path, name: str) -> Path:
@@ -74,79 +65,40 @@ def study_dir(root: Path, name: str) -> Path:
 
 
 def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
-    """One replicate: y_bar, its sigma_log, and the cv, from a single draw.
+    """One replicate, summarized: y_bar, sigma_log and cv per scale.
 
-    Returns the same three summaries estimate_omega1.py records, so a pilot
-    replicate and an Experiment B replicate are interchangeable downstream.
+    `reduce=` collapses each scale's draws inside generate() and frees them
+    immediately, so a pilot never holds a full sample in memory. The three
+    summaries are tools/summary.py's -- the same ones run.py records, so a
+    pilot replicate and a final replicate are interchangeable downstream.
     """
-    def summarize(s):
-        mean = float(np.mean(s))
-        sd = float(np.std(s, ddof=1))
-        return mean, sd / (np.sqrt(len(s)) * mean), sd / mean   # y_bar, sigma_log, cv
-
-    stats = generate(model, scales, n, params, seed=seed_seq, reduce=summarize)
-    return {"y_bar": [stats[i][0] for i in scales],
-            "sigma_log": [stats[i][1] for i in scales],
-            "cv": [stats[i][2] for i in scales]}
+    stats = generate(model, scales, n, params, seed=seed_seq, reduce=summarize_scale)
+    return replicate_summary(stats, scales)
 
 
-def _time_one(spec, i, params, rng, repeats) -> float:
-    spec.simulate(i, 1, params, rng)                       # warm the code path
-    t0 = time.perf_counter()
-    for _ in range(repeats):
-        spec.simulate(i, 1, params, rng)
-    return (time.perf_counter() - t0) / repeats
+def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
+    """Measure d = the cost exponent of Assumption cost_is_power_law (eq. 353).
 
+    Both halves live in tools/cost_model.py and are shared with the standalone
+    probe (src/estimate/measure_cost.py): `climb_to_target` picks where to
+    time, `fit_cost_probe` fits cost(i) = a + b*i^d and reports the per-call
+    overhead it separated out.
 
-def measure_cost_exponent(model, params, scales, repeats=COST_REPEATS) -> dict:
-    """Time simulate() per scale and fit cost(i) = a + b*i^d.
+    The probe starts at the pilot's LARGEST scale and climbs away from there.
+    It must not simply time the sample ladder: those scales are chosen so the
+    correction term is visible, which means small, and at srw's 8..256 a single
+    simulate() call is almost entirely Python/NumPy dispatch -- timing them
+    returned d = 8.0 +/- 280. d is a property of the model, not of the window,
+    so measuring it further out costs nothing.
 
-    Two things make this harder than it looks, and both bit on the first run.
-
-    The affine form, not the pure power law: a single simulate(k, n=1, ...)
-    call pays a fixed per-call overhead that does not scale with k, and the
-    pure fit folds it into d (0.78 against a true 1.0).
-
-    And the probe must not use the pilot's own scale ladder. The ladder is
-    chosen so the CORRECTION term is visible, which means small scales -- and
-    at srw's 8..256 a single call is almost entirely dispatch, giving
-    d = 8.0 +/- 280. So the probe climbs geometrically from the largest sample
-    scale until one call takes COST_TARGET_SECONDS, bounded by a doubling count
-    and a wall-clock budget so a steep model cannot hang the pilot.
-
-    A model that declares `cost_hint` gets that reported too: it is exact where
-    the clock is not, and disagreement means either the hint is wrong or the
-    machine has stopped being compute-bound.
+    A model that declares `cost_hint` gets that reported too, as `declared_d`:
+    it is exact where the clock is not, and disagreement means either the hint
+    is wrong or the machine has stopped being compute-bound.
     """
     spec = get_model(model)
-    rng = np.random.default_rng(0)
-
-    probe, elapsed = [], []
-    i = int(max(scales))
-    t_start = time.perf_counter()
-    for _ in range(COST_MAX_DOUBLINGS):
-        t = _time_one(spec, i, params, rng, repeats)
-        probe.append(i)
-        elapsed.append(t)
-        if t >= COST_TARGET_SECONDS and len(probe) >= 4:
-            break
-        if time.perf_counter() - t_start > COST_TIME_BUDGET:
-            break
-        i *= 2
-
-    out = {"scales": probe, "elapsed": elapsed, "repeats": repeats,
-           "reached_target": bool(elapsed and elapsed[-1] >= COST_TARGET_SECONDS)}
-    try:
-        aff = estimate_cost_affine(probe, elapsed)
-        out["affine"] = aff
-        if elapsed and aff.get("a") is not None:
-            out["overhead_share"] = float(aff["a"] / elapsed[0]) if elapsed[0] else None
-    except ValueError as exc:
-        out["affine"] = {"error": str(exc)}
-    if spec.cost_hint is not None:
-        from cost_model import declared_exponent
-        out["declared_d"] = declared_exponent(probe, spec.cost_hint, params)
-    return out
+    probe = climb_to_target(spec, params, np.random.default_rng(COST_PROBE_SEED),
+                            start=int(max(scales)), repeats=repeats)
+    return fit_cost_probe(probe, spec.cost_hint, params)
 
 
 def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
