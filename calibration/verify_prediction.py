@@ -16,8 +16,8 @@ Keep the machine otherwise idle: this measures wall clock, so a competing job
 invalidates the timing half of the answer (the RMSE half is unaffected).
 
 CLI:
-    python3 src/budget/verify_prediction.py                       # ~4 min at the defaults
-    python3 src/budget/verify_prediction.py --m0 3 4 5 --replicates 6 --tag my_check
+    python3 calibration/verify_prediction.py                       # ~4 min at the defaults
+    python3 calibration/verify_prediction.py --m0 3 4 5 --replicates 6 --tag my_check
 """
 
 from __future__ import annotations
@@ -32,9 +32,10 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+ROOT = HERE.parent                           # repo root; calibration/ -> ../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
+sys.path.insert(0, str(ROOT / "src" / "budget"))    # the table being checked
 
 from artifacts import artifact_path, write_artifact  # noqa: E402
 from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
@@ -171,7 +172,7 @@ def _main(argv: list[str] | None = None) -> None:
     rd = _run_dir(root, args.tag)
     rd.mkdir(parents=True, exist_ok=True)
     write_artifact(rd, "prediction_check", result,
-                   produced_by="src/budget/verify_prediction.py")
+                   produced_by="calibration/verify_prediction.py")
 
     print(f"\n{'m0':>4} {'n':>12} {'pred s':>10} {'meas s':>10} {'ratio':>7}"
           f" {'pred rmse':>11} {'meas rmse':>11} {'ratio':>7}")

@@ -22,12 +22,15 @@ flowchart LR
     subgraph estimate["src/estimate"]
         MC["measure_cost.py<br/><b>d</b> — cost exponent"]
         EO["estimate_omega1.py<br/><b>ω₁, a₁</b> — correction"]
-        CC["check_coverage.py<br/><i>are the error bars real?</i>"]
     end
 
     subgraph budget["src/budget"]
         AT["allocation_table.py<br/><i>precision vs wall clock</i>"]
         AE["allocation_experiment.py<br/><i>sweep m₀ × B</i>"]
+    end
+
+    subgraph calib["calibration — checks on our own machinery"]
+        CC["check_coverage.py<br/><i>are the error bars real?</i>"]
         VP["verify_prediction.py<br/><i>predicted vs real</i>"]
     end
 
@@ -50,15 +53,17 @@ flowchart LR
     class RCP lib
 ```
 
-Solid arrows carry data or measured constants. `src/` holds only these ten drivers;
-the functions they call live in `tools/`, and the simulators in `models/`.
+Solid arrows carry data or measured constants. `src/` holds the eight pipeline
+drivers, `calibration/` the two that check the pipeline itself; the functions they all
+call live in `tools/`, and the simulators in `models/`.
 
 | layer | asks | reads | writes |
 |---|---|---|---|
 | `src/generate` | what does $Y_i$ look like? | a recipe | `samples.npz`, `samples_meta.json` |
 | `src/estimate` | what are $d$, $\omega_1$, $a_1$ — and is the stated $\pm$ honest? | samples | `cost_probe.json`, `omega1.json`, `coverage.json` |
-| `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json`, `prediction_check.json` |
+| `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json` |
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
+| `calibration/` | are our **own** stated numbers honest — the ± and the ETA? | the pipeline itself | `coverage.json`, `prediction_check.json` |
 | `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
 

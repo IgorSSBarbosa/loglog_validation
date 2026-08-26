@@ -86,16 +86,24 @@ loglog_validation/
                                   cross-checks the wall clock against the model's
                                   own declared cost_hint
     estimate/estimate_omega1.py   Experiment B's analysis driver (omega_1, a_1)
-    estimate/check_coverage.py    checkpoint 0.4: are the error bars calibrated?
-                                  arms planted / planting / rate / wilson
     budget/allocation_experiment.py  Experiment C: sweep (budget x m0), paired arms
     budget/allocation_table.py    precision vs wall clock, from measured constants
-    budget/verify_prediction.py   run the tuned ladders for real, compare
     report/plot_loglog.py         single shared log-log plotter; overlays a known
                                   E Y_i curve only when the model has a target_fn
                                   (currently only "synthetic")
     report/plot_cost.py           plot of measure_cost.py's output
     report/plot_allocation.py     Experiment C's two panels
+  calibration/                  <- checks whose subject is THIS REPO's machinery
+                                    rather than a model (2026-08-25). Distinct from
+                                    tools/tests/ (gitignored, seconds, closed forms):
+                                    these are slow Monte Carlo measurements with
+                                    numeric tolerances, tracked in git and run by
+                                    hand. Depends on src/; never the reverse.
+    check_coverage.py             checkpoint 0.4: are the error bars calibrated?
+                                  arms planted / planting / rate / wilson. Found that
+                                  every "95%" interval was covering 88%
+    verify_prediction.py          run allocation_table's tuned ladders for real and
+                                  compare predicted vs measured seconds and RMSE
   tools/                        <- shared, experiment-agnostic *helper* functions:
                                     called by src/'s scripts, or by each other, or
                                     by tests -- never run directly. May not import

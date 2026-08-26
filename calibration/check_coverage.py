@@ -31,10 +31,10 @@ allocation_experiment.py's `true_gamma` -- truth may plant data and score a
 finished answer, never reach an estimator. See experiments/01_srw/README.md.
 
 CLI:
-    python3 src/estimate/check_coverage.py                      # planted arm, 500 trials
-    python3 src/estimate/check_coverage.py --trials 2000
-    python3 src/estimate/check_coverage.py --arm srw --trials 40
-    python3 src/estimate/check_coverage.py --arm both --json out.json
+    python3 calibration/check_coverage.py                      # planted arm, 500 trials
+    python3 calibration/check_coverage.py --trials 2000
+    python3 calibration/check_coverage.py --arm srw --trials 40
+    python3 calibration/check_coverage.py --arm both --json out.json
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
+ROOT = HERE.parent                           # repo root; calibration/ -> ../
 sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
 sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
 

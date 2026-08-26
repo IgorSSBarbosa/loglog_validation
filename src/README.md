@@ -5,17 +5,20 @@ those scripts (and each other) call (user's own framing, 2026-08-12). One shared
 of each action, used by every experiment via a recipe's `"model"` field (dispatched
 through `tools/models.py`'s registry), instead of each experiment keeping its own copy.
 
-Ten drivers in four layers, named for the question they answer:
+Eight drivers in four layers, named for the question they answer:
 
 ```
 src/
   generate/   generate.py                                 draw samples
   estimate/   measure_cost.py  estimate_omega1.py         measure the constants
-              check_coverage.py                           …and check the error bars
-  budget/     allocation_experiment.py  allocation_table.py
-              verify_prediction.py                        spend a budget well
+  budget/     allocation_experiment.py  allocation_table.py    spend a budget well
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
 ```
+
+Scripts whose subject is **this repo's own machinery** rather than a model live in
+`calibration/` instead — `check_coverage.py` (are the error bars honest?) and
+`verify_prediction.py` (does a predicted runtime predict?). See
+`calibration/README.md`.
 
 Run everything from the repo root; the paths below assume it.
 
@@ -46,16 +49,17 @@ python3 src/budget/allocation_experiment.py -meta experiments/01_srw/recipes/swe
 python3 src/budget/allocation_table.py --list          # which run groups are available
 python3 src/budget/allocation_table.py --compare
 
-# 8. Check those predictions against reality (a few minutes; keep the machine idle)
-python3 src/budget/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+# 8. Check those predictions against reality -- calibration/, not src/
+#    (a few minutes; keep the machine idle)
+python3 calibration/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
 
 # 9. Plot Experiment C: the m0 tradeoff, and measured vs predicted decay rate
 python3 src/report/plot_allocation.py -data experiments/01_srw/data/allocation
 
-# 10. Are the error bars themselves calibrated? (checkpoint 0.4)
-python3 src/estimate/check_coverage.py --arm planted --trials 2000 --centre both
-python3 src/estimate/check_coverage.py --arm planting --trials 3000   # is the planting faithful?
-python3 src/estimate/check_coverage.py --arm wilson --trials 1000     # eq. (720) as a bound on gamma
+# 10. Are the error bars themselves calibrated? -- calibration/, checkpoint 0.4
+python3 calibration/check_coverage.py --arm planted --trials 2000 --centre both
+python3 calibration/check_coverage.py --arm planting --trials 3000   # is the planting faithful?
+python3 calibration/check_coverage.py --arm wilson --trials 1000     # eq. (720) as a bound on gamma
 ```
 
 ---
@@ -121,35 +125,6 @@ known values for reporting only — those values are never passed to the estimat
 the measurement stays blind to the answer it is checking. See
 `experiments/01_srw/README.md` for the recipe, the allocation rule, and the result.
 
-`check_coverage.py` — PLAN.md checkpoint 0.4: replays Experiment B's whole estimation
-pipeline thousands of times against srw's known ground truth and counts how often the
-interval it reports actually contains that truth. Tests the *error bar*, not the
-estimate — Experiment B already showed the estimates are right; what had never been
-checked is whether "±0.1050" means what it claims. **It found a real defect**: every
-interval this repo called 95% was covering 88%, because a 5-replicate standard error
-was being paired with the normal quantile $1.960$ instead of $t_4=2.776$. Four arms:
-
-- `planted` draws $\overline Y_i$ straight from $\mathcal N(\mu_i,\sigma_i^2/n_i)$
-  using the exact moments of $|S_k|$ (cheap, so many trials, and it isolates the fit's
-  error bar from whether the CLT has kicked in). `--centre both` scores the pipeline's
-  own pooled estimate against the mean-of-fits alternative on identical draws.
-- `planting` draws real srw at small $n$ and KS-tests $\overline Y$ against the normal
-  the `planted` arm assumes — i.e. it validates the validation. Small $n$ on purpose:
-  normality of a sample mean only improves with $n$, so a pass here implies a pass at
-  Experiment B's much larger $n$.
-- `rate` checks the error-decay exponent rather than a single interval.
-- `wilson` is a different question from the others: it scores `tools/wilson.py`'s eq.
-  (720) **bound** rather than a replicate interval, so the pass condition is coverage
-  $\ge$ nominal and the interesting number is how conservative. It sweeps $m_0$ to show
-  the crossover from bias-dominated (shallow ladders, where the bound is very wide and
-  the replicate interval is simply wrong) to variance-dominated (deep ladders, where
-  the bound is both valid and narrower).
-
-Ground truth ($\mathbb E|S_k|$, $\mathrm{sd}|S_k|$) lives in this driver and is
-deliberately *not* registered in `tools/models.py` as a `target_fn` — same rule as
-`allocation_experiment.py`'s `true_gamma`: truth may plant data and score a finished
-answer, never reach an estimator.
-
 ## `budget/`
 
 `allocation_experiment.py` — Experiment C's driver: sweeps a (budget × $m_0$) grid,
@@ -186,14 +161,6 @@ $\mathbb{E}[\hat a_1]$ rather than $a_1$, a bias no number of replicates removes
 `measured_a1`'s docstring for the measured numbers). Pooling uses the
 `y_bar`/`n`/`sigma_log` stored in `omega1.json`, so the samples need not be kept.
 Verified: `tools/tests/test_allocation_table.py` (20 cases).
-
-`verify_prediction.py` — runs the tuned ladders for real and compares wall clock and
-RMSE against what `allocation_table.py` predicted. Measured 0.94×–1.00× on timing
-across four orders of magnitude, and 1.06× median on RMSE (noisy at small
-`--replicates`, since an RMSE over $R$ draws carries $1/\sqrt{2R}$ relative sd itself).
-Skips ladders needing more than `--max-n` samples per scale: budget is derived *from*
-$m_0$ here, so $n$ grows like $\rho^{2m_0}$ and a stray `--m0 20` would otherwise ask
-for $10^{25}$ samples. Verified: `tools/tests/test_verify_prediction.py` (7 cases).
 
 ## `report/`
 
@@ -232,7 +199,7 @@ are).
 
 ---
 
-## Conventions these ten share
+## Conventions these eight share
 
 **Recipes are inputs and declare their kind.** A recipe lives in
 `experiments/<exp>/recipes/<kind>_<name>.json` and carries a `"kind"` field

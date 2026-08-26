@@ -234,7 +234,7 @@ same defect: $\Pr(|t_4|<1)=2F_{t_4}(1)-1=0.6261$.
 
 ## 11. Measured coverage
 
-`src/estimate/check_coverage.py` replays Experiment B's exact configuration (scales $8..256$, the
+`calibration/check_coverage.py` replays Experiment B's exact configuration (scales $8..256$, the
 real per-scale $n$, $R=5$) 2000 times against the known ground truth for $|S_k|$ and counts
 interval hits. Bounds on the coverage itself are Wilson score intervals.
 
@@ -315,8 +315,8 @@ python3 src/report/plot_allocation.py -data experiments/01_srw/data/allocation_w
 python3 src/budget/allocation_table.py --compare
 
 # Part II: coverage calibration
-python3 src/estimate/check_coverage.py --arm planted  --trials 2000 --centre both
-python3 src/estimate/check_coverage.py --arm planting --trials 3000 --planting-n 10000
+python3 calibration/check_coverage.py --arm planted  --trials 2000 --centre both
+python3 calibration/check_coverage.py --arm planting --trials 3000 --planting-n 10000
 ```
 
 The constants themselves are `tools/allocation.py`'s `allocation_constants` /

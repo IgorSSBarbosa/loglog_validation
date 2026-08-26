@@ -70,7 +70,7 @@ of any bias term. `moment_bounds` reads $\sigma_\infty^2$/$\sigma_{\max}^2$/$\La
 off real samples; `sigma_se_per_scale` handles the non-uniform $n$ eq. (720) does not
 cover. Terms whose constants are unmeasured are dropped only behind a loud
 `complete=False` — a bound missing a term is not a bound. Driven by
-`src/estimate/check_coverage.py --arm wilson`.
+`calibration/check_coverage.py --arm wilson`.
 
 `coverage.py` — calibration testing for error bars (PLAN.md checkpoint 0.4).
 Answers a question none of the other tools do: this repo reports every result
@@ -91,7 +91,7 @@ the fix differs. **Not article eq. (720)**: the article's Wilson interval is a
 four-term bound on $\hat\gamma$ and lives in `tools/wilson.py` (above); the one
 here is the textbook binomial score interval, used only for counting
 proportions. The distinction is the whole reason both exist -- `coverage.py`
-*scores* intervals, `wilson.py` *builds* one. Driven by `src/estimate/check_coverage.py`.
+*scores* intervals, `wilson.py` *builds* one. Driven by `calibration/check_coverage.py`.
 
 `loglog.py` — four $\hat\gamma$ estimators. Three as the general OLS slope of
 $\log\overline Y_i$ vs $\log i$ (equivalent to the article's closed-form

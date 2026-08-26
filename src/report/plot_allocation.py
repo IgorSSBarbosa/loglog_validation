@@ -306,7 +306,7 @@ def _main(argv: list[str] | None = None) -> None:
     # handful of replicates, so the combined statistic is not standard normal
     # and the familiar |z| < 2 is the wrong cut-off. Welch-Satterthwaite gives
     # the effective dof; at R = 5 replicates a "2.5 sigma discrepancy" is in
-    # fact consistent. Measured in src/estimate/check_coverage.py -- normal-quantile
+    # fact consistent. Measured in calibration/check_coverage.py -- normal-quantile
     # intervals at R = 5 cover 88%, not 95%.
     comb, dof_eff = combine_se([(slope_se, None),
                                 (th_se, (expected_reps - 1) if expected_reps else None)])

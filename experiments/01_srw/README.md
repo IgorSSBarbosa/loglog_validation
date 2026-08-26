@@ -591,7 +591,7 @@ averaging *those* would be meaningless rather than merely imprecise.
 Everything above reports *estimate $\pm$ uncertainty*, and the estimates have been
 checked against known truth. The uncertainties never had been. "$\omega_1 = 1.0155 \pm
 0.1050$" is also a claim: that re-running the experiment many times would land within
-$0.1050$ of truth about 68% of the time. `src/estimate/check_coverage.py` measures that
+$0.1050$ of truth about 68% of the time. `calibration/check_coverage.py` measures that
 (PLAN.md checkpoint 0.4) by replaying Experiment B's exact configuration — scales
 $8..256$, the real per-scale $n$, $R=5$ — 2000 times against srw's known truth and
 counting interval hits.
@@ -872,11 +872,11 @@ single run (`rep2`) is one step off, costing 19%.
 
 #### Are the predictions themselves right? The timing, essentially exactly
 
-`src/budget/verify_prediction.py` runs each tuned ladder for real and compares
+`calibration/verify_prediction.py` runs each tuned ladder for real and compares
 (~4 min at the defaults; keep the machine idle, it measures wall clock):
 
 ```bash
-python3 src/budget/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+python3 calibration/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
 ```
 
 | $m_0$ | $n$ | predicted | measured | ratio | pred RMSE | meas RMSE | ratio |

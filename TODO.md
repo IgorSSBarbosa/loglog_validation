@@ -76,7 +76,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] 0.3 CLT empirical check (fresh replicates only, per `tools/rng.py`)
 - [x] ~~0.4 coverage calibration of the $\omega_1$/$a_1$/$\gamma$ error bars (done
       2026-08-22). **FOUND A REAL DEFECT**: every "95%" interval this repo had
-      published was an 88% interval. `src/estimate/check_coverage.py` replays Experiment B's
+      published was an 88% interval. `calibration/check_coverage.py` replays Experiment B's
       exact configuration (scales $8..256$, the real per-scale $n$, $R=5$) 2000 times
       against srw's known truth and counts interval hits; all six quantity/centre
       combinations came in at $0.877$--$0.891$ against a nominal $0.95$, and all six

@@ -5,7 +5,7 @@ Written 2026-08-24 as step zero of a reorganization, refreshed 2026-08-25: the p
 current structure legible enough to change safely, **not** to defend it. Where the
 current placement looks wrong, the "Notes" column says so.
 
-Scope: `tools/`, `src/`, `models/` — 23 modules, ~5,900 lines, 112 module-level
+Scope: `tools/`, `src/`, `calibration/`, `models/` — 23 modules, ~5,900 lines, 112 module-level
 public functions (§4 indexes the ones worth naming). Not covered: `tools/tests/`
 (gitignored, local-only), `experiments/*/` (recipes + data, no code), `derivations/`
 (LaTeX).
@@ -42,8 +42,8 @@ flowchart TB
         ALLOC --> AE --> PA
     end
 
-    subgraph check["Checkpoint 0.4 — are the error bars real?"]
-        CC["estimate/check_coverage.py<br/>arms: planted / planting / rate / wilson"]
+    subgraph check["calibration/ — are the error bars real?"]
+        CC["calibration/check_coverage.py<br/>arms: planted / planting / rate / wilson"]
         COV["coverage.py<br/>coverage_test, t vs normal"]
         WIL["wilson.py<br/>eq. 720 bound, γ only"]
         CC --> COV
@@ -52,7 +52,7 @@ flowchart TB
 
     subgraph plan["Planning & verification"]
         AT["budget/allocation_table.py<br/>precision vs wall clock"]
-        VP["budget/verify_prediction.py<br/>predicted vs real seconds"]
+        VP["calibration/verify_prediction.py<br/>predicted vs real seconds"]
     end
 
     ART --> expA & expB & expC & check
@@ -122,7 +122,8 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 
 ### `src/` — the scripts a human runs
 
-Split into four layers on 2026-08-25 (see §5.3).
+Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out to
+`calibration/` the same day (§5.2's neighbourhood).
 
 | module | L | tags | purpose | depends on |
 |---|---|---|---|---|
@@ -130,12 +131,17 @@ Split into four layers on 2026-08-25 (see §5.3).
 | `estimate/measure_cost.py` | 214 | `experiment`, `budget tool` | **Experiment A**: time `simulate()` per scale, fit $d$, and score it against the model's declared `cost_hint`. | `cost_model`, `loglog`, `models`, `persistence` |
 | `estimate/estimate_omega1.py` | 198 | `experiment`, `statistical tool` | **Experiment B**: $\omega_1$, $a_1$, $\gamma$, $a_0$ from one run. | `correction`, `loglog`, `persistence` |
 | `budget/allocation_experiment.py` | 348 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
-| `estimate/check_coverage.py` | 461 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation`, `generate`, … |
 | `budget/allocation_table.py` | 630 | `budget tool`, `statistical tool` | Planning: precision vs wall clock. Discovers run groups, pools replicates, reports provenance. **Largest module — see §5.** | `allocation`, `correction`, `persistence` |
-| `budget/verify_prediction.py` | 190 | `experiment`, `budget tool` | Runs tuned ladders for real; predicted vs measured seconds and RMSE. | `allocation`, `allocation_table`, `loglog`, … |
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
 | `report/plot_cost.py` | 88 | `plot tool` | Cost-probe timings. | `loglog_plot` |
+
+### `calibration/` — checks on our own machinery, not on a model
+
+| module | L | tags | purpose | depends on |
+|---|---|---|---|---|
+| `check_coverage.py` | 461 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation`, `generate` |
+| `verify_prediction.py` | 190 | `experiment`, `budget tool` | Runs tuned ladders for real; predicted vs measured seconds and RMSE. | `allocation`, `allocation_table`, `generate` |
 
 ### `models/` — the simulated objects
 
@@ -208,7 +214,7 @@ Split into four layers on 2026-08-25 (see §5.3).
 </details>
 
 <details>
-<summary><b>src/</b> — the public surface worth naming (37 module-level functions in all)</summary>
+<summary><b>src/ + calibration/</b> — the public surface worth naming (37 module-level functions in all)</summary>
 
 | function | module | what it is |
 |---|---|---|
@@ -242,13 +248,14 @@ with their outcome, rather than deleted, so the reasoning stays readable.
 
 1. **`src/budget/allocation_table.py` is 630 lines and does three jobs**: discovering
    run groups on disk, extracting measured constants with provenance, and
-   rendering tables. The first two are library work that `plot_allocation.py`,
-   `verify_prediction.py` and `check_coverage.py` all reach into `src/` to get —
-   which is backwards, since `src/` is supposed to be leaf scripts. Splitting the
-   constant-extraction half into `tools/measured.py` would remove the only
-   `src/ → src/` imports in the repo.
+   rendering tables. *Partly addressed* (2026-08-25): `ladder`, `n_for_budget` and
+   `rate_exponent(_se)` moved from `allocation_experiment` into `tools/allocation.py`,
+   which removed `check_coverage`'s reach into `src/budget` entirely. What remains is
+   the constant-extraction half of `allocation_table` itself, which
+   `plot_allocation.py` and `verify_prediction.py` still import; splitting it into
+   `tools/measured.py` would finish the job.
 
-2. **`src/estimate/check_coverage.py` holds srw's exact moments.** Deliberate — truth must
+2. **`calibration/check_coverage.py` holds srw's exact moments.** Deliberate — truth must
    never reach an estimator — but it means a *driver* owns model knowledge. If
    Phase 2 adds RWRE, this file will grow a second model's truth. A
    `models/<name>_truth.py` convention, imported only by drivers, would scale
