@@ -16,3 +16,9 @@ experiments/*/data/
 # (python3 -m pytest); a fresh `git clone`/EnterWorktree checkout of this
 # repo will not have them -- see TODO.md's note on this tradeoff.
 tools/tests/
+
+# Local working plan, not part of the record (user request, 2026-08-29).
+plans/saverepo.md
+
+# Local scratch: rescued uncommitted work, never part of the record.
+local/

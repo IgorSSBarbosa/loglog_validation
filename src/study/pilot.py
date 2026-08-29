@@ -43,9 +43,11 @@ sys.path.insert(0, str(ROOT / "src" / "generate"))
 sys.path.insert(0, str(ROOT / "src" / "estimate"))
 
 from artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
-from constants import format_table, measured, save  # noqa: E402
+from constants import format_table, measured, override, save  # noqa: E402
 from correction import fit_correction  # noqa: E402
-from cost_model import PROBE_REPEATS, climb_to_target, fit_cost_probe  # noqa: E402
+from cost_model import (  # noqa: E402
+    PROBE_MIN_SCALES, PROBE_REPEATS, aggregate, climb_to_target,
+    estimate_cost_affine, fit_cost_probe)
 from models import get_model  # noqa: E402
 from rng import spawn  # noqa: E402
 from summary import replicate_summary, summarize_scale  # noqa: E402
@@ -114,9 +116,11 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
     returned d = 8.0 +/- 280. d is a property of the model, not of the window,
     so measuring it further out costs nothing.
 
-    A model that declares `cost_hint` gets that reported too, as `declared_d`:
-    it is exact where the clock is not, and disagreement means either the hint
-    is wrong or the machine has stopped being compute-bound.
+    A model that declares `cost_hint` gets that reported too, as `declared_d`
+    -- but only as something to CHECK the clock against, never as the value
+    used. See `_resolve_d`: before 2026-08-29 a declaration was written
+    straight into constants.json, so on srw (cost_hint(i) = i exactly) d = 1
+    entered by definition and this probe never had to recover anything.
     """
     spec = get_model(model)
     probe = climb_to_target(spec, params, np.random.default_rng(COST_PROBE_SEED),
@@ -124,8 +128,172 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
     return fit_cost_probe(probe, spec.cost_hint, params)
 
 
+#: |z| beyond which the clock and a declared cost are called a mismatch.
+#: A WARNING, not a stop (user's call, 2026-08-29): a disagreement is evidence
+#: about the machine or about the hint, and the draw that produced it is still
+#: the draw you asked for -- stopping would throw away hours of sampling over a
+#: diagnostic. It is recorded in pilot.json and reprinted by report.py instead,
+#: so it cannot be lost by scrolling past.
+D_MISMATCH_Z = 3.0
+
+#: Above this share, the affine fit's `a` term is most of the cheapest
+#: measurement, so the PURE power-law d_hat is measuring dispatch rather than
+#: work. affine["d"] is unaffected -- separating that overhead is precisely what
+#: it is for -- so this is recorded as a note, never a refusal.
+OVERHEAD_SHARE_NOTE = 0.2
+
+#: Resamples for the fallback se(d). Only used when the Gauss-Newton covariance
+#: is singular, which needs len(scales) <= 3 or a degenerate Jacobian.
+D_SE_BOOTSTRAP = 200
+
+
+def _d_se_bootstrap(cost: dict, draws: int = D_SE_BOOTSTRAP,
+                    seed: int = COST_PROBE_SEED) -> float | None:
+    """se(d) by resampling the probe's own repeat times, when the fit gave none.
+
+    `estimate_cost_affine` derives d_se from the Gauss-Newton covariance and
+    returns None when that is singular (dof = len(scales) - 3 <= 0, or a
+    degenerate Jacobian). Without SOME spread there is no z, and a declaration
+    that cannot be checked is exactly what stage 2 exists to remove -- so fall
+    back to the raw timings the probe already kept in `elapsed_all` rather than
+    silently skipping the check.
+
+    Returns None when even this is impossible (fewer than 2 repeats per scale,
+    or too many refits failing), and the caller records `verdict: "unchecked"`.
+    """
+    raw, scales = cost.get("elapsed_all") or {}, cost.get("scales") or []
+    per = [raw.get(str(k)) for k in scales]
+    if len(scales) < 2 or any(not t or len(t) < 2 for t in per):
+        return None
+    rng = np.random.default_rng(seed)
+    agg, ds = cost.get("aggregator", "median"), []
+    for _ in range(draws):
+        elapsed = [aggregate(list(rng.choice(t, size=len(t), replace=True)), agg)
+                   for t in per]
+        try:
+            ds.append(float(estimate_cost_affine(scales, elapsed)["d"]))
+        except Exception:                  # a resample the fit cannot solve
+            continue
+    if len(ds) < draws // 2:
+        return None
+    sd_ = float(np.std(ds, ddof=1))
+    return sd_ if np.isfinite(sd_) and sd_ > 0 else None
+
+
+def _resolve_d(cost: dict, declared_override: float | None = None,
+               *, trust_declared: bool = False):
+    """The pilot's d. The CLOCK measures it; a declaration only CHECKS it.
+
+    This inverts what this file used to do. Before 2026-08-29, a model that
+    declared a `cost_hint` had that value written straight into constants.json
+    and the timing demoted to a note -- so on srw, whose cost_hint returns
+    exactly `i`, d = 1 entered BY DEFINITION and the cost probe never had to
+    recover anything. That is the same class of defect tools/constants.py was
+    written to close (see its docstring on FALLBACK_D), one layer up.
+
+    Now: `d` is always the affine fit's, with its own standard error, and a
+    declaration becomes an assertion scored as z = (d_hat - declared)/se(d_hat).
+    |z| > D_MISMATCH_Z is reported loudly and recorded -- it does not stop the
+    run (user's call; see D_MISMATCH_Z).
+
+    `declared_override` is --assert-d, for models with no cost_hint; it takes
+    the identical checked path. `trust_declared` is --trust-declared-d, the
+    explicit escape hatch for a machine whose clock is not usable: it routes
+    through constants.override(), so the number prints as `<-- NOT MEASURED`
+    and can never pass for a measurement.
+
+    Returns (Constant | None, check: dict, warnings: list[str]). A None
+    Constant means no usable d exists at all and the caller must stop.
+    """
+    aff = cost.get("affine") or {}
+    d_val, d_se = aff.get("d"), aff.get("d_se")
+    declared = declared_override if declared_override is not None \
+        else cost.get("declared_d")
+    warnings, se_source = [], "affine fit covariance"
+
+    share = cost.get("overhead_share")
+    if share is not None and share > OVERHEAD_SHARE_NOTE:
+        # Not a refusal: this is the condition affine[] exists to survive.
+        warnings.append(
+            f"per-call overhead is {share:.0%} of the cheapest probe rung "
+            f"(> {OVERHEAD_SHARE_NOTE:.0%}), so the pure power-law d_hat "
+            f"({cost.get('d_hat')}) is measuring dispatch. The affine fit "
+            f"separates it out and is what d uses.")
+
+    check = {"declared": declared, "measured": d_val, "d_se": None,
+             "z": None, "verdict": None, "se_source": None,
+             "overhead_share": share}
+
+    if trust_declared:
+        if declared is None:
+            raise SystemExit("--trust-declared-d needs a declared d: the model "
+                             "must have a cost_hint, or pass --assert-d.")
+        check["verdict"] = "trusted-by-flag (NOT measured)"
+        warnings.append(
+            f"--trust-declared-d: d = {declared:g} was taken on trust and the "
+            f"clock was NOT used. It is stamped as a user override and prints "
+            f"as `<-- NOT MEASURED` everywhere it appears.")
+        return override(declared, "d"), check, warnings
+
+    if d_val is None:
+        # The clock produced nothing usable. Never silently substitute the
+        # declaration AS a measurement -- fall back to it stamped, or stop.
+        if declared is None:
+            return None, check, warnings
+        check["verdict"] = "unmeasured, fell back to declared"
+        warnings.append(
+            f"the cost probe produced no usable d ("
+            f"{aff.get('error', 'affine fit failed')}), so the declared value "
+            f"{declared:g} is being used UNCHECKED, stamped as an override. "
+            f"Widen the probe (PROBE_MAX_DOUBLINGS / PROBE_TARGET_SECONDS) to "
+            f"get a real measurement.")
+        return override(declared, "d"), check, warnings
+
+    if d_se is None:
+        d_se = _d_se_bootstrap(cost)
+        se_source = "bootstrap over probe repeats" if d_se else None
+
+    prov = (f"pilot cost probe, affine fit over {len(cost['scales'])} scales "
+            f"({cost['scales'][0]}..{cost['scales'][-1]})")
+    if se_source and se_source != "affine fit covariance":
+        prov += f", se from {se_source}"
+    c = measured(d_val, d_se, prov)
+    check.update(d_se=d_se, se_source=se_source)
+
+    if declared is None:
+        check["verdict"] = "no declaration to check"
+        return c, check, warnings
+
+    if d_se is None or d_se <= 0:
+        check["verdict"] = "unchecked (no se for d)"
+        warnings.append(
+            f"d was measured ({d_val:.4f}) and something declares {declared:g}, "
+            f"but no standard error could be formed for d -- neither the fit "
+            f"covariance nor a bootstrap over the probe repeats -- so the two "
+            f"CANNOT be compared. Treat the agreement as unverified.")
+        return c, check, warnings
+
+    z = (d_val - declared) / d_se
+    check["z"] = float(z)
+    if abs(z) > D_MISMATCH_Z:
+        check["verdict"] = "MISMATCH"
+        warnings.append(
+            f"D MISMATCH: the clock measured d = {d_val:.4f} +/- {d_se:.4f}, "
+            f"but the declared cost says {declared:g} -- that is z = {z:+.2f}, "
+            f"beyond +/-{D_MISMATCH_Z:g}.\n"
+            f"    Either the cost_hint is wrong, or this machine has stopped "
+            f"being compute-bound (load, throttling, swap).\n"
+            f"    d is the MEASURED value; every wall-clock prediction "
+            f"downstream inherits this disagreement. Recorded in pilot.json "
+            f"as cost.d_check.")
+    else:
+        check["verdict"] = "pass"
+    return c, check, warnings
+
+
 def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
-          existing: list | None = None) -> dict:
+          existing: list | None = None, assert_d: float | None = None,
+          trust_declared_d: bool = False) -> dict:
     """Draw `replicates` replicates, fit the constants, write them to `sd`."""
     model, params = recipe["model"], recipe.get("params", {})
     scales = [int(x) for x in recipe["scales"]]
@@ -196,21 +364,19 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
                            f"pilot, mean over {len(scales)} scales, spread "
                            f"{cv_per_scale.min():.4f}-{cv_per_scale.max():.4f}"),
     }
-    declared = cost.get("declared_d")
-    if declared is not None:
-        # The model states its own cost, which is exact where a clock is not.
-        # The timing still runs, as a cross-check reported by plan.py.
-        gap = abs(d_val - declared) if d_val is not None else None
-        note = (f"declared by the model's cost_hint (clock agrees: "
-                f"{d_val:.4f}, gap {gap:.4f})" if gap is not None and gap < 0.1
-                else f"declared by the model's cost_hint"
-                      + (f" -- CLOCK DISAGREES: {d_val:.4f}" if gap is not None else ""))
-        consts["d"] = measured(declared, None, note)
-    elif d_val is not None:
-        consts["d"] = measured(d_val, d_se,
-                               f"pilot cost probe, affine fit over "
-                               f"{len(cost['scales'])} scales "
-                               f"({cost['scales'][0]}..{cost['scales'][-1]})")
+    consts["d"], d_check, d_warnings = _resolve_d(
+        cost, declared_override=assert_d, trust_declared=trust_declared_d)
+    if consts["d"] is None:
+        raise SystemExit(
+            f"\nthe cost probe produced no usable d, and nothing declares one.\n"
+            f"  The affine fit cost(i) = a + b*i**d needs at least "
+            f"{PROBE_MIN_SCALES} rungs and got "
+            f"{len(cost.get('scales') or [])}: {cost.get('affine', {}).get('error', '')}\n"
+            f"  Widen the probe (tools/cost_model.py: PROBE_MAX_DOUBLINGS, "
+            f"PROBE_TARGET_SECONDS),\n"
+            f"  or state it:  --assert-d <value>   (checked against the clock, "
+            f"not a substitute for it)\n")
+    cost["d_check"] = d_check
 
     sd.mkdir(parents=True, exist_ok=True)
     save(sd, consts)
@@ -222,10 +388,11 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         "direct_fit": fit, "per_replicate": reps, "cost": cost,
         "gamma_pilot": fit["gamma"], "a0_pilot": fit["a0"],
         "throughput": throughput, "drawn_seconds": drawn_seconds,
-        "drawn_steps": drawn_steps,
+        "drawn_steps": drawn_steps, "d_warnings": d_warnings,
     }, produced_by="src/study/pilot.py")
     return {"constants": consts, "fit": fit, "cost": cost, "replicates": R,
-            "reps": reps, "cv_per_scale": cv_per_scale, "throughput": throughput}
+            "reps": reps, "cv_per_scale": cv_per_scale, "throughput": throughput,
+            "d_check": d_check, "d_warnings": d_warnings}
 
 
 def _main(argv=None) -> None:
@@ -245,6 +412,17 @@ def _main(argv=None) -> None:
                    help="add this many replicates to an existing pilot, keeping the "
                         "ones already drawn")
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--assert-d", type=float, default=None, dest="assert_d",
+                   help="a known cost exponent to CHECK the clock against, for "
+                        "models with no cost_hint. Scored as z = (d_hat - "
+                        "value)/se; a mismatch warns loudly and is recorded, "
+                        "but never replaces the measurement or stops the run")
+    p.add_argument("--trust-declared-d", action="store_true",
+                   dest="trust_declared_d",
+                   help="take the declared d on trust and skip the clock. For a "
+                        "machine whose timings are unusable (shared load, "
+                        "throttling). Stamped as a user override and printed as "
+                        "`<-- NOT MEASURED` wherever it appears")
     a = p.parse_args(argv)
 
     existing = None
@@ -268,7 +446,8 @@ def _main(argv=None) -> None:
         sd = study_dir(root, a.study)
         reps = a.replicates
 
-    r = pilot(recipe, sd, reps, seed=a.seed, existing=existing)
+    r = pilot(recipe, sd, reps, seed=a.seed, existing=existing,
+              assert_d=a.assert_d, trust_declared_d=a.trust_declared_d)
 
     print(f"\nstudy   = {sd}")
     print(f"model   = {recipe['model']}  scales = {r['fit'] and recipe['scales']}")
@@ -285,7 +464,15 @@ def _main(argv=None) -> None:
               f"(this machine, from the pilot's own clock)")
     print(f"\ngamma from the pilot itself: {r['fit']['gamma']:.4f}  "
           f"(indicative -- the plan exists to measure it properly)")
+
     print(f"\nnext: python3 src/study/plan.py --study {a.study} --data-root {root}")
+    # Last, and on stderr, so a mismatch is the final thing on screen rather
+    # than something scrolled past above the constants table. stdout is flushed
+    # first: without it the two streams interleave when the output is piped,
+    # and the warning lands in the middle of the table it is meant to follow.
+    sys.stdout.flush()
+    for w in r["d_warnings"]:
+        print(f"\n  !! {w}", file=sys.stderr)
 
 
 if __name__ == "__main__":

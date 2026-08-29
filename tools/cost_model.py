@@ -413,9 +413,11 @@ def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> d
                        dispatch rather than work. Above ~0.2, `d_hat` is
                        measuring the overhead and only `affine["d"]` is usable
       declared_d       what the model's own cost_hint implies, when it has one.
-                       Exact where a clock is not, so allocations prefer it;
-                       kept beside the measurement so the two can disagree
-                       visibly rather than silently
+                       Reported for CROSS-CHECKING only -- src/study/pilot.py
+                       always takes d from the affine fit and scores any
+                       declaration as z = (d_hat - declared)/se(d_hat). It used
+                       to be preferred over the measurement; that is exactly the
+                       leak `_resolve_d` was written to close.
     """
     scales, elapsed = probe["scales"], probe["elapsed"]
     probe["d_hat"] = estimate_cost_exponent(scales, elapsed)

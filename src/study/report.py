@@ -176,6 +176,40 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
     return p
 
 
+def _d_check_section(sd: Path) -> list[str]:
+    """The pilot's declared-vs-measured d check, reprinted in the deliverable.
+
+    A mismatch warns on the pilot's console, which is hours and several steps
+    upstream of this file. Reprinting it here is the point: d sizes every
+    wall-clock prediction in the study, so a disagreement between the clock and
+    a model's declared cost has to survive all the way to the document someone
+    actually reads.
+    """
+    pj = artifact_path(sd, "pilot")
+    if not pj.exists():
+        return []
+    chk = (json.loads(pj.read_text()).get("cost") or {}).get("d_check")
+    if not chk or chk.get("declared") is None:
+        return []
+    verdict, z = chk.get("verdict"), chk.get("z")
+    zs = f"{z:+.2f}" if z is not None else "n/a"
+    flag = "" if verdict == "pass" else "  **<-- CHECK THIS**"
+    return [
+        "## Cost exponent: declared vs measured", "",
+        "| | |", "|---|---|",
+        f"| measured (clock) | {chk.get('measured')} +/- {chk.get('d_se')} |",
+        f"| declared (model cost_hint or --assert-d) | {chk.get('declared')} |",
+        f"| z | {zs} |",
+        f"| verdict | {verdict}{flag} |",
+        "",
+        "`d` is the MEASURED value in every case; the declaration is only ever "
+        "scored against it. A mismatch means either the declared cost is wrong "
+        "or the machine was not compute-bound while the probe ran -- both make "
+        "the wall-clock predictions in this study unreliable, even though the "
+        "gamma estimate above is unaffected.", "",
+    ]
+
+
 def write_details(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> Path:
     """details.md -- every constant, its error, and where it came from."""
     fit = res["fit"]
@@ -198,6 +232,7 @@ def write_details(sd: Path, res: dict, final: dict, consts: dict, plan: dict) ->
         "These sized the run; the table above is what the run then measured. "
         "Large disagreement means the pilot was not representative -- worth "
         "knowing before quoting the result.", "",
+        *_d_check_section(sd),
         "## Per-replicate gamma", "",
         "```",
         "\n".join(f"  rep {i}: {g:+.6f}"
