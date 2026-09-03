@@ -1,0 +1,20 @@
+{
+  "kind": "samples",
+  "model": "srw",
+  "params": {"q": 0.5},
+  "scales": [8, 16, 32, 64, 128, 256],
+  "n": {"rule": "snr", "budget": 5e10, "omega1": 1.0},
+  "seed": null,
+  "_note": [
+    "saverepo stage 3.3/3.4 arm: snr, omega1 = 1 (what samples_pilot.json used until 2026-09-03). Budget 5e10, ladder 8..256, 3 replicates,",
+    "distinct seeds per arm. Measured 2026-08-29:",
+    "",
+    "    omega1 = 1.0364 +/- 0.1816   a1 = -0.2709 +/- 0.0918   n = 1.7e5 .. 1.7e8",
+    "",
+    "The five arms together answer two questions. (1) Does the recipe's design",
+    "omega1 reach the estimator? No: it moves the allocation by 1e6x across the",
+    "arms and moves the fitted omega1 by less than the noise. (2) Which arm should",
+    "the pilot use? The uninformed one -- see samples_pilot.json for the full",
+    "table and tools/allocation.py:snr_allocation for the corrected claim."
+  ]
+}

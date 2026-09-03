@@ -1,0 +1,26 @@
+{
+  "kind": "samples",
+  "model": "srw",
+  "params": {"q": 0.5},
+  "scales": [8, 16, 32, 64, 128, 256],
+  "n": {"rule": "snr", "budget": 5e10},
+  "seed": null,
+  "_note": [
+    "The pilot with NO design constants: no 'd', no 'omega1'. It exists to make",
+    "the claim 'design inputs never reach an estimator' TESTABLE rather than",
+    "asserted -- run it against a recipe that DOES state omega1 and compare the",
+    "fitted value while the allocation differs by orders of magnitude.",
+    "",
+    "As of 2026-09-03 its \"n\" block is identical to samples_pilot.json's, because",
+    "stage 3.4 ran that comparison (five arms, omega1 in {absent, 0.25, 1, 2} plus",
+    "neyman) and it came out clean: the allocation moved 1e6x, the fitted omega1",
+    "moved less than the noise, and the uninformed arm was also the most precise.",
+    "The pilot therefore dropped its omega1. Keep this file anyway -- it is the",
+    "control for the next model, whose truths are not srw's.",
+    "",
+    "Missing omega1 falls back to the uninformed 0 (n_i ~ s_i**2, flat for a",
+    "scale-free cv), reported as 'uninformed default' and recorded in the run's",
+    "_allocation_resolved. It is deliberately NOT 1.0: on srw that is the exact",
+    "truth, and a default near the truth would defeat the test."
+  ]
+}

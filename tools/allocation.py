@@ -238,8 +238,10 @@ def neyman_allocation(
         raise ValueError("scales must be non-empty")
     if np.any(i <= 0):
         raise ValueError("scales must be strictly positive")
-    if d <= 0:
-        raise ValueError(f"d must be > 0 (Assumption cost_is_power_law); got {d}")
+    # d is a DESIGN input here (see snr_allocation): 0 means every scale costs
+    # the same, which is what a recipe stating nothing falls back to.
+    if d < 0:
+        raise ValueError(f"d must be >= 0 as a design input; got {d}")
     if budget <= 0:
         raise ValueError(f"budget must be > 0; got {budget}")
     if min_n < 1:
@@ -278,10 +280,33 @@ def snr_allocation(
 ) -> dict:
     """Per-scale n_i equalizing the signal-to-noise ratio of the CORRECTION term.
 
-    This is Experiment B's corrected rule, and it supersedes
+    This is Experiment B's corrected rule. It was claimed here to SUPERSEDE
     `neyman_allocation` for measuring omega_1 (measured 2026-08-20, see
-    plans/three_experiment_ladder.md section 3).
+    plans/three_experiment_ladder.md section 3). **That claim is false**, and
+    the reasoning below is what misled it -- read both together.
 
+    Measured 2026-08-29 (saverepo stage 3.3): five arms, srw, ladder 8..256,
+    budget 5e10, 3 replicates, distinct seeds, se(omega1_hat) of
+
+        flat / this rule at omega1 = 0   0.0076
+        this rule at omega1 = 0.25       0.0150
+        neyman                           0.0171
+        this rule at omega1 = 2          0.148
+        this rule at omega1 = 1          0.182
+
+    So at the design value the argument below recommends, this rule is ~24x
+    WORSE than flat and ~11x worse than Neyman. It is not wrong, only
+    expensive: every arm above is identified, and the omega1 = 1 arm still
+    recovers the truth. The failure is one of degree, and the mechanism is
+    visible in the allocation -- n_i proportional to i**2 starves precisely the
+    small scales where the correction is large and cheap to resolve. Equalizing
+    each point's SNR is not the same as minimizing var(omega1_hat).
+
+    Prefer omega1 = 0 (or simply omit it; see generate.UNINFORMED) unless you
+    have a reason to weight the large scales. The ordering among the top three
+    arms is ~1.4 sigma on R = 3 and is NOT settled.
+
+    The argument that produced the false claim, kept because it is half right:
     Neyman minimizes the variance of Y_bar_i. But omega_1 is not estimated
     from Y_bar_i -- it is estimated from the small correction a_1 * i^-omega_1
     riding on top of it, whose size SHRINKS with i. Equalizing the error of
@@ -316,10 +341,18 @@ def snr_allocation(
         raise ValueError("scales must be non-empty")
     if np.any(i <= 0):
         raise ValueError("scales must be strictly positive")
-    if d <= 0:
-        raise ValueError(f"d must be > 0 (Assumption cost_is_power_law); got {d}")
-    if omega1 <= 0:
-        raise ValueError(f"omega1 must be > 0 (article eq. 232); got {omega1}")
+    # d and omega1 are DESIGN inputs here, not the article's exponents, and zero
+    # is the meaningful uninformed value for each: d = 0 makes every scale cost
+    # the same (the budget counts samples), omega1 = 0 makes n_i ~ s_i**2 (flat
+    # for a scale-free cv). Both are what a recipe stating nothing falls back to
+    # (generate.UNINFORMED), so rejecting them would make "runnable with no
+    # design constants" impossible. NOT relaxed in `allocation_constants`, where
+    # omega1 IS eq. (232)'s exponent and d IS the cost exponent, and where the
+    # prop:opt formulas divide by both.
+    if d < 0:
+        raise ValueError(f"d must be >= 0 as a design input; got {d}")
+    if omega1 < 0:
+        raise ValueError(f"omega1 must be >= 0 as a design input; got {omega1}")
     if budget <= 0:
         raise ValueError(f"budget must be > 0; got {budget}")
     if min_n < 1:

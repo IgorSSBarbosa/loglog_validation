@@ -269,6 +269,17 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
 #: These are DESIGN inputs: they decide how the budget is split across scales
 #: and never enter any fit. The pilot measures omega1 and d from the samples;
 #: what these choose is only where the pilot spends them.
+#: What an allocation rule falls back to when the recipe states nothing.
+#: Both are deliberately the UNINFORMED choice, not a good guess:
+#:   omega1 = 0  ->  n_i ~ s_i**2, flat when the cv is scale-free
+#:   d      = 0  ->  every scale costs the same, so the budget counts SAMPLES
+#: The point (Igor, 2026-08-29) is that a recipe must be runnable with no design
+#: constants at all, so that the claim "these never reach an estimator" can be
+#: TESTED by running with and without them. A default that happened to be near
+#: the truth would defeat that -- on srw, d = 1 and omega1 = 1 are the exact
+#: truths, which is precisely why neither is the default here.
+UNINFORMED = {"omega1": 0.0, "d": 0.0}
+
 DESIGN_INPUTS = {
     "d": ('"d": 1.0',
           "d is Assumption cost_is_power_law's exponent: how the cost of ONE sample\n"
@@ -283,15 +294,22 @@ DESIGN_INPUTS = {
 }
 
 
-def _design_input(n: dict, key: str, rule: str):
-    """One allocation-rule input, or an error that says what it is and why.
+def _design_input(n: dict, key: str, rule: str) -> tuple[float, str]:
+    """One allocation-rule input and WHERE IT CAME FROM.
 
-    SystemExit, not a bare exception: a recipe missing a key is the author's
-    mistake, not a crash, and a traceback buries the one line that would fix
-    it. Same convention as constants.require (tools/constants.py).
+    Returns (value, source). A stated value is `"recipe"`; an absent one falls
+    back to UNINFORMED and is reported as `"uninformed default"` -- never
+    silently, because the whole argument that design inputs are harmless rests
+    on being able to run without them and compare.
+
+    Still SystemExit for a key with no uninformed choice: a recipe missing one
+    is the author's mistake, not a crash, and a traceback buries the one line
+    that would fix it. Same convention as constants.require.
     """
     if key in n:
-        return float(n[key])
+        return float(n[key]), "recipe"
+    if key in UNINFORMED:
+        return UNINFORMED[key], "uninformed default"
     example, why = DESIGN_INPUTS[key]
     raise SystemExit(
         f"the {rule!r} allocation rule needs {key!r} in the recipe's \"n\", and this "
@@ -318,7 +336,7 @@ def resolve_d(cfg: dict, n: dict, rule: str) -> tuple[float, str]:
         return (declared_exponent(cfg["scales"], spec.cost_hint,
                                   cfg.get("params", {})),
                 f"declared by {cfg['model']}'s cost_hint")
-    return _design_input(n, "d", rule), "recipe"
+    return _design_input(n, "d", rule)
 
 
 def resolve_n(cfg: dict):
@@ -360,13 +378,26 @@ def resolve_n(cfg: dict):
         sigma=n.get("sigma"),
         min_n=int(n.get("min_n", 1)),
     )
+    omega1, omega1_from = (None, None)
     if rule == "neyman":
         alloc = neyman_allocation(cfg["scales"], **common)
     else:
-        alloc = snr_allocation(cfg["scales"],
-                               omega1=_design_input(n, "omega1", rule), **common)
+        omega1, omega1_from = _design_input(n, "omega1", rule)
+        alloc = snr_allocation(cfg["scales"], omega1=omega1, **common)
+
+    # Stamped onto the recipe so it travels into every metadata sidecar that
+    # records the recipe (samples_meta.json, pilot.json). Without this the run
+    # remembers the NUMBERS it drew but not whether they were chosen or
+    # defaulted, which is the one distinction stage 3 exists to preserve.
+    cfg["_allocation_resolved"] = {
+        "rule": rule, "d": d, "d_source": d_from,
+        "omega1": omega1, "omega1_source": omega1_from,
+        "n": [int(x) for x in alloc["n"]], "exhausted": alloc["exhausted"],
+    }
+    om = "" if omega1 is None else f" omega1={omega1:g} ({omega1_from})"
     print(
-        f"allocation rule={rule!r} budget={alloc['budget']:.4g} d={d:g} ({d_from}) -> "
+        f"allocation rule={rule!r} budget={alloc['budget']:.4g} "
+        f"d={d:g} ({d_from}){om} -> "
         f"cost={alloc['cost']:.4g} ({alloc['exhausted']:.1%} of budget)"
     )
     if alloc["exhausted"] > 1.0:
