@@ -32,11 +32,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
 
-from tools.artifacts import artifact_path, read_artifact
+from tools.artifacts import artifact_path
 
 
 def normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:
@@ -88,15 +89,33 @@ def load_samples(run_dir: str | Path) -> dict[int, np.ndarray]:
 
     Raises a clear FileNotFoundError (not a bare one from inside numpy) if
     neither is present -- e.g. `run_dir` names a recipe's tag that was
-    never actually generated.
+    never actually generated. Warns if BOTH are present: the flat file wins,
+    which is fine when it is the current run and silently wrong when it is
+    not.
     """
     run_dir = Path(run_dir)
     npz_path = run_dir / "samples.npz"
+    samples_dir = run_dir / "samples"
     if npz_path.exists():
+        if samples_dir.is_dir() and any(samples_dir.glob("*.npy")):
+            # One run directory, two layouts, and this function has always
+            # resolved the flat one first -- so the chunked data would be
+            # invisible, and if it were the newer of the two every number
+            # downstream would describe the older run. generate.py deletes the
+            # layout it did not just write (`_clear_other_layout`) precisely
+            # for this reason, so reaching here means the directory was
+            # assembled by hand or by a generate.py that predates that fix.
+            # Loud, because the failure it guards is silent and wrong.
+            warnings.warn(
+                f"{run_dir} holds BOTH samples.npz and samples/*.npy. Reading "
+                f"samples.npz and ignoring {len(list(samples_dir.glob('*.npy')))} "
+                f"chunked scale file(s) -- if those are the newer run, every "
+                f"number derived from this directory describes the older one. "
+                f"Delete whichever layout is stale.", RuntimeWarning,
+                stacklevel=2)
         with np.load(npz_path) as npz:
             return {int(k): npz[k] for k in npz.files}
 
-    samples_dir = run_dir / "samples"
     if samples_dir.exists():
         npy_paths = sorted(samples_dir.glob("*.npy"))
         if npy_paths:

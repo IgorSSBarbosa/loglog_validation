@@ -84,7 +84,7 @@ ordinary recipe, so the planned run is the same kind of thing as any other run.
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
 | `src/study` | **start here**: pilot → plan → run → report, carrying constants for you | a recipe | `constants.json`, `report.md`, `details.md` |
 | `calibration/` | are our **own** stated numbers honest — the ± and the ETA? and does every function still behave as documented? | the pipeline itself | `coverage.json`, `prediction_check.json` |
-| `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, seeding, I/O | | |
+| `tools/` | *(imported, not run — except `artifacts.py --list/--migrate`)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
 
 ## Quickstart

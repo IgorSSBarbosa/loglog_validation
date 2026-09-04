@@ -81,8 +81,23 @@ def sigma_se_per_scale(n_per_scale: Sequence, m: int, rho: float,
 
     NOT in the article: eq. (720) assumes uniform n. This is the exact variance
     of the same linear estimator when n differs across scales, which is what
-    Experiment B's snr allocation produces. It reduces to `sigma_se` when n and
-    cv2 are constant, because sum_j w_j^2 = 12/(m(m^2-1)) -> 12/m^3.
+    Experiment B's snr allocation produces.
+
+    At uniform n it does NOT equal `sigma_se`, and the gap is worth knowing.
+    sum_j w_j^2 = 12/(m(m^2-1)) exactly, while eq. (720)'s fourth term carries
+    the asymptotic 12/m^3, so this returns sqrt(m^2/(m^2-1)) times sigma_se --
+    1.42% larger at m = 6, 0.5% at m = 10, vanishing only as m -> inf.
+    `sigma_se` keeps the article's formula verbatim (Igor, 2026-09-04): it is
+    the theorem's own constant and this repo does not silently improve on the
+    object it is validating.
+
+    Measured (calibration/exercise_all.py, and plans/function_audit.md section
+    5): at m0 = 10, where the bias terms are negligible, a nominal 95% interval
+    gamma_hat +/- 1.96*sigma_se covers 0.944 [0.941, 0.947] while the same
+    interval built on THIS function covers 0.948 [0.945, 0.951]. The full
+    eq. (720) bound is unaffected -- its three bias terms cover that gap many
+    times over -- so the difference matters only where sigma_se is quoted AS a
+    standard error rather than used inside the bound.
 
     Only the VARIANCE generalises this easily. The three bias terms of eq. (720)
     are stated for uniform n and are not adapted here.
@@ -93,7 +108,6 @@ def sigma_se_per_scale(n_per_scale: Sequence, m: int, rho: float,
         raise ValueError(f"expected {m} entries; got n:{n.size}, cv2:{cv2.size}")
     if np.any(n <= 0) or np.any(cv2 < 0):
         raise ValueError("n must be positive and cv2 non-negative")
-    j = np.arange(1, m + 1, dtype=float)
     w = closed_form_weights(m)          # eq. (526), one definition (tools/loglog.py)
     se = math.sqrt(float(np.sum(w**2 * cv2 / n)))
     return se / math.log(rho) if for_gamma else se

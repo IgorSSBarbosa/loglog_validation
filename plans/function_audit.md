@@ -1,6 +1,8 @@
 # Function audit — every function, every flag, once
 
 **Status:** run 2026-09-04 against `e677280`, tests green (420 passed).
+**Resolved 2026-09-04** — every finding below is fixed; the re-run stands at
+599 checks, 0 failures, 1 note. See *What was done* at the end.
 **How to reproduce:** `python3 calibration/exercise_all.py` (432 s).
 
 The question was blunter than the test suite's: *for every public function and
@@ -268,3 +270,81 @@ The eq. (720) interval labelled 95% covered **96.6%–100%** across m₀ = 0…1
 rather than an interval. The 95% interval that would *not* hold is the one
 without the bias terms: on this repo's own pilot ladder (8…256, m₀ = 2) it
 covers **0%**.
+
+
+---
+
+## 6. What was done
+
+Same day, on Igor's call. The audit was re-run after each change; the harness
+now *checks* each fix rather than reporting the note it replaced, so a
+regression would show up as a FAIL rather than as a note nobody re-reads.
+
+### The defect
+
+**`--force`** now overrides the decision and only the decision. The diagnosis
+prints identically either way — it is the evidence, and the evidence does not
+depend on what you chose to do about it — and then planning, drawing and
+reporting go ahead. The record carries `forced: true`, and the console closes
+with a warning that the answer inherits an undetermined omega1.
+`_give_up` split into `_diagnose` (says what happened) and `_record_give_up`
+(writes the artifact when nothing was drawn), which is why the flag had been
+easy to forget: one function was doing both jobs.
+
+Worth seeing once: forced on a deliberately bad pilot, the study reported
+gamma = 0.50214 with a t interval of [0.50192, 0.50235] and an eq. (720) bound
+of [0.50148, 0.50279] — **both excluding the true 1/2**, because B_fs was built
+from omega1 = 1.86 instead of 1. That is the failure the gate exists to
+prevent, and it is exactly what the closing warning is for.
+
+### The doubling loop, reopened
+
+Not from the audit but from Igor's own run: the loop grew the replicate COUNT,
+and every replicate costs its own non-convex four-parameter fit with five
+restarts, so the fitting cost grew with the thing being doubled. It now grows
+the DRAWS per replicate instead, redrawing the same R replicates at 2x, 4x, ...
+n from independent streams.
+
+Measured before changing it, 400 planted studies per arm, scales 8..256:
+
+| arm | total draws | mean se(omega1) | mean omega1 |
+|---|---|---|---|
+| R=3, n (baseline) | 3.78e+07 | 0.1585 | 1.0125 |
+| R=6, n (double R) | 7.56e+07 | 0.1207 | 1.0326 |
+| R=3, 2n (double n) | 7.56e+07 | **0.1098** | **1.0031** |
+| R=12, n (4x R) | 1.51e+08 | 0.0879 | 1.0103 |
+| R=3, 4n (4x n) | 1.51e+08 | **0.0769** | **0.9989** |
+
+At equal total draws the draws axis gives a 9–13% *smaller* se and is the only
+one that also moves the point estimate toward the truth. Both follow from the
+fit being nonlinear: more draws per fit shrink that fit's dispersion and its
+bias together, while more fits at the same n average a distribution that stays
+exactly as wide and as skewed. So the cheaper axis was also the better one —
+the old docstring's argument for the other choice was wrong, and is replaced by
+this table.
+
+### Everything else
+
+| # | resolution |
+|---|---|
+| 2 | `sigma_se` keeps eq. (720)'s formula verbatim. `sigma_se_per_scale`'s docstring now states the exact `sqrt(m²/(m²−1))` relationship and the measured coverage cost, instead of claiming the two are equal. |
+| 3 | `--arm all` runs all five arms, cheapest first (`ALL_ARMS`). `srw` got its own `--srw-n-scale` / `--srw-trials`, because sharing the planted arm's numbers is what made it unrunnable in a group; it prints its step count and a wall-clock estimate before starting. |
+| 4 | `measure_cost.py` scores the measured d against the model's **own declared** `cost_hint` (`ACCEPTANCE_REL = 0.2`), so `synthetic` — whose true d is 0 — now passes. A model declaring nothing falls back to the old window, labelled as an expectation rather than a truth. |
+| 5 | `compare_cost_models` returns `comparable: False` and `agree: None` when there is no standard error, and `format_cost_comparison` leads with `NOT COMPARED`. "No test was possible" no longer shares a value with "they agree". |
+| 6 | `--params` has `choices=`, so a typo is an argparse error naming the valid values. |
+| 7 | `verify_prediction` reports "nothing here is runnable at these constants", names a nearer m0 and exits 0, instead of dividing an empty list. |
+| 8 | `load_samples` warns (RuntimeWarning) when a run directory holds both layouts, naming the one it served. |
+| 9 | The autopilot gate is judged at the whole remaining budget, not `seconds_budget * 4`, which was only the total at the default `--pilot-cap`. |
+| 10 | `climb_to_target`'s `PROBE_MIN_SCALES` floor now outranks both stopping rules, and a `max_doublings` below it is refused as the contradiction it is. |
+| 11 | `input_sensitivity` handles `cv` and raises on a name it does not know — validated *before* the `try` that used to swallow the raise and answer "this input does not matter". |
+| 12–15 | Dead code deleted: the unreachable `DESIGN_INPUTS` branch, 16 unused imports, the dead local in `sigma_se_per_scale`, and four unused locals. |
+| 16 | `find_omega1_runs` deleted; its tests keep the behaviour by calling `discover_groups` directly. `format_interval`, which the import cleanup exposed as having no caller at all, was **wired up rather than deleted** — `experiments/01_srw/README.md` already describes it as the thing that surfaces an incomplete bound, and the wilson arm now prints one full breakdown under its table. |
+| 17 | Three docstrings corrected to what the code does: `human_time`, the parity-trap note in `tools/correction.py`, and the "imported, never run" description of `tools/` in both `README.md` and `CATALOG.md`. |
+
+### Left standing, deliberately
+
+- **The parity trap** (`tools/correction.py`). A rho = sqrt(2) grid over srw's
+  exact means still fits omega1 = 18 against a truth of 1. It cannot be guarded
+  against here: the parity that matters is a property of the model, which this
+  module never sees. Documented, re-measured, and now honest about
+  `converged = False` being the only tell.

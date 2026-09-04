@@ -23,7 +23,6 @@ CLI:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from math import sqrt
@@ -39,7 +38,6 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
 from tools.artifacts import artifact_path, write_artifact  # noqa: E402
 from tools.allocation import allocation_constants, predict_error, total_cost  # noqa: E402
 from tools.loglog import gamma_closed_form  # noqa: E402
-from tools.models import get_model  # noqa: E402
 from tools.persistence import run_dir as _run_dir  # noqa: E402
 
 from src.generate.generate import generate  # noqa: E402
@@ -185,6 +183,19 @@ def _main(argv: list[str] | None = None) -> None:
     rd.mkdir(parents=True, exist_ok=True)
     write_artifact(rd, "prediction_check", result,
                    produced_by="calibration/verify_prediction.py")
+
+    if not result["cells"]:
+        # Every ladder was skipped -- too small a budget at one end, past
+        # --max-n at the other. That is an answer ("nothing here is runnable"),
+        # not a failure, and the summary below would divide an empty list.
+        print(f"\nno ladder in --m0 {' '.join(str(x) for x in args.m0)} is "
+              f"runnable at these constants: each needs either fewer than 2 or "
+              f"more than --max-n {args.max_n:,} samples per scale.")
+        print(f"  Try m0 values nearer "
+              f"{int(round(allocation_constants(args.d, args.omega1, args.rho, args.m, a1, cv)['offset'] + 6))}"
+              f", or raise --max-n.")
+        print(f"\noutput = {artifact_path(rd, 'prediction_check')}")
+        return
 
     print(f"\n{'m0':>4} {'n':>12} {'pred s':>10} {'meas s':>10} {'ratio':>7}"
           f" {'pred rmse':>11} {'meas rmse':>11} {'ratio':>7}")

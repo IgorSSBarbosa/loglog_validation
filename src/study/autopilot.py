@@ -13,19 +13,56 @@ WHAT IT DECIDES, AND ON WHAT
 assumed: it takes what it needs out of the total (capped at --pilot-cap) and
 the final run gets what is left, measured rather than predicted.
 
-The pilot doubles. Round 1 draws `--replicates` replicates at the recipe's own
-n; if the constants are not good enough the next round draws as many again and
-pools them, so the total samples per scale go n*R, 2nR, 4nR, ... Doubling
-means the whole search costs at most twice what starting at the right size
-would have, and the SCALES never change -- they are the recipe's, and a ladder
-is a modelling decision this script has no business making.
+The pilot doubles its DRAWS. Round 1 takes `--replicates` replicates at the
+recipe's own n; if the constants are not good enough, round 2 redraws the same
+number of replicates with twice the n each, round 3 with four times, and so on.
+Total samples per scale go nR, 2nR, 4nR, ... Doubling means the whole search
+costs at most twice what starting at the right size would have, and the SCALES
+never change -- they are the recipe's, and a ladder is a modelling decision
+this script has no business making.
 
-Doubling replicates rather than n per replicate is deliberate: for the pooled
-fit the two are identical (information about omega1 comes from the total draws
-at each scale, however they are grouped), but every constant's stated error is
-`std(per-replicate fits)/sqrt(R)`, so only one of them also improves the error
-bar the gate is testing. At R = 3 that spread carries ~50% relative sd of its
-own; growing R is what makes the gate mean something.
+Doubling n per replicate rather than the replicate COUNT (Igor, 2026-09-04).
+Both routes shrink what the gate reads, `se = std(per-replicate fits)/sqrt(R)`:
+more replicates leaves each fit's own error alone and divides by a larger
+sqrt(R); more draws per replicate shrinks each fit's error with R fixed. The
+draws axis turns out to be the better of the two on the statistics AND the
+cheaper on compute, so nothing is traded away.
+
+Measured on planted srw, 400 independent studies per arm, scales 8..256,
+baseline 3 replicates at n_k = (2e5 ... 6.4e6):
+
+    arm                    total draws   mean se(omega1)   mean omega1
+    R=3,  n  (baseline)       3.78e+07           0.1585        1.0125
+    R=6,  n  (double R)       7.56e+07           0.1207        1.0326
+    R=3, 2n  (double n)       7.56e+07           0.1098        1.0031
+    R=12, n  (4x R)           1.51e+08           0.0879        1.0103
+    R=3, 4n  (4x n)           1.51e+08           0.0769        0.9989
+
+At equal total draws the draws axis gives a 9-13% SMALLER se, and it is the
+only one that also moves the point estimate toward the truth (1.003 and 0.999
+against 1.033 and 1.010). Both follow from `fit_correction` being nonlinear:
+more draws per fit shrink that fit's own dispersion and its nonlinear bias
+together, while more fits at the same n average a distribution that stays
+exactly as wide and as skewed as it was.
+
+What differs in cost is the fitting. Every replicate needs its own
+`fit_correction`, a non-convex four-parameter least-squares restarted from
+five omega1 seeds, and the count of those grows with R while the cost of each
+is flat in n. At --replicates 10, doubling R three times means
+10 + 20 + 40 + 80 = 150 multi-restart fits; doubling n means 40 -- and the
+sampling, which dominates either way, is identical.
+
+Each round is a CLEAN redraw at one n, not an extension of the previous one.
+Replicates drawn at different n cannot be pooled by the equal-weight rule
+`pilot` uses, and the geometric argument already pays for discarding: 1 + 2 +
+4 + ... + 2^k < 2 * 2^k, so throwing away every earlier round still costs less
+than twice the final one. Rounds draw from independent streams (ground rule 2).
+
+The replicate COUNT is therefore yours to choose and is never changed here.
+It fixes two things this loop cannot improve: the dof of the t quantile the
+final report uses, and how well `std(fits)` estimates the spread it stands for
+(its own relative sd is ~1/sqrt(2(R-1)) -- 50% at R = 3, 24% at R = 10). Use
+--replicates 5 or more if you intend to act on the gate's verdict.
 
 THE GATE is the B_fs span, not the "is se small" verdict plan.py prints for a
 human. eq. (720)'s finite-size term is B_fs ~ rho**(-omega1*m0), so omega1
@@ -39,7 +76,13 @@ is the m0 the answer would actually be computed at.
 WHEN IT GIVES UP it prints the constants it did measure with their intervals,
 the span that failed, and what to change -- and draws nothing. Spending the
 rest of the budget on constants known to be undetermined produces a confident
-wrong answer, which is worse than no answer. --force overrides.
+wrong answer, which is worse than no answer.
+
+--force overrides that last step and only that step. The diagnosis is printed
+identically; what changes is that planning, drawing and reporting go ahead
+afterwards, and the result carries `forced: true` in autopilot.json plus a
+closing warning on the console. Use it when you want the number anyway and
+have read why it is soft.
 """
 
 from __future__ import annotations
@@ -75,8 +118,8 @@ from src.study import run as run_mod  # noqa: E402
 #: not the sample count, is what needs fixing.
 PILOT_CAP = 0.25
 
-#: Rounds are geometric, so this is generous: round 6 draws 32x round 1, and
-#: the pooled total is 64x the first round's.
+#: Rounds are geometric, so this is generous: round 6 draws 32x the recipe's
+#: n per replicate, and the whole search has then cost under 64x round 1.
 MAX_ROUNDS = 6
 
 #: p-value above which a pure power law is an adequate fit to the pilot, and
@@ -178,16 +221,47 @@ def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput):
     return pl["m0"] if pl.get("feasible") else None
 
 
-def pilot_until_determined(recipe, sd, *, seconds_budget, replicates, seed,
-                           rho, m, throughput_guess, max_rounds=MAX_ROUNDS,
-                           span_limit=report_mod._BFS_SPAN_LIMIT, log=print):
-    """The doubling loop: draw, pool, refit, judge; double and repeat if not.
+def scale_draws(recipe: dict, factor: int) -> dict:
+    """A copy of `recipe` asking for `factor` times as many draws per replicate.
 
-    Each round draws as many replicates as are already pooled, so the total
-    samples per scale double. Streams are extended, never restarted --
-    `spawn(skip=)`, without which the pool would fill with bit-identical
-    copies and every standard error would shrink by sqrt(3) per round on no
-    new information (see tools/rng.py).
+    The three spellings of a recipe's `"n"` all have to grow the same way, and
+    only the one the recipe actually uses is touched:
+
+        {"rule": ..., "budget": B}  ->  budget * factor   (the allocation then
+                                        redistributes it across scales by the
+                                        same rule, so the SHAPE is preserved)
+        [n_1, ..., n_k]             ->  each entry * factor
+        n                           ->  n * factor
+
+    The scales are never touched. That is the ladder, and the ladder is the
+    recipe author's decision (see this module's docstring).
+    """
+    out = dict(recipe)
+    n = recipe["n"]
+    if isinstance(n, dict):
+        if "budget" not in n:
+            raise SystemExit(
+                f"the pilot cannot grow this recipe: its \"n\" is the "
+                f"{n.get('rule')!r} rule but states no \"budget\", so there is "
+                f"nothing to double. Add one, or state \"n\" as a number.")
+        out["n"] = {**n, "budget": float(n["budget"]) * factor}
+    elif isinstance(n, (list, tuple)):
+        out["n"] = [int(x) * factor for x in n]
+    else:
+        out["n"] = int(n) * factor
+    return out
+
+
+def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
+                           replicates, seed, rho, m, throughput_guess,
+                           max_rounds=MAX_ROUNDS,
+                           span_limit=report_mod._BFS_SPAN_LIMIT, log=print):
+    """The doubling loop: draw, fit, judge; double the DRAWS and repeat if not.
+
+    Each round redraws `replicates` replicates with twice the previous round's
+    n, from its own independent stream. The replicate count never changes --
+    see this module's docstring for why that axis and not the other, and why
+    each round is a clean redraw rather than an extension.
 
     TWO gates, and either alone is not enough. The B_fs span asks whether
     omega1 is pinned down; `ladder_check` asks whether there is anything on
@@ -204,28 +278,35 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, replicates, seed,
 
     Returns (consts, rounds, ok).
     """
-    reps, rounds = [], []
+    rounds = []
     consts = None
     t_start = time.perf_counter()
+    # One stream per round, drawn up front: a round is a fresh, independent
+    # draw, never a continuation of the one it replaces (ground rule 2).
+    round_seeds = spawn(seed, max_rounds)
 
-    while len(rounds) < max_rounds:
-        add = replicates if not reps else len(reps)      # double the pool
+    for k in range(max_rounds):
         if rounds and (time.perf_counter() - t_start) >= seconds_budget:
             break
-        log(f"  pilot round {len(rounds) + 1}: +{add} replicate(s) "
-            f"-> {len(reps) + add} pooled")
+        factor = 2 ** k
+        this = scale_draws(recipe, factor) if factor > 1 else recipe
+        log(f"  pilot round {k + 1}: {replicates} replicate(s) at "
+            f"{factor}x the recipe's draws")
         t = time.perf_counter()
-        out = pilot_mod.pilot(recipe, sd, add, seed=seed, existing=reps)
+        out = pilot_mod.pilot(this, sd, replicates, seed=round_seeds[k])
         reps, consts = out["reps"], out["constants"]
         spent = time.perf_counter() - t_start
 
         lc = ladder_check(reps, [int(x) for x in recipe["scales"]])
         tp = out.get("throughput") or throughput_guess
-        m0 = _provisional_m0(consts, max(1e-9, seconds_budget * 4 - spent),
+        # The gate must be judged at the m0 the ANSWER will be computed at, so
+        # this is the whole remaining budget -- not the pilot's slice of it.
+        m0 = _provisional_m0(consts, max(1e-9, total_seconds - spent),
                              rho=rho, m=m, replicates=replicates, throughput=tp)
         span = bfs_span(consts, m0, m, rho) if m0 is not None else None
-        rounds.append({"round": len(rounds) + 1, "added": add,
-                       "pooled": len(reps), "seconds": time.perf_counter() - t,
+        rounds.append({"round": k + 1, "factor": factor,
+                       "replicates": len(reps),
+                       "seconds": time.perf_counter() - t,
                        "m0": m0, "span": span, "ladder": lc,
                        "omega1": consts["omega1"].value,
                        "omega1_se": consts["omega1"].se})
@@ -237,7 +318,7 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, replicates, seed,
                 f"visible yet for omega1 to be fitted to")
         if span is None:
             log(f"    omega1 = {consts['omega1'].value:+.4f} (no se yet) "
-                f"-- cannot judge, doubling")
+                f"-- cannot judge, doubling the draws")
         else:
             ok = span["span"] <= span_limit
             log(f"    omega1 = {consts['omega1'].value:+.4f} "
@@ -297,12 +378,13 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float, replicates: int,
         f"{human_time(seconds * pilot_cap)} of it on the pilot\n")
 
     consts, rounds, ok = pilot_until_determined(
-        recipe, sd, seconds_budget=seconds * pilot_cap, replicates=replicates,
-        seed=pilot_seed, rho=rho, m=m, throughput_guess=1e8,
-        max_rounds=max_rounds, log=log)
+        recipe, sd, seconds_budget=seconds * pilot_cap, total_seconds=seconds,
+        replicates=replicates, seed=pilot_seed, rho=rho, m=m,
+        throughput_guess=1e8, max_rounds=max_rounds, log=log)
     pilot_seconds = time.perf_counter() - t0
 
-    log(f"\nconstants after {rounds[-1]['pooled']} pooled replicate(s), "
+    log(f"\nconstants after {rounds[-1]['replicates']} replicate(s) at "
+        f"{rounds[-1]['factor']}x the recipe's draws, "
         f"{human_time(pilot_seconds)}")
     log(format_table(consts))
 
@@ -319,28 +401,48 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float, replicates: int,
             f"     sqrt(n), a smaller rung buys it as a power of the scale.")
 
     if not ok:
-        return _give_up(consts, rounds, sd, pilot_seconds, seconds, lc, force, log)
+        # The diagnosis is printed either way -- it is the evidence, and it is
+        # the same evidence whether or not the run goes ahead. What --force
+        # changes is only what happens next.
+        _diagnose(consts, rounds, sd, pilot_seconds, seconds, lc, force, log)
+        if not force:
+            return _record_give_up(consts, rounds, sd, pilot_seconds, lc)
 
     left = seconds - (time.perf_counter() - t0)
     log(f"\nplanning with {human_time(left)} of the budget left "
         f"({human_time(pilot_seconds)} went to the pilot)")
-    return _plan_run_report(recipe, sd, consts, rounds, lc, seconds=left,
-                            replicates=replicates, seed=run_seed, rho=rho, m=m,
-                            progress=progress, pilot_seconds=pilot_seconds, log=log)
+    rec = _plan_run_report(recipe, sd, consts, rounds, lc, seconds=left,
+                           replicates=replicates, seed=run_seed, rho=rho, m=m,
+                           progress=progress, pilot_seconds=pilot_seconds,
+                           log=log, forced=not ok)
+    if not ok:
+        log("\n  !! --force: the constants above were NOT determined, and the "
+            "answer\n     printed here inherits that. The eq. (720) bound's "
+            "B_fs term is built\n     from an omega1 this pilot could not pin "
+            "down; treat the interval as\n     indicative, and see "
+            "`forced: true` in autopilot.json.")
+    return rec
 
 
-def _give_up(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> dict:
-    """Say what was measured, what failed, and why -- then draw nothing.
+def _diagnose(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> None:
+    """Say what was measured, what failed, and why. Decides nothing.
 
     The failure mode this exists for is not a crash. It is a study that spends
     its whole budget and reports gamma = 0.50195 +/- 0.00076, excluding the
     truth, because omega1 was never determined. So the constants and their
     intervals are printed in full: they are the evidence for the diagnosis,
     and they are also what the next attempt starts from.
+
+    Printed whether or not --force was given, because the evidence does not
+    depend on what the caller decided to do about it. Only the last line
+    differs, and the caller acts on `force`, not this function.
     """
     last = rounds[-1]
     sp = last["span"]
-    log(f"\n{'=' * 68}\nPILOT DID NOT DETERMINE THE CONSTANTS -- nothing was drawn\n")
+    head = ("PILOT DID NOT DETERMINE THE CONSTANTS -- running anyway (--force)"
+            if force else
+            "PILOT DID NOT DETERMINE THE CONSTANTS -- nothing was drawn")
+    log(f"\n{'=' * 68}\n{head}\n")
     log("measured so far:")
     log(format_table(consts))
     if sp is not None:
@@ -358,8 +460,9 @@ def _give_up(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> dict
             "(one replicate has no spread),\n  so it cannot be shown to be "
             "determined.")
     log(f"\nthe pilot used {human_time(pilot_seconds)} of "
-        f"{human_time(seconds)} ({len(rounds)} doubling round(s), "
-        f"{rounds[-1]['pooled']} replicates pooled).")
+        f"{human_time(seconds)} ({len(rounds)} doubling round(s), ending at "
+        f"{rounds[-1]['replicates']} replicate(s) x "
+        f"{rounds[-1]['factor']}x the recipe's draws).")
     if lc["p"] > LADDER_P_MAX:
         log(f"\nmost likely cause: THE LADDER. A pure power law still fits "
             f"(chi2/dof = {lc['chi2_per_dof']:.2f} on {lc['dof']} dof, "
@@ -375,9 +478,17 @@ def _give_up(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> dict
             f"(chi2/dof = {lc['chi2_per_dof']:.2f}, p = {lc['p']:.3g}),\n"
             f"  omega1 is simply not pinned down yet. Fix: raise --time, or "
             f"--pilot-cap above {PILOT_CAP:g}.")
-    log("\n  --force runs anyway, on constants known to be undetermined.")
+    log("\n  --force runs anyway, on constants known to be undetermined."
+        if not force else
+        "\n  --force was given: planning and drawing proceed on these "
+        "constants.")
     log("=" * 68)
-    rec = {"ok": False, "reason": "pilot did not determine the constants",
+
+
+def _record_give_up(consts, rounds, sd, pilot_seconds, lc) -> dict:
+    """The record written when the gate failed and nothing was drawn."""
+    rec = {"ok": False, "forced": False,
+           "reason": "pilot did not determine the constants",
            "rounds": rounds, "ladder": lc,
            "constants": {k: vars(v) for k, v in consts.items()},
            "pilot_seconds": pilot_seconds}
@@ -386,8 +497,15 @@ def _give_up(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> dict
 
 
 def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
-                     seed, rho, m, progress, pilot_seconds, log) -> dict:
-    """Steps 2-4, with the plan accepted automatically and a bar over the run."""
+                     seed, rho, m, progress, pilot_seconds, log,
+                     forced=False) -> dict:
+    """Steps 2-4, with the plan accepted automatically and a bar over the run.
+
+    `forced` means the gate failed and --force overrode it. It changes nothing
+    about what is computed -- the same plan, the same draw, the same report --
+    and is carried into autopilot.json so a result produced that way can never
+    be mistaken later for one whose constants were determined.
+    """
     argv = ["--study", sd.name, "--data-root", str(sd.parent),
             "--time", f"{seconds:.0f}s", "--replicates", str(replicates),
             "--rho", str(rho), "--m", str(m), "--accept"]
@@ -427,11 +545,14 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     report_mod.print_answer(res, log=log)
     log(f"\n  {sd / 'report.md'}\n  {sd / 'details.md'}\n  {fig}")
 
-    rec = {"ok": True, "rounds": rounds, "ladder": lc,
+    rec = {"ok": True, "forced": bool(forced), "rounds": rounds, "ladder": lc,
            "pilot_seconds": pilot_seconds, "plan": plan,
            "constants": {k: vars(v) for k, v in consts.items()},
            "gamma": res["gamma"], "wilson": res.get("wilson"),
            "ci": res["ci"], "seed": seed_record(seed)}
+    if forced:
+        rec["reason"] = ("pilot did not determine the constants; --force "
+                         "ran the study anyway")
     write_artifact(sd, "autopilot", rec, produced_by="src/study/autopilot.py")
     return rec
 
@@ -458,8 +579,11 @@ def _main(argv=None) -> None:
     p.add_argument("--max-rounds", type=int, default=MAX_ROUNDS, dest="max_rounds",
                    help="doubling rounds before giving up")
     p.add_argument("--force", action="store_true",
-                   help="run even if the constants were never determined -- "
-                        "produces a confident answer that may be wrong")
+                   help="plan, draw and report even when the pilot's gate "
+                        "failed. The diagnosis is printed either way; this "
+                        "decides only whether the long run happens. The answer "
+                        "is stamped `forced: true` in autopilot.json, because "
+                        "it rests on constants known to be undetermined")
     p.add_argument("--no-progress", action="store_false", dest="progress",
                    help="no progress bar (also off automatically when not a TTY)")
     a = p.parse_args(argv)

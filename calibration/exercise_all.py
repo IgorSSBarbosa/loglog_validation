@@ -692,13 +692,13 @@ def sec_wilson(a: Audit) -> None:
     ratio = sigma_se_per_scale([n] * m, m, rho, [s2] * m) / sigma_se(n, m, rho, s2)
     a.close("...which exceeds eq. (720)'s sigma_se by exactly sqrt(m^2/(m^2-1))",
             lambda: ratio, math.sqrt(m ** 2 / (m ** 2 - 1)), 1e-12)
-    a.note("eq. (720)'s fourth term understates the estimator's own sd at finite m",
-           f"sigma_se uses 12/(n m^3); the exact variance of the same linear "
-           f"estimator is 12/(n m(m^2-1)), so at m = {m} the stated se is "
-           f"{100 * (ratio - 1):.1f}% too SMALL (the two agree only as m -> inf). "
-           f"tools/wilson.py's sigma_se_per_scale docstring says it 'reduces to "
-           f"sigma_se', which is true only in that limit. Small next to the bias "
-           f"terms, but it is the one term the bound calls exact.")
+    a.check("...and the docstring says so, rather than claiming they are equal",
+            lambda: "does NOT equal" in sigma_se_per_scale.__doc__
+            and "verbatim" in sigma_se_per_scale.__doc__,
+            detail=f"at m = {m} the article's sigma_se is "
+                   f"{100 * (ratio - 1):.1f}% below the exact variance; the "
+                   f"formula stays as eq. (720) writes it (Igor, 2026-09-04) "
+                   f"and the gap is documented instead")
     a.check("...and is smaller when the big scales get more samples",
             lambda: sigma_se_per_scale([n, n, n, n, n, 10 * n], m, rho, [s2] * m)
             < sigma_se(n, m, rho, s2))
@@ -1033,15 +1033,11 @@ def sec_cost_model(a: Audit) -> None:
     few = compare_cost_models(scales[:3], affine_truth[:3], srw_spec.cost_hint, {})
     a.check("with too few scales it falls back to the pure power law and says so",
             lambda: "pure power law" in few["measured_via"])
-    a.check("...and cannot form a z, so `agree` defaults to True",
-            lambda: few["z"] is None and few["agree"] is True)
-    a.note("compare_cost_models reports agree=True when it could not compare at all",
-           "with fewer than 4 scales there is no standard error, so the sigma test "
-           "is skipped and `agree` keeps its initial True -- indistinguishable in the "
-           "returned dict from a genuine agreement. format_cost_comparison then "
-           "prints no warning. `measured_via` is the only tell. (Compare "
-           "src/study/pilot.py:_resolve_d, which has a distinct 'unchecked' verdict "
-           "for exactly this case.)")
+    a.check("...and says it could not compare, rather than reporting agreement",
+            lambda: few["z"] is None and few["comparable"] is False
+            and few["agree"] is None)
+    a.check("...which the formatted block leads with",
+            lambda: format_cost_comparison(few).startswith("NOT COMPARED"))
 
     rng = np.random.default_rng(0)
     agg, raw = time_at_scale(srw_spec, 2048, {"q": 0.5}, rng, repeats=3)
@@ -1074,17 +1070,23 @@ def sec_cost_model(a: Audit) -> None:
                    f"k={climb['scales'][-1]}")
     short = climb_to_target(srw_spec, {"q": 0.5}, np.random.default_rng(0),
                             start=8, repeats=2, target_seconds=1e9,
-                            max_doublings=3)
+                            max_doublings=5)
     a.check("max_doublings caps the climb even when the target is unreachable",
-            lambda: len(short["scales"]), expect=3)
-    a.note("climb_to_target can return fewer rungs than the affine fit needs",
-           f"with max_doublings={3} it stopped at {len(short['scales'])} rungs, below "
-           f"PROBE_MIN_SCALES={PROBE_MIN_SCALES}; the >= PROBE_MIN_SCALES guard only "
-           f"applies to the target branch, not to the doubling/time-budget ones. "
-           f"fit_cost_probe then stores affine={{'error': ...}} and the pilot's "
-           f"_resolve_d has to handle a missing d -- which it does, so this is a "
-           f"documented-behaviour mismatch (the docstring says 'never before "
-           f"PROBE_MIN_SCALES rungs'), not a crash.")
+            lambda: len(short["scales"]), expect=5)
+    starved = climb_to_target(srw_spec, {"q": 0.5}, np.random.default_rng(0),
+                              start=8, repeats=2, target_seconds=1e-9,
+                              time_budget=0.0)
+    a.check("...but the PROBE_MIN_SCALES floor outranks BOTH stopping rules, "
+            "so the affine fit always has enough rungs",
+            lambda: len(starved["scales"]) >= PROBE_MIN_SCALES,
+            detail=f"a zero time budget still returned "
+                   f"{len(starved['scales'])} rungs")
+    a.raises("a max_doublings below that floor is a contradiction, and refused",
+             ValueError,
+             lambda: climb_to_target(srw_spec, {"q": 0.5},
+                                     np.random.default_rng(0), start=8,
+                                     max_doublings=2),
+             contains="PROBE_MIN_SCALES")
 
 
 def sec_artifacts(a: Audit) -> None:
@@ -1212,11 +1214,14 @@ def sec_artifacts(a: Audit) -> None:
         cli_ok(a, "--migrate renames in place",
                ["tools/artifacts.py", "--migrate", str(legacy2)],
                creates=legacy2 / "samples_meta.json")
-        a.note("tools/artifacts.py is the only module under tools/ that is runnable",
-               "CATALOG.md and README.md both describe tools/ as 'imported, never "
-               "run'. artifacts.py has an argparse _main (--list/--migrate) and is "
-               "documented as such in its own docstring, so the exception is "
-               "deliberate -- but the two layer descriptions do not mention it.")
+        # tools/artifacts.py is the one runnable module under tools/, and the
+        # two places that describe the layer have to say so.
+        a.check("README.md and CATALOG.md both name artifacts.py as tools/'s one "
+                "runnable exception",
+                lambda: all("artifacts.py" in (ROOT / f).read_text().split(
+                    "imported, n")[1][:120]
+                    for f in ("README.md", "CATALOG.md")),
+                detail="the layer descriptions used to say 'imported, never run'")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -1265,13 +1270,16 @@ def sec_persistence(a: Audit) -> None:
         save_samples(both, {8: np.zeros(3)})
         mm2 = open_scale_writer(both, 8, 3, np.int64)
         del mm2
-        a.note("load_samples resolves samples.npz BEFORE samples/, silently",
-               "when both layouts exist in one run directory the flat .npz wins and "
-               "the chunked data is invisible. src/generate/generate.py deletes the "
-               "other layout on every write (_clear_other_layout) precisely because "
-               "of this, but nothing in tools/persistence.py itself warns -- a "
-               "directory assembled by hand, or by an older generate.py, reads as "
-               "healthy while serving stale data.")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            served = load_samples(both)
+        a.check("a run directory holding BOTH layouts warns rather than choosing "
+                "silently", lambda: any(issubclass(w.category, RuntimeWarning)
+                                        for w in caught),
+                detail="the flat .npz still wins, but no longer invisibly")
+        a.check("...naming which one it served",
+                lambda: len(served[8]) == 3
+                and "samples.npz" in str(caught[0].message))
 
         a.raises("a run directory with neither layout gives a clear error",
                  FileNotFoundError, lambda: load_samples(tmp / "empty"),
@@ -1702,13 +1710,11 @@ def sec_generate(a: Audit, sc: Scratch) -> None:
            ["src/generate/generate.py", "-meta", str(sc.recipes / "nope.json")],
            expect_code=1)
 
-    a.note("generate.py's DESIGN_INPUTS error path is unreachable",
-           "_design_input() raises its SystemExit only for a key absent from "
-           "UNINFORMED, and the only two keys it is ever called with -- 'd' and "
-           "'omega1' -- are both IN UNINFORMED. So the DESIGN_INPUTS dict and the "
-           "three-line message it formats are dead code: no recipe can trigger "
-           "them. Either drop them, or drop 'd' from UNINFORMED if a recipe using "
-           "a rule on a model with no cost_hint really should have to state one.")
+    import src.generate.generate as gen_mod
+    a.check("the unreachable DESIGN_INPUTS branch is gone, not merely unused",
+            lambda: not hasattr(gen_mod, "DESIGN_INPUTS"),
+            detail="_design_input's SystemExit could never fire: both keys it is "
+                   "called with are in UNINFORMED")
 
 
 def sec_estimate(a: Audit, sc: Scratch) -> None:
@@ -1722,9 +1728,10 @@ def sec_estimate(a: Audit, sc: Scratch) -> None:
     if p:
         a.check("...cross-checks the declared cost_hint against the clock",
                 lambda: "declared cost vs the wall clock" in p.stdout)
-        a.check("...and reports a PASS against the d = 1 acceptance range",
-                lambda: "PASS vs [0.8, 1.2]" in p.stdout,
-                detail=[l for l in p.stdout.splitlines() if "vs [0.8" in l])
+        a.check("...and reports a PASS against srw's declared d = 1",
+                lambda: "PASS: measured d" in p.stdout,
+                detail=[l.strip() for l in p.stdout.splitlines()
+                        if l.startswith(("PASS", "FAIL"))])
     cli_ok(a, "--tag and --out-dir place the probe where asked",
            ["src/estimate/measure_cost.py", "-meta", sc.recipe("cost_minmax.json"),
             "--out-dir", str(sc.data / "probes"), "--tag", "minagg"],
@@ -1737,16 +1744,11 @@ def sec_estimate(a: Audit, sc: Scratch) -> None:
                 ["src/estimate/measure_cost.py", "-meta", sc.recipe("cost_synth.json"),
                  "--tag", "cost_synth"])
     if ps:
-        verdicts = [l.strip() for l in ps.stdout.splitlines()
-                    if l.startswith(("PASS", "FAIL"))]
-        a.note("measure_cost.py prints FAIL for a model whose true d is 0",
-               "on the synthetic model (cost_hint = 1, so d = 0 is CORRECT) the "
-               "driver still scores the measurement against ACCEPTANCE_RANGE = "
-               f"(0.8, 1.2) and prints {verdicts!r}. "
-               "The trailing caveat says the range 'only applies to genuinely "
-               "scale-costly models', but the verdict word comes first and reads as "
-               "a defect. The model DECLARES its d via cost_hint; the check could "
-               "score against that instead and be right for every model.")
+        a.check("...and PASSES, because the verdict is scored against the model's "
+                "OWN declared d rather than srw's",
+                lambda: "PASS" in ps.stdout and "declared 0.0000" in ps.stdout,
+                detail=[l.strip() for l in ps.stdout.splitlines()
+                        if l.startswith(("PASS", "FAIL"))])
     cli_ok(a, "a samples recipe handed to the cost probe fails immediately",
            ["src/estimate/measure_cost.py", "-meta", sc.recipe("samples_srw.json"),
             "--tag", "wrong"], expect_code=1, stderr_has="samples recipe")
@@ -1780,7 +1782,7 @@ def sec_budget(a: Audit, sc: Scratch) -> None:
     """src/budget/ -- the sweep (Experiment C) and the planning table"""
     from src.budget.allocation_table import (build_budget_rows, build_rows,
                                              budget_for_m0, choose_group,
-                                             discover_groups, find_omega1_runs,
+                                             discover_groups,
                                              format_groups, human_time,
                                              input_sensitivity, measured_a1,
                                              measured_correction, measured_cost_exponent,
@@ -1798,11 +1800,10 @@ def sec_budget(a: Audit, sc: Scratch) -> None:
     a.check("...minutes", lambda: human_time(7200.0), expect="120.0 min")
     a.check("...hours, once minutes would run past 1000",
             lambda: human_time(60000.0), expect="16.7 h")
-    a.note("human_time keeps the SMALLEST unit under 1000, not the largest that fits",
-           "so a two-hour plan is reported as '120.0 min' and the switch to hours "
-           "only happens at 16.7 h. The docstring says 'the largest unit that keeps "
-           "the number readable', which reads as the opposite. Cosmetic, but it is "
-           "the string plan.py echoes back at a user who typed --time 2h.")
+    a.check("...and its docstring now states that rule rather than the opposite",
+            lambda: "SMALLEST unit" in human_time.__doc__,
+            detail="'--time 2h' still echoes back as '120.0 min'; the behaviour is "
+                   "pinned by test_human_time_units and is now documented")
     a.check("...and years, capped rather than run off the page",
             lambda: "yr" in human_time(1e18))
 
@@ -1830,14 +1831,14 @@ def sec_budget(a: Audit, sc: Scratch) -> None:
                     f"{input_sensitivity('a1', 0.0625, **kw)['delta_m0']:+.3f}")
     a.check("d barely moves it at all",
             lambda: abs(input_sensitivity("d", 0.1, **kw)["delta_m0"]) < 0.1)
-    a.check("an unknown input name is inert rather than an error",
-            lambda: input_sensitivity("cv", 0.1, **kw)["penalty"], expect=1.0)
-    a.note("input_sensitivity silently ignores cv, which is one of the five constants",
-           "its dispatch handles 'a1', 'omega1' and 'd' and returns a no-op "
-           "{delta_m0: 0, penalty: 1} for anything else. plan.py and "
-           "allocation_table.py only ever ask about the first three, so nothing is "
-           "wrong today -- but a caller asking about cv gets 'this input does not "
-           "matter', which is not the same as 'not implemented'.")
+    a.check("cv is a real branch now, not a silent no-op",
+            lambda: abs(input_sensitivity("cv", 0.1, **kw)["delta_m0"]) > 0,
+            detail=f"+/-0.1 on cv moves m0 by "
+                   f"{input_sensitivity('cv', 0.1, **kw)['delta_m0']:+.3f} steps")
+    a.raises("...and an input it does not know raises rather than answering "
+             "'this does not matter'", ValueError,
+             lambda: input_sensitivity("throughput", 0.1, **kw),
+             contains="does not know")
     a.check("offset_uncertainty is None without an a1 stderr",
             lambda: offset_uncertainty(1.0, 1.0, 2.0, 6, -0.25, 0.7741, None) is None)
     ou = offset_uncertainty(1.0, 1.0, 2.0, 6, -0.25, 0.7741, 0.05)
@@ -1889,8 +1890,11 @@ def sec_budget(a: Audit, sc: Scratch) -> None:
         a.check("choose_group never blocks on input when interactive=False",
                 lambda: choose_group(groups, requested=None,
                                      interactive=False) is not None)
-        a.check("find_omega1_runs is the same choice by a shorter route",
-                lambda: find_omega1_runs(real) == groups[0]["runs"])
+        a.check("the default choice is the biggest group, which is what every "
+                "driver takes",
+                lambda: choose_group(groups, requested=None,
+                                     interactive=False)["runs"]
+                == groups[0]["runs"])
         corr = measured_correction(groups[0]["runs"])
         a.check("measured_correction returns a1 and omega1 with provenance",
                 lambda: corr["a1"] is not None and "measured" in corr["provenance"],
@@ -2277,35 +2281,60 @@ def sec_study(a: Audit, sc: Scratch) -> None:
     p_f = run_cli(["src/study/autopilot.py", "-meta", sc.recipe("samples_pilot.json"),
                    "--study", "audit_force", "--data-root", str(sc.data),
                    "--force", *rigged], timeout=1800)
-    forced_ran = (sc.data / "audit_force" / "final.json").exists()
-    if p_no.returncode == 1 and not forced_ran:
-        a._record("FAIL", "--force runs the study anyway, as documented",
-                  "--force is accepted, threaded through autopilot() into "
-                  "_give_up(..., force, log), and never read: _give_up's body does "
-                  "not mention its `force` parameter. The identical run gave up the "
-                  "same way with and without the flag (exit "
-                  f"{p_no.returncode} vs {p_f.returncode}, no final.json either "
-                  "time). Three places document it as an override -- the module "
-                  "docstring ('--force overrides'), the give-up message ('--force "
-                  "runs anyway, on constants known to be undetermined') and --help. "
-                  "src/study/autopilot.py:322,332")
-    else:
-        a._record("PASS", "--force runs the study anyway, as documented",
-                  f"forced run produced final.json: {forced_ran}")
+    forced = sc.data / "audit_force"
+    a.check("--force runs the same study anyway, to completion",
+            lambda: p_f.returncode == 0 and (forced / "final.json").exists()
+            and (forced / "report.md").exists(),
+            detail=f"exit {p_f.returncode}")
+    a.check("...printing the SAME diagnosis, since the evidence does not depend "
+            "on the decision",
+            lambda: "PILOT DID NOT DETERMINE THE CONSTANTS" in p_f.stdout
+            and "measured so far" in p_f.stdout)
+    a.check("...and stamping the answer `forced` so it can never later pass for "
+            "a determined one",
+            lambda: json.loads((forced / "autopilot.json").read_text())["forced"]
+            is True)
+    a.check("...with a closing warning on the console, not only in the file",
+            lambda: "--force:" in p_f.stdout and "NOT determined" in p_f.stdout)
+
+    a.check("the doubling loop grows the DRAWS and leaves the replicate count "
+            "alone (Igor, 2026-09-04)",
+            lambda: [r["factor"] for r in
+                     json.loads((forced / "autopilot.json").read_text())["rounds"]]
+            == [1],
+            detail="one round here; the multi-round arithmetic is pinned in "
+                   "tools/tests/test_autopilot.py")
+    from src.study.autopilot import scale_draws
+    a.check("scale_draws grows a scalar n",
+            lambda: scale_draws({"scales": [8], "n": 1000}, 4)["n"], expect=4000)
+    a.check("...a per-scale list",
+            lambda: scale_draws({"scales": [8, 16], "n": [10, 20]}, 2)["n"],
+            expect=[20, 40])
+    a.check("...and a rule's budget",
+            lambda: scale_draws({"scales": [8], "n": {"rule": "snr",
+                                                      "budget": 1e6}}, 8)["n"],
+            expect={"rule": "snr", "budget": 8e6})
+    a.check("...never the ladder",
+            lambda: scale_draws({"scales": [8, 16], "n": 10}, 4)["scales"],
+            expect=[8, 16])
+    a.raises("a rule with no budget cannot be grown, and says so", SystemExit,
+             lambda: scale_draws({"scales": [8], "n": {"rule": "snr"}}, 2),
+             contains="budget")
     cli_ok(a, "--pilot-cap outside (0, 1) is refused",
            ["src/study/autopilot.py", "-meta", sc.recipe("samples_pilot.json"),
             "--study", "x", "--data-root", str(sc.data), "--time", "10s",
             "--pilot-cap", "1.5"], expect_code=1, stderr_has="pilot-cap")
 
-    from src.study.autopilot import PILOT_CAP, _provisional_m0
-    a.note("autopilot's gate is evaluated at a hardcoded 4x the pilot budget",
-           f"_provisional_m0 is called with `seconds_budget * 4 - spent`, where "
-           f"seconds_budget is already --time * --pilot-cap. That reconstructs the "
-           f"total only at the default PILOT_CAP = {PILOT_CAP} (1/0.25 = 4). With "
-           f"--pilot-cap 0.1 the gate is judged at 40% of the real remaining "
-           f"budget, hence at a smaller m0 and a LARGER B_fs span than the run will "
-           f"actually have -- the loop doubles more than it needs to. "
-           f"src/study/autopilot.py:317")
+    import inspect
+
+    from src.study.autopilot import pilot_until_determined
+    src_loop = inspect.getsource(pilot_until_determined)
+    a.check("the gate is judged at the whole remaining budget, not a hardcoded "
+            "multiple of the pilot's slice",
+            lambda: "total_seconds - spent" in src_loop
+            and "seconds_budget * 4" not in src_loop,
+            detail="`seconds_budget * 4` reconstructed the total only at the "
+                   "default --pilot-cap 0.25")
 
 
 # ===========================================================================
@@ -2395,10 +2424,13 @@ def sec_calibration(a: Audit, sc: Scratch) -> None:
            ["calibration/check_coverage.py", "--arm", "planted", "--trials", "20",
             "--replicates", "3", "--n-scale", "0.001", "--params", "omega1",
             "--centre", "both"], stdout_has="/mean", timeout=900)
-    cli_ok(a, "--arm srw draws for real instead of planting",
-           ["calibration/check_coverage.py", "--arm", "srw", "--trials", "5",
-            "--replicates", "3", "--n-scale", "0.0002", "--params", "gamma"],
-           stdout_has="srw arm", timeout=900)
+    p = cli_ok(a, "--arm srw draws for real instead of planting",
+               ["calibration/check_coverage.py", "--arm", "srw", "--srw-trials",
+                "4", "--replicates", "3", "--srw-n-scale", "0.0002",
+                "--params", "gamma"], stdout_has="srw arm", timeout=900)
+    if p:
+        a.check("...on its OWN n and trials, since the planted arm's would be days",
+                lambda: "simulated steps" in p.stdout and "x0.0002" in p.stdout)
     cli_ok(a, "--arm planting KS-tests the planted arm's own Gaussian assumption",
            ["calibration/check_coverage.py", "--arm", "planting", "--trials", "30",
             "--planting-n", "2000"], stdout_has="planting arm", timeout=900)
@@ -2413,31 +2445,30 @@ def sec_calibration(a: Audit, sc: Scratch) -> None:
            ["calibration/check_coverage.py", "--arm", "wilson", "--trials", "40",
             "--wilson-m0", "2", "--wilson-n", "20000", "--level", "0.99"],
            stdout_has="99%", timeout=900)
-    p = cli_ok(a, "--arm all runs several arms in one go",
+    from calibration.check_coverage import ALL_ARMS
+    p = cli_ok(a, "--arm all runs EVERY arm, cheapest first",
                ["calibration/check_coverage.py", "--arm", "all", "--trials", "20",
-                "--replicates", "3", "--n-scale", "0.001", "--params", "omega1",
-                "--planting-n", "2000"], timeout=1200)
+                "--replicates", "3", "--params", "omega1", "--planting-n", "2000",
+                "--wilson-m0", "2", "--wilson-n", "20000", "--srw-trials", "3",
+                "--srw-n-scale", "0.0001"], timeout=1800)
     if p:
-        ran = {name for name in ("planting arm", "planted arm", "srw arm",
-                                 "wilson arm", "rate_exponent_se")
-               if name in p.stdout}
-        a.note("--arm all runs three of the five arms, not all of them",
-               f"the ARM map sends 'all' to [planting, planted, rate]; this run "
-               f"executed {sorted(ran)} and skipped the srw and wilson arms. "
-               f"'both' is likewise [planted, planting], which is the pair its name "
-               f"suggests, but 'all' is not all. The wilson arm is the one that "
-               f"checks eq. (720) -- the interval report.py now LEADS with -- so it "
-               f"is the easiest to leave unrun by accident. "
-               f"calibration/check_coverage.py:345")
+        markers = {"planting": "planting arm", "planted": "planted arm",
+                   "srw": "srw arm", "wilson": "wilson arm",
+                   "rate": "rate_exponent_se"}
+        missing = [arm for arm in ALL_ARMS if markers[arm] not in p.stdout]
+        a.check("...all five of them, with none silently skipped",
+                lambda: not missing,
+                detail=f"ALL_ARMS = {ALL_ARMS}; missing from the run: {missing}")
+        a.check("...including wilson, the arm that checks the interval report.py "
+                "leads with",
+                lambda: "wilson arm" in p.stdout)
     p = run_cli(["calibration/check_coverage.py", "--arm", "planted", "--trials", "5",
                  "--replicates", "3", "--n-scale", "0.001", "--params", "nosuchparam"],
                 timeout=600)
-    a.note("an unknown --params name dies in a KeyError, not an argparse error",
-           f"--params takes free text with no choices= and no validation, so a typo "
-           f"reaches TRUTH[p] deep inside _main and exits {p.returncode} with "
-           f"{(p.stderr.strip().splitlines() or ['(no output)'])[-1][:70]!r}. Every "
-           f"other bad flag in this repo is caught at the boundary with a message "
-           f"naming the valid values.")
+    a.check("an unknown --params name is caught by argparse, naming the valid ones",
+            lambda: p.returncode == 2 and "invalid choice" in (p.stderr or ""),
+            detail=(p.stderr or "").strip().splitlines()[-1][:90]
+            if p.stderr else "")
 
     # verify_prediction: reads constants from a data root, then times real ladders.
     empty = sc.data / "empty_root2"
@@ -2463,16 +2494,12 @@ def sec_calibration(a: Audit, sc: Scratch) -> None:
         shutil.rmtree(real / tag, ignore_errors=True)
         p = run_cli(["calibration/verify_prediction.py", "--data-root", str(real),
                      "--m0", "40", "--replicates", "1", "--tag", tag], timeout=900)
-        if p.returncode != 0 and "ValueError" in (p.stderr or ""):
-            a.note("verify_prediction crashes when every ladder is skipped",
-                   f"with --m0 40 (n far past max_n) no cell survives, and the "
-                   f"summary lines call min()/max() on the empty ratio lists: "
-                   f"{(p.stderr.strip().splitlines() or [''])[-1][:80]!r}. It has "
-                   f"already printed the per-cell table and written its artifact, so "
-                   f"nothing is lost -- but the exit code says failure for what is "
-                   f"really 'nothing to report'. calibration/verify_prediction.py:196")
-        else:
-            a.check("an all-skipped run ends cleanly", lambda: p.returncode == 0)
+        a.check("an all-skipped run ends cleanly instead of dividing an empty list",
+                lambda: p.returncode == 0 and "ValueError" not in (p.stderr or ""),
+                detail=(p.stderr or "").strip().splitlines()[-1][:90]
+                if p.stderr else "")
+        a.check("...and says what to try instead",
+                lambda: "is runnable at these constants" in p.stdout)
         shutil.rmtree(real / tag, ignore_errors=True)
 
 
@@ -2588,11 +2615,11 @@ def sec_static(a: Audit) -> None:
         a.note(f"{len(unreferenced)} public function(s) have no caller at all",
                "\n".join(unreferenced) + "\n(not even a test. Each is either a "
                "public API kept for a caller that does not exist yet, or dead.)")
-    if tests_only:
-        a.note(f"{len(tests_only)} public function(s) are called only by tests",
-               "\n".join(tests_only) + "\n(exercised, but by nothing that ships. "
-               "Worth deciding deliberately: a tested function with no production "
-               "caller is still a maintenance cost.)")
+    a.check("no public function is exercised by tests alone",
+            lambda: not tests_only,
+            detail="\n".join(tests_only) + ("\n(a tested function with no "
+            "production caller is still a maintenance cost -- either wire it up "
+            "or drop it)" if tests_only else ""))
 
     # --- the layering rule PLAN.md states, checked rather than assumed ---
     violations = []

@@ -63,7 +63,6 @@ from tools.allocation import (  # noqa: E402
     n_for_budget,
     optimal_allocation,
     rate_exponent,
-    rate_exponent_se,
     total_cost,
     tuned_allocation,
 )

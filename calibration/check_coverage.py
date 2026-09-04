@@ -30,10 +30,19 @@ deliberately not registered in tools/models.py as a `target_fn`. Same rule as
 allocation_experiment.py's `true_gamma` -- truth may plant data and score a
 finished answer, never reach an estimator. See experiments/01_srw/README.md.
 
+`--arm all` runs every arm, cheapest first (ALL_ARMS). It really does mean
+all of them: until 2026-09-04 it ran three of the five and silently skipped
+`srw` and `wilson` -- the second of which is the eq. (720) bound that
+report.py leads with, so "I ran --arm all" was not the assurance it sounded
+like. The two arms that were skipped are also the two that cost real compute,
+which is why `srw` has its own `--srw-n-scale` / `--srw-trials`: sharing the
+planted arm's numbers is what made it unrunnable in a group.
+
 CLI:
     python3 calibration/check_coverage.py                      # planted arm, 500 trials
     python3 calibration/check_coverage.py --trials 2000
-    python3 calibration/check_coverage.py --arm srw --trials 40
+    python3 calibration/check_coverage.py --arm srw --srw-trials 40
+    python3 calibration/check_coverage.py --arm all            # every arm
     python3 calibration/check_coverage.py --arm both --json out.json
 """
 
@@ -61,21 +70,15 @@ from tools.allocation import (  # noqa: E402
     rate_exponent_se,
 )
 from tools.correction import fit_correction  # noqa: E402
-from tools.wilson import (  # noqa: E402
-    format_interval,
-    sigma_se,
-    wilson_interval,
-)
+from tools.wilson import format_interval, wilson_interval  # noqa: E402
 from tools.coverage import (  # noqa: E402
     coverage_multi,
     coverage_test,
     format_result,
     rescore,
-    se_ratio,
 )
 from tools.loglog import gamma_closed_form  # noqa: E402
 from tools.models import get_model  # noqa: E402
-from src.generate.generate import generate  # noqa: E402
 
 # Experiment B's actual configuration (experiments/01_srw/recipes/samples_omega1.json,
 # snr allocation at B = 5e10), replayed verbatim so the coverage measured here
@@ -86,6 +89,18 @@ REPLICATES = 5
 
 # Ground truth for |S_k| -- see experiments/01_srw/README.md.
 TRUTH = {"omega1": 1.0, "a1": -0.25, "gamma": 0.5, "a0": sqrt(2 / np.pi)}
+
+#: Every arm, cheapest first. `--arm all` runs exactly this list -- all of it,
+#: which it did not before 2026-09-04, when "all" meant three of the five and
+#: quietly skipped `srw` and `wilson`. `wilson` is the arm that checks the
+#: eq. (720) bound report.py now LEADS with, so it was the worst one to leave
+#: out of the command whose name promises everything.
+ALL_ARMS = ["planting", "wilson", "rate", "planted", "srw"]
+
+#: Rough srw throughput on one core, steps/second. Used ONLY to turn the srw
+#: arm's requested work into a wall-clock estimate for the header below --
+#: never into a result. An order of magnitude is all this has to be right to.
+SRW_STEPS_PER_SECOND = 1.5e8
 
 
 def exact_mean(k: int) -> float:
@@ -155,6 +170,20 @@ def _srw_replicate(rng, n_per_scale) -> tuple[np.ndarray, np.ndarray]:
         y_bar[j], sigma_log[j] = _mean_and_sigma_log(
             spec.simulate(k, int(n_per_scale[j]), {"q": 0.5}, rng))
     return y_bar, sigma_log
+
+
+def srw_arm_cost(n_per_scale, trials: int, replicates: int) -> tuple[float, float]:
+    """(simulated steps, estimated seconds) the srw arm would spend.
+
+    srw costs k steps per sample (models/srw.py's cost_hint, exact), so the
+    arm's work is trials * replicates * sum_k n_k * k. At Experiment B's real
+    n it is days, which is why the arm has its own `--srw-n-scale` and
+    `--srw-trials` rather than sharing the planted arm's: the same numbers
+    that make `planted` a faithful replay make `srw` unrunnable.
+    """
+    steps = float(trials) * replicates * sum(
+        float(n) * k for n, k in zip(n_per_scale, SCALES))
+    return steps, steps / SRW_STEPS_PER_SECOND
 
 
 def make_wilson_experiment(m0: int, m: int, rho: float, n: int, *,
@@ -316,9 +345,11 @@ def make_rate_experiment(budgets, replicates: int, d: float, omega1: float,
 
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--arm", choices=("planted", "srw", "rate", "planting",
-                                     "wilson", "both", "all"),
-                   default="planted")
+    p.add_argument("--arm", choices=(*ALL_ARMS, "both", "all"),
+                   default="planted",
+                   help="which coverage question to answer. 'all' runs every "
+                        f"arm ({', '.join(ALL_ARMS)}), cheapest first; 'both' "
+                        "is the planted/planting pair")
     p.add_argument("--wilson-m0", type=int, nargs="+", default=[2, 4, 6, 8, 10],
                    help="m0 values to sweep in the wilson arm")
     p.add_argument("--wilson-n", type=int, default=100_000,
@@ -331,19 +362,35 @@ def _main(argv=None) -> None:
     p.add_argument("--replicates", type=int, default=REPLICATES,
                    help=f"replicates per experiment (default {REPLICATES}, "
                         "matching what Experiment B actually ran)")
-    p.add_argument("--params", nargs="+", default=["omega1", "a1", "gamma"])
+    p.add_argument("--params", nargs="+", default=["omega1", "a1", "gamma"],
+                   choices=sorted(TRUTH),
+                   help="which fitted constants to score. Only those with a "
+                        "known truth here can be scored at all, which is what "
+                        "the choices are")
     p.add_argument("--centre", choices=("pooled", "mean", "both"), default="pooled",
                    help="how replicates are combined into the point estimate; "
                         "'pooled' is what the pipeline does")
     p.add_argument("--level", type=float, default=0.95)
     p.add_argument("--n-scale", type=float, default=1.0,
-                   help="multiply every n by this (srw arm: use <1 to keep it affordable)")
+                   help="multiply the PLANTED arm's n by this. 1.0 replays "
+                        "Experiment B's real allocation, which costs nothing "
+                        "there because the arm draws no samples -- n only "
+                        "enters sigma_log")
+    p.add_argument("--srw-n-scale", type=float, default=1e-3,
+                   help="the same for the srw arm, which DOES draw. Small by "
+                        "default because Experiment B's real n is ~1e14 steps "
+                        "here (days); the arm is a spot check that the planted "
+                        "arm's Gaussian is not itself what is being measured, "
+                        "and reduced n is the conservative direction for that")
+    p.add_argument("--srw-trials", type=int, default=40,
+                   help="trials for the srw arm alone, for the same reason "
+                        "(the shared --trials is sized for the cheap arms)")
     p.add_argument("--seed", type=int, default=20260822)
     p.add_argument("--json", type=Path, default=None)
     a = p.parse_args(argv)
 
     arms = {"both": ["planted", "planting"],
-            "all": ["planting", "planted", "rate"]}.get(a.arm, [a.arm])
+            "all": list(ALL_ARMS)}.get(a.arm, [a.arm])
     out, t0 = {}, time.perf_counter()
 
     for arm in arms:
@@ -356,6 +403,7 @@ def _main(argv=None) -> None:
                   f"how conservative\n{'=' * 72}")
             print(f"  {'m0':>4} {'B_fs':>11} {'se_term':>11} {'half':>11} "
                   f"{'dominant':>9} {'coverage':>9} {'95% CI':>16}")
+            first = None
             for m0 in a.wilson_m0:
                 scales = ladder(m0, 6, 2.0)
                 cv2 = [(exact_sd(k) / exact_mean(k)) ** 2 for k in scales]
@@ -374,6 +422,15 @@ def _main(argv=None) -> None:
                       f"{w['half_width']:>11.3e} {w['dominant']:>9} "
                       f"{r['coverage']:>9.3f} {f'[{lo:.3f}, {hi:.3f}]':>16}")
                 out[f"wilson/m0={m0}"] = r
+                first = first if first is not None else (m0, w)
+            if first is not None:
+                # One row in full. The table above cannot say the thing that
+                # matters most here -- that the bound is INCOMPLETE, because
+                # phi_plus is an assumption-level constant nobody has measured
+                # -- and a coverage of 1.000 from an incomplete bound is not
+                # the reassurance it looks like.
+                print(f"\n  one row in full (m0 = {first[0]}):")
+                print("    " + format_interval(first[1]).replace("\n", "\n    "))
             continue
         if arm == "planting":
             print(f"\n{'=' * 72}\nplanting arm: is y_bar really N(mu, sigma^2/n)?"
@@ -404,15 +461,25 @@ def _main(argv=None) -> None:
                 out[label] = r
             continue
 
-        n = [max(1, int(x * a.n_scale)) for x in N_PER_SCALE]
+        # The two draw-based arms share everything but their scale: `planted`
+        # replays Experiment B's real n for free (it never draws), while `srw`
+        # really simulates and needs its own, much smaller, knobs.
+        scale = a.srw_n_scale if arm == "srw" else a.n_scale
+        trials = a.srw_trials if arm == "srw" else a.trials
+        n = [max(1, int(x * scale)) for x in N_PER_SCALE]
         draw = _planted_replicate if arm == "planted" else _srw_replicate
-        print(f"\n{'=' * 72}\n{arm} arm: R={a.replicates} replicates/experiment, "
-              f"{a.trials} experiments, n scaled x{a.n_scale:g}\n"
-              f"n = {n}\n{'=' * 72}")
+        head = (f"\n{'=' * 72}\n{arm} arm: R={a.replicates} replicates/experiment, "
+                f"{trials} experiments, n scaled x{scale:g}\nn = {n}")
+        if arm == "srw":
+            steps, secs = srw_arm_cost(n, trials, a.replicates)
+            head += (f"\n{steps:.3g} simulated steps, ~{secs / 60:.1f} min at "
+                     f"{SRW_STEPS_PER_SECOND:.1g} steps/s -- raise --srw-n-scale "
+                     f"/ --srw-trials to spend more")
+        print(head + f"\n{'=' * 72}")
         centres = ["pooled", "mean"] if a.centre == "both" else [a.centre]
         exp = make_experiment(draw, n, a.replicates, tuple(a.params))
         truths = {f"{p}/{c}": TRUTH[p] for p in a.params for c in ("pooled", "mean")}
-        res = coverage_multi(exp, truths, trials=a.trials, level=a.level,
+        res = coverage_multi(exp, truths, trials=trials, level=a.level,
                              dofs=(None, a.replicates - 1), seed=a.seed,
                              progress=True)
         for label, r in sorted(res.items()):

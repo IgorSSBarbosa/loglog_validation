@@ -350,8 +350,6 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         return float(np.std([p[key] for p in per], ddof=1) / np.sqrt(R)) if R > 1 else None
 
     cost = measure_cost_exponent(model, params, scales)
-    d_val = cost.get("affine", {}).get("d")
-    d_se = cost.get("affine", {}).get("d_se")
 
     cv_per_scale = np.array([r["cv"] for r in reps], float).mean(axis=0)
     throughput = (drawn_steps / drawn_seconds) if drawn_seconds > 0 else None

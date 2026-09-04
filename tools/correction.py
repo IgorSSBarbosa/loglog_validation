@@ -42,11 +42,14 @@ power of 2 anchored at one -- samples one consistent branch of that staircase
 and the smooth model applies. A grid that mixes odd and even k does not, and
 the resulting zig-zag is fitted as if it were curvature: measured on EXACT
 means with zero sampling noise, a rho = sqrt(2) grid over 8..256 returns
-omega1 ~ 17.8 instead of 1. That failure is silent -- the fit converges and
-reports a small residual -- so it is the caller's job to choose the grid, and
-this is why the failure mode is documented here rather than guarded against
-(the parity that matters is a property of the model, which this module never
-sees).
+omega1 ~ 18 instead of 1, pinned at the upper end of _OMEGA1_BOUNDS, with
+rel_rmse 9.2e-03 (re-measured 2026-09-04). The one thing that does give it
+away is `converged = False`; the residual is small and nothing else in the
+returned dict says "your grid mixes parities", so a caller reading only
+omega1 gets a plausible wrong number. It is therefore the caller's job to
+choose the grid, and that is why the failure mode is documented here rather
+than guarded against (the parity that matters is a property of the model,
+which this module never sees).
 """
 
 from __future__ import annotations

@@ -21,6 +21,7 @@ python3 calibration/exercise_all.py --list           # what it would run
 
 # are the error bars honest?           (~3.5 min at the defaults)
 python3 calibration/check_coverage.py
+python3 calibration/check_coverage.py --arm all                      # every arm
 python3 calibration/check_coverage.py --arm planted --trials 2000 --centre both
 python3 calibration/check_coverage.py --arm planting --trials 3000   # is the planting faithful?
 python3 calibration/check_coverage.py --arm wilson --trials 1000     # eq. (720) as a bound on gamma
@@ -43,14 +44,26 @@ instead of $t_4=2.776$. $\Pr(|t_4|<1.96)=0.8784$; measured $0.877$–$0.882$. Th
 scores both quantile choices on identical draws rather than assuming which is right,
 which is the only reason the comparison is conclusive.
 
-Four arms, answering different questions:
+Five arms, answering different questions. `--arm all` runs every one of them,
+cheapest first — it really does mean all, which until 2026-09-04 it did not:
+the group ran three of the five and silently skipped `srw` and `wilson`, the
+second being the very bound `report.py` now leads with.
 
 | arm | question | cost |
 |---|---|---|
-| `planted` | is the fit's error bar the right width? | ~200 s at 500 trials |
 | `planting` | is the planted arm's Gaussian assumption itself sound? | cheap |
-| `rate` | does the *analytic* error bar on the decay exponent cover? | cheap |
-| `wilson` | how conservative is eq. (720)'s bound? | moderate |
+| `wilson` | how conservative is eq. (720)'s bound? | cheap |
+| `rate` | does the *analytic* error bar on the decay exponent cover? | moderate |
+| `planted` | is the fit's error bar the right width? | ~200 s at 500 trials |
+| `srw` | does any of it survive real draws? | its own knobs — see below |
+
+`srw` is the only arm that simulates, and at Experiment B's real allocation it
+is ~1e14 steps, i.e. days. So it takes its own `--srw-n-scale` (default 1e-3)
+and `--srw-trials` (default 40) rather than sharing `--n-scale` and `--trials`,
+which are sized for arms that draw nothing. Reduced n is the *conservative*
+direction for the question it asks — a sample mean only gets more Gaussian as
+n grows — and the arm prints the step count and a wall-clock estimate before it
+starts.
 
 `planting` is the one that validates the validation: it KS-tests real srw
 $\overline Y$ against the normal `planted` assumes. Small $n$ on purpose — normality of
@@ -92,8 +105,12 @@ Three outcomes, and the third is what it is for:
 NOTEs never fail the run. They are the output someone reads and decides about;
 FAILs get fixed and disappear. The first run (2026-09-04, 586 checks in 432 s)
 found one defect — `autopilot.py --force` is accepted, threaded through two
-signatures and never read — and 16 notes. `plans/function_audit.md` is that
-write-up.
+signatures and never read — and 16 notes. Every one of them was resolved the
+same day, and the harness now *checks* each fix rather than repeating the note
+it replaced, so a regression shows up as a FAIL: the run stands at **599
+checks, 0 failures, 1 note** (the parity trap in `tools/correction.py`, which
+is a property of the model and cannot be guarded against here).
+`plans/function_audit.md` is the write-up, findings and resolutions both.
 
 Not a replacement for `tools/tests/`, which owns the closed-form assertions and
 runs in seconds under pytest. This is slower, exercises the CLIs as subprocesses

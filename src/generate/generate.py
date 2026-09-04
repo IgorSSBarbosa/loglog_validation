@@ -276,11 +276,10 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
     return generate(meta["model"], meta["scales"], meta["n"], meta["params"], seed=meta["seed"])
 
 
-#: Why each allocation-rule input exists, printed when a recipe omits one.
+#: What an allocation rule falls back to when the recipe states nothing.
 #: These are DESIGN inputs: they decide how the budget is split across scales
 #: and never enter any fit. The pilot measures omega1 and d from the samples;
 #: what these choose is only where the pilot spends them.
-#: What an allocation rule falls back to when the recipe states nothing.
 #: Both are deliberately the UNINFORMED choice, not a good guess:
 #:   omega1 = 0  ->  n_i ~ s_i**2, flat when the cv is scale-free
 #:   d      = 0  ->  every scale costs the same, so the budget counts SAMPLES
@@ -291,20 +290,6 @@ def reproduce(run_dir: str | Path) -> dict[int, np.ndarray]:
 #: truths, which is precisely why neither is the default here.
 UNINFORMED = {"omega1": 0.0, "d": 0.0}
 
-DESIGN_INPUTS = {
-    "d": ('"d": 1.0',
-          "d is Assumption cost_is_power_law's exponent: how the cost of ONE sample\n"
-          "  grows with the scale, cost(i) = i**d. It converts the budget into sample\n"
-          "  counts and nothing else. A model that declares a `cost_hint` supplies it\n"
-          "  automatically -- this model does not, so state it."),
-    "omega1": ('"omega1": 1.0',
-               "omega1 here is a DESIGN input, not an estimate. It sets the SHAPE of the\n"
-               "  allocation, n_i ~ i**(2*omega1), and never reaches an estimator: the fit\n"
-               "  sees only the drawn samples. Use 1.0 if you have no idea -- the rule needs\n"
-               "  the right sign of the trend, not the right value (see snr_allocation)."),
-}
-
-
 def _design_input(n: dict, key: str, rule: str) -> tuple[float, str]:
     """One allocation-rule input and WHERE IT CAME FROM.
 
@@ -313,20 +298,15 @@ def _design_input(n: dict, key: str, rule: str) -> tuple[float, str]:
     silently, because the whole argument that design inputs are harmless rests
     on being able to run without them and compare.
 
-    Still SystemExit for a key with no uninformed choice: a recipe missing one
-    is the author's mistake, not a crash, and a traceback buries the one line
-    that would fix it. Same convention as constants.require.
+    Every key this is called with has an uninformed choice, so there is no
+    third outcome. It used to raise a SystemExit for a key outside UNINFORMED,
+    with a paragraph explaining what to state and why -- unreachable, since the
+    only two keys ever passed ('d' and 'omega1') are both in UNINFORMED, and
+    deleted 2026-09-04 rather than left as an argument the code cannot make.
     """
     if key in n:
         return float(n[key]), "recipe"
-    if key in UNINFORMED:
-        return UNINFORMED[key], "uninformed default"
-    example, why = DESIGN_INPUTS[key]
-    raise SystemExit(
-        f"the {rule!r} allocation rule needs {key!r} in the recipe's \"n\", and this "
-        f"recipe has none.\n"
-        f'  add it:  "n": {{"rule": "{rule}", "budget": ..., {example}}}\n'
-        f"  {why}")
+    return UNINFORMED[key], "uninformed default"
 
 
 def resolve_d(cfg: dict, n: dict, rule: str) -> tuple[float, str]:

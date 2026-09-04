@@ -29,7 +29,7 @@ import argparse
 import json
 import re
 import sys
-from math import ceil, log, sqrt
+from math import sqrt
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -37,10 +37,9 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.allocation import allocation_constants, ladder, predict_error, tuned_allocation  # noqa: E402
+from tools.allocation import ladder, predict_error, tuned_allocation  # noqa: E402
 from tools.artifacts import (  # noqa: E402
     artifact_path,
-    read_artifact,
     recipe_name,
     recipes_dir,
     write_artifact,

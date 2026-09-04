@@ -4,12 +4,15 @@ the computational-cost exponent d, article Assumption cost_is_power_law
 grid of scales -- instead of each experiment keeping its own copy of this
 driver.
 
-Only meaningful for models whose per-call cost genuinely grows with scale
+Only interesting for models whose per-call cost genuinely grows with scale
 (e.g. "srw": generating k i.i.d. +-1 steps and summing them is Theta(k),
 so d should recover close to 1 -- the verification step for
 tools/cost_model.py's estimator). Pointed at "synthetic" -- drawing from a
-closed-form formula, cost ~constant in i -- this will just (correctly)
-measure d~=0; that's an expected, uninteresting result, not a bug.
+closed-form formula, cost ~constant in i -- this correctly measures d ~= 0,
+and now says PASS for it: the acceptance check scores the measurement against
+the model's OWN declared cost_hint (ACCEPTANCE_REL), not against srw's d = 1.
+A model that declares nothing falls back to the old [0.8, 1.2] window, which
+is then labelled as an expectation rather than a truth.
 
 Repeated timing measurements at a fixed scale all target the same true
 deterministic quantity (unlike Y_i, which is genuinely stochastic) -- noise
@@ -57,6 +60,7 @@ from tools.artifacts import artifact_path, default_out_dir, load_recipe  # noqa:
 from tools.cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
     compare_cost_models,
+    declared_exponent,
     fit_cost_probe,
     format_cost_comparison,
     median_ci,
@@ -64,9 +68,20 @@ from tools.cost_model import (  # noqa: E402
 )
 from tools.loglog import gamma_drop_leading  # noqa: E402
 from tools.models import get_model  # noqa: E402
-from tools.persistence import content_id, run_dir as _run_dir  # noqa: E402
+from tools.persistence import run_dir as _run_dir  # noqa: E402
 
-ACCEPTANCE_RANGE = (0.8, 1.2)  # around the known ground truth d = 1, for models where that applies
+#: How far the measured d may sit from the model's DECLARED d and still pass.
+#: Relative, so it means the same thing at d = 1 and at d = 3; and relative
+#: rather than in sigma because `estimate_cost_affine`'s standard error is
+#: residual-based and treats timing noise as i.i.d., which it is not (see
+#: `compare_cost_models`). 20% is the old absolute window [0.8, 1.2] around
+#: srw's d = 1, restated so it applies to every model rather than to one.
+ACCEPTANCE_REL = 0.2
+
+#: Fallback window for a model that declares no cost_hint. There is nothing to
+#: score against then, so this is the old hardcoded range and is used ONLY to
+#: say "this looks like the Theta(k) model we expect", never as a truth.
+ACCEPTANCE_RANGE = (0.8, 1.2)
 
 
 def measure(
@@ -192,12 +207,28 @@ def _main(argv: list[str] | None = None) -> None:
     for est in local_slopes:
         print(f"  m0={est['m0']}: scales={est['scales_used']}  d_hat={est['gamma_hat']:.4f}")
 
-    lo, hi = ACCEPTANCE_RANGE
+    # Scored against what the MODEL declares, not against srw's d = 1. The
+    # synthetic model's cost really is constant in i, so d = 0 is the right
+    # answer there; the old fixed window printed FAIL for it, with a caveat
+    # underneath that nobody reads before the verdict word.
     d_for_acceptance = aff["d"] if "error" not in aff else result["d_hat"]
-    passed = lo <= d_for_acceptance <= hi
-    print(f"\n{'PASS' if passed else 'FAIL'} vs [{lo}, {hi}] on d_hat={d_for_acceptance:.4f} "
-          f"(ground truth d=1 only applies to "
-          f"genuinely scale-costly models, e.g. srw -- see module docstring)")
+    if spec.cost_hint is not None:
+        declared = declared_exponent(result["scales"], spec.cost_hint, params)
+        gap = abs(d_for_acceptance - declared)
+        rel = gap / abs(declared) if declared else gap
+        passed = rel <= ACCEPTANCE_REL
+        print(f"\n{'PASS' if passed else 'FAIL'}: measured d = "
+              f"{d_for_acceptance:.4f} against this model's declared "
+              f"{declared:.4f} "
+              + (f"({100 * rel:.1f}% of it, " if declared else f"(gap {gap:.4f}, ")
+              + f"tolerance {100 * ACCEPTANCE_REL:.0f}%)")
+    else:
+        lo, hi = ACCEPTANCE_RANGE
+        passed = lo <= d_for_acceptance <= hi
+        print(f"\n{'PASS' if passed else 'FAIL'} vs [{lo}, {hi}] on "
+              f"d_hat={d_for_acceptance:.4f} -- {model!r} declares no "
+              f"cost_hint, so there is nothing to score against and this is "
+              f"only the Theta(k) window srw is expected to land in")
     print(f"\noutput = {out_path}")
     print(f"plot   = python3 src/report/plot_cost.py -data {rd}")
 

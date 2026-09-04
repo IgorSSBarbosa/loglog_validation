@@ -31,7 +31,7 @@ import csv
 import json
 import os
 import sys
-from math import log, sqrt
+from math import sqrt
 from pathlib import Path
 
 import numpy as np
@@ -50,7 +50,6 @@ from tools.allocation import (  # noqa: E402
     tuned_allocation,
 )
 from tools.constants import (  # noqa: E402
-    Constant,
     format_table,
     measured,
     override,
@@ -176,17 +175,6 @@ def choose_group(groups, *, requested: str | None, interactive: bool):
                 return groups[int(raw) - 1]
             print("  not a valid choice")
     return groups[0]
-
-
-def find_omega1_runs(data_root: Path) -> list[Path]:
-    """Runs of the single best-supported configuration under `data_root`.
-
-    Thin wrapper over `discover_groups` kept for callers that just want the
-    default choice; use `discover_groups` + `choose_group` to see or pick
-    among several.
-    """
-    groups = discover_groups(data_root)
-    return groups[0]["runs"] if groups else []
 
 
 def measured_a1(run_dirs) -> tuple[float, float | None, str]:
@@ -374,7 +362,15 @@ def measured_throughput(result_json) -> tuple[float | None, None, str]:
 
 
 def human_time(seconds: float) -> str:
-    """Seconds -> the largest unit that keeps the number readable."""
+    """Seconds -> the SMALLEST unit that keeps the number under 1000.
+
+    Not the largest unit that fits, which is what this docstring used to claim
+    and what the name suggests: 7200 s reads as "120.0 min", not "2.0 h", and
+    the switch to hours waits until 1000 min = 16.7 h. Deliberate -- a plan is
+    easier to compare in one unit across a whole table than in whichever unit
+    each row happens to land in -- but it surprises anyone who typed `--time 2h`
+    and reads `120.0 min` back, so it is worth stating.
+    """
     if seconds < 1e-3:
         return f"{seconds * 1e6:.0f} us"
     if seconds < 1.0:
@@ -432,7 +428,20 @@ def input_sensitivity(name: str, se: float, *, d, omega1, rho, m, a1, cv) -> dic
     `offset_uncertainty`'s -- near the optimum a shift of delta costs
     sqrt((rho^(-2*delta*omega1) + (2*omega1/d)*rho^(d*delta)) / (1 + 2*omega1/d)),
     which is why a whole step of m0 is worth only about 1.1x.
+
+    Knows the four constants that reach the offset: omega1, a1, d and cv. Any
+    other name raises rather than returning a zero shift, which would be
+    indistinguishable from "this input genuinely does not move the plan".
     """
+    # Checked here rather than in the dispatch below, whose `except
+    # (ValueError, ZeroDivisionError): continue` would swallow the raise and
+    # hand back the same zero shift the check exists to stop.
+    if name not in ("omega1", "a1", "d", "cv"):
+        raise ValueError(
+            f"input_sensitivity does not know {name!r}; it moves one of "
+            f"'omega1', 'a1', 'd', 'cv'. Returning a zero shift for an unknown "
+            f"name would read as 'this input does not matter', which is not the "
+            f"same as 'not implemented'.")
     kw = dict(rho=rho, m=m, a1=a1, cv=cv)
     base = allocation_constants(d, omega1, **kw)["offset"]
 
@@ -459,8 +468,14 @@ def input_sensitivity(name: str, se: float, *, d, omega1, rho, m, a1, cv) -> dic
                 if v <= 0:
                     continue
                 shifts.append(offset_at(d=v))
-            else:
-                return {"delta_m0": 0.0, "penalty": 1.0, "offset": base}
+            else:                                    # cv, per the guard above
+                # cv enters through Cs, and kappa ~ Cb^2/Cs^2, so the offset
+                # moves by -2*theta2*log_rho(cv'/cv) -- logarithmically, like
+                # a1, and in the opposite direction.
+                v = cv + sign * se
+                if v <= 0:
+                    continue
+                shifts.append(offset_at(cv=v))
         except (ValueError, ZeroDivisionError):
             continue
 
@@ -628,9 +643,8 @@ def _main(argv: list[str] | None = None) -> None:
 
     consts = {n: require(found, n) for n in ("d", "omega1", "a1", "cv", "throughput")}
     d, omega1 = consts["d"].value, consts["omega1"].value
-    a1, a1_se = consts["a1"].value, consts["a1"].se
-    omega1_se = consts["omega1"].se
-    cv, tp = consts["cv"].value, consts["throughput"].value
+    a1, cv = consts["a1"].value, consts["cv"].value
+    tp = consts["throughput"].value
 
     c = allocation_constants(d, omega1, args.rho, args.m, a1, cv)
 

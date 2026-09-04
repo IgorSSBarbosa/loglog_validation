@@ -27,7 +27,6 @@ says so. `python3 tools/artifacts.py --migrate <root>` renames them in place.
 from __future__ import annotations
 
 import json
-import sys
 import time
 import warnings
 from pathlib import Path

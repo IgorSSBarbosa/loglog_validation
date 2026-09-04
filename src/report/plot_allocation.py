@@ -30,7 +30,6 @@ CLI:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -139,7 +138,6 @@ def plot_allocation(result: dict, expected: dict | None = None,
                     estimator: str = "closed_form", ax=None):
     """Draw both panels. `expected` is measured_correction()'s dict, or None."""
     summary = summarize(result, estimator)
-    d, omega1_recipe = result["d"], result["omega1"]
 
     if ax is None:
         fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.4))

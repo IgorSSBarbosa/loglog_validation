@@ -104,7 +104,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 
 ## 3. Modules
 
-### `tools/` — imported, never run directly
+### `tools/` — imported, not run directly (one exception: `artifacts.py --migrate`)
 
 | module | L | tags | purpose | depends on |
 |---|---|---|---|---|

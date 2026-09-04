@@ -211,6 +211,11 @@ def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
 
     Neither is detectable from either measurement alone, which is why both are
     kept rather than picking one.
+
+    `agree` is None when the two could not be compared at all -- fewer than
+    four scales leaves the affine fit without a standard error, and a gap with
+    no error bar is not evidence either way. Check `comparable` before reading
+    `agree`; `format_cost_comparison` says so in words.
     """
     declared = declared_exponent(scales, cost_hint, params)
     try:
@@ -222,6 +227,12 @@ def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
 
     z = (measured - declared) / se if se else None
     rel = abs(measured - declared) / abs(declared) if declared else float("inf")
+    # Whether a comparison was possible AT ALL, which is not the same question
+    # as whether it agreed. Without a standard error the sigma test below is
+    # skipped, and `agree` used to keep its initial True -- indistinguishable
+    # in the returned dict from a real agreement, and silent in
+    # `format_cost_comparison`. It is now None, and the caller has to say so.
+    comparable = se is not None and se > 0
 
     # Two tolerances, and agreement needs only one of them. The sigma test
     # alone is too strict here: `estimate_cost_affine`'s standard error is
@@ -234,9 +245,8 @@ def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
     # than not having it. The relative floor says what actually matters for an
     # allocation -- the offset moves only logarithmically in d, so sub-percent
     # differences are irrelevant regardless of their significance.
-    agree = True
-    if z is not None:
-        agree = bool(abs(z) <= tolerance_sigma or rel <= tolerance_rel)
+    agree = (bool(abs(z) <= tolerance_sigma or rel <= tolerance_rel)
+             if comparable else None)
 
     return {
         "declared_d": declared,
@@ -245,15 +255,22 @@ def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
         "measured_via": how,
         "z": z,
         "rel_gap": rel,
+        "comparable": comparable,
         "agree": agree,
         "tolerance_sigma": tolerance_sigma,
         "tolerance_rel": tolerance_rel,
     }
 
 def format_cost_comparison(cmp: dict) -> str:
-    """One block, warning first when the two disagree."""
+    """One block, warning first when the two disagree -- or cannot be compared."""
     lines = []
-    if not cmp["agree"]:
+    if cmp.get("agree") is None:
+        lines.append(
+            "NOT COMPARED: no standard error for the measured d, so the "
+            "declared value\n  cannot be scored against it. This is not "
+            "agreement -- it is the absence of\n  a test. Time at least "
+            "4 scales so the affine fit has a degree of freedom.")
+    elif not cmp["agree"]:
         lines.append(
             f"WARNING: declared and measured cost exponents differ by "
             f"{abs(cmp['z']):.1f} sigma.")
@@ -269,6 +286,9 @@ def format_cost_comparison(cmp: dict) -> str:
     if cmp["z"] is not None:
         lines.append(f"  gap = {cmp['z']:+.2f} sigma, {100 * cmp['rel_gap']:.2f}% relative"
                      + ("" if cmp["agree"] else "   -> DISAGREE"))
+    elif cmp["declared_d"]:
+        lines.append(f"  gap = {100 * cmp['rel_gap']:.2f}% relative, "
+                     f"significance unknown")
     return "\n".join(lines)
 
 # --------------------------------------------------------------------------
@@ -360,7 +380,18 @@ def climb_to_target(spec, params: dict, rng, start: int,
     Stops on whichever comes first: the target, `max_doublings` rungs, or
     `time_budget` seconds -- but never before `PROBE_MIN_SCALES` rungs, which
     is what the affine fit needs. `reached_target` reports which happened.
+
+    That floor now holds on every exit, not just the target one. The time
+    budget used to be able to cut the climb short at three rungs, leaving
+    `fit_cost_probe` with no affine fit and the pilot with no measured d --
+    the guarantee this docstring states, but two of the three branches did
+    not keep. A `max_doublings` below the floor is a contradiction and is
+    refused up front rather than silently honoured.
     """
+    if max_doublings < PROBE_MIN_SCALES:
+        raise ValueError(
+            f"max_doublings={max_doublings} cannot reach PROBE_MIN_SCALES="
+            f"{PROBE_MIN_SCALES} rungs, which the affine fit needs")
     scales, times_by_scale = [], {}
     i = int(start)
     t_start = time.perf_counter()
@@ -368,7 +399,10 @@ def climb_to_target(spec, params: dict, rng, start: int,
         agg, times = time_at_scale(spec, i, params, rng, repeats, aggregator)
         scales.append(i)
         times_by_scale[i] = times
-        if agg >= target_seconds and len(scales) >= PROBE_MIN_SCALES:
+        if len(scales) < PROBE_MIN_SCALES:
+            i *= 2
+            continue                # the floor outranks both stopping rules
+        if agg >= target_seconds:
             break
         if time.perf_counter() - t_start > time_budget:
             break
