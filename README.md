@@ -66,7 +66,8 @@ flowchart LR
 ```
 
 Solid arrows carry data or measured constants. `src/` holds the eight pipeline
-drivers, `calibration/` the two that check the pipeline itself; the functions they all
+drivers, `calibration/` the three that check the pipeline itself (two statistical,
+one an audit of every function and flag); the functions they all
 call live in `tools/`, and the simulators in `models/`.
 
 There is exactly **one sampler** — `generate.py`. `pilot.py` and `run.py` do not draw
@@ -82,7 +83,7 @@ ordinary recipe, so the planned run is the same kind of thing as any other run.
 | `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json` |
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
 | `src/study` | **start here**: pilot → plan → run → report, carrying constants for you | a recipe | `constants.json`, `report.md`, `details.md` |
-| `calibration/` | are our **own** stated numbers honest — the ± and the ETA? | the pipeline itself | `coverage.json`, `prediction_check.json` |
+| `calibration/` | are our **own** stated numbers honest — the ± and the ETA? and does every function still behave as documented? | the pipeline itself | `coverage.json`, `prediction_check.json` |
 | `tools/` | *(imported, never run)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
 
@@ -121,6 +122,18 @@ pilot cannot determine $\omega_1$.
 
 `src/README.md` is the full command reference, one section per driver.
 `CATALOG.md` maps every module and function with its classification.
+
+```bash
+# every public function and every CLI flag, once, in dependency order (~7 min)
+python3 calibration/exercise_all.py
+python3 calibration/exercise_all.py --stage tools      # just the leaf layer
+```
+
+`calibration/exercise_all.py` is the audit: it calls each function on its normal
+inputs *and* on the degenerate ones, runs each driver across its flags, and
+prints `PASS` / `FAIL` / `NOTE` — the last for behaviour that is as written but
+worth a human's eye (a flag that does nothing, a message that misleads, an
+unreachable branch). `tools/tests/` still owns the closed-form assertions.
 
 ## Where things go
 

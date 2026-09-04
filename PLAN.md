@@ -121,6 +121,13 @@ loglog_validation/
                                   every "95%" interval was covering 88%
     verify_prediction.py          run allocation_table's tuned ladders for real and
                                   compare predicted vs measured seconds and RMSE
+    exercise_all.py               call every public function and every CLI flag in
+                                  the repo once, in dependency order (tools ->
+                                  models -> src -> calibration), and report
+                                  PASS/FAIL/NOTE. Not a test suite: it asks whether
+                                  each call BEHAVES as documented, including the
+                                  error branches and flag combinations no test
+                                  covers, and NOTEs the ones that do not
   tools/                        <- shared, experiment-agnostic *helper* functions:
                                     called by src/'s scripts, or by each other, or
                                     by tests -- never run directly. May not import

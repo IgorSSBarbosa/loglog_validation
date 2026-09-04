@@ -142,6 +142,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 |---|---|---|---|---|
 | `check_coverage.py` | 461 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation`, `generate` |
 | `verify_prediction.py` | 190 | `experiment`, `budget tool` | Runs tuned ladders for real; predicted vs measured seconds and RMSE. | `allocation`, `allocation_table`, `generate` |
+| `exercise_all.py` | 2681 | `experiment`, `tool` | The audit: every public function and every CLI flag called once, in dependency order, reporting PASS/FAIL/NOTE. Asks whether each call behaves as *documented* — error branches and flag combinations included — where `tools/tests/` asserts closed forms. Also a static pass: unused imports, uncalled public functions, and the PLAN.md layering rule checked rather than assumed. | everything |
 
 ### `models/` — the simulated objects
 

@@ -14,6 +14,11 @@ tolerances, run deliberately and read — so they are tracked in git like any ot
 result-producing script.
 
 ```bash
+# every public function and every CLI flag, once   (~7 min)
+python3 calibration/exercise_all.py
+python3 calibration/exercise_all.py --stage tools    # one layer at a time
+python3 calibration/exercise_all.py --list           # what it would run
+
 # are the error bars honest?           (~3.5 min at the defaults)
 python3 calibration/check_coverage.py
 python3 calibration/check_coverage.py --arm planted --trials 2000 --centre both
@@ -63,6 +68,38 @@ deliberately *not* registered in `tools/models.py` as a `target_fn` — same rul
 `allocation_experiment.py`'s `true_gamma`: truth may plant data and score a finished
 answer, never reach an estimator (user's decision, 2026-08-20).
 
+## `exercise_all.py` — does every function still do what it says?
+
+The other two files here measure a *statistical* property of the pipeline. This
+one asks a blunter question about the same subject: for every public function
+and every CLI flag in the repo, does calling it do something sensible? Including
+the paths nothing calls — error branches, flag combinations, degenerate inputs —
+which is where a defect can sit for months without a passing test noticing.
+
+Ordered by dependency (`tools/` → `models/` → `src/` → `calibration/`, then a
+static pass), and that ordering is the method: `allocation_constants` is checked
+only after the `closed_form_weights` it calls has been checked on its own, so a
+late failure whose earlier stages passed is a failure of the composition.
+
+Three outcomes, and the third is what it is for:
+
+| | |
+|---|---|
+| `PASS` | the call did what its docstring says |
+| `FAIL` | it did not — a defect, with expected vs got |
+| `NOTE` | it behaved as written, and the behaviour is worth a human's eye: a flag that does nothing, a message that misleads, an unreachable branch |
+
+NOTEs never fail the run. They are the output someone reads and decides about;
+FAILs get fixed and disappear. The first run (2026-09-04, 586 checks in 432 s)
+found one defect — `autopilot.py --force` is accepted, threaded through two
+signatures and never read — and 16 notes. `plans/function_audit.md` is that
+write-up.
+
+Not a replacement for `tools/tests/`, which owns the closed-form assertions and
+runs in seconds under pytest. This is slower, exercises the CLIs as subprocesses
+(so argparse, the `sys.path` bootstrap and the exit code are part of what is
+tested), and is read rather than gated on.
+
 ## `verify_prediction.py` — does a predicted runtime predict?
 
 The same shape one level up: `src/budget/allocation_table.py` claims a ladder will take
@@ -82,6 +119,7 @@ Proposition `prop:opt`, a claim in the **paper**. Testing the article is the who
 repo's job and stays in `src/`. The test for "does this belong in `calibration/`?" is
 whether the thing it could falsify is our code or someone else's theorem.
 
-Both files draw through `src/generate/generate.py` rather than repeating its loop, and
-`verify_prediction.py` imports the table it checks, so this folder depends on `src/` —
-never the reverse.
+The two measurement scripts draw through `src/generate/generate.py` rather than
+repeating its loop, and `verify_prediction.py` imports the table it checks, so this
+folder depends on `src/` — never the reverse. `exercise_all.py` depends on everything
+by construction, which is why it is last in its own ordering.
