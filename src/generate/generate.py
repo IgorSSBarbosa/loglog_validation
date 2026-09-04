@@ -85,6 +85,7 @@ def generate(
     out_dir: str | Path | None = None,
     tag: str | None = None,
     progress: bool = False,
+    on_scale=None,
     reduce=None,
     max_chunk_bytes: int = 1_000_000_000,
     mem_flush_pct: float = 90.0,
@@ -121,6 +122,10 @@ def generate(
     tag : str, optional
         Run directory name. Defaults to a hash of the run's content, so an
         identical rerun overwrites rather than accumulating a new directory.
+    on_scale : callable(i, n_i, seconds), optional
+        Called as each scale finishes, with the scale, the count drawn there
+        and how long it took. For an external progress display; independent of
+        `progress`, which is this function's own stderr line.
     progress : bool, optional
         Print a one-line-per-scale progress update to stderr as sampling
         proceeds. Off by default so library callers (e.g. a Monte Carlo loop
@@ -217,6 +222,11 @@ def generate(
         samples[i] = drawn if reduce is None else reduce(drawn)
         del drawn                      # the point of reduce=: drop it now, not at loop end
         timings[i] = time.perf_counter() - t0
+        if on_scale is not None:
+            # Called with what was actually drawn, not what was planned, so a
+            # caller driving a progress bar measures the run rather than
+            # re-deriving it from the plan it is trying to check.
+            on_scale(i, n_i, timings[i])
         if progress:
             print(
                 f"\r[{idx}/{len(scales_list)}] scale i={i} n={n_i} ({timings[i] * 1e3:.1f} ms)"

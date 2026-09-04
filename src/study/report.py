@@ -500,6 +500,36 @@ def _plot(sd: Path, res: dict, final: dict) -> Path:
     return out
 
 
+def print_answer(res: dict, *, log=print) -> None:
+    """The console answer: eq. (720) first, the scatter interval below it.
+
+    Factored out of _main so src/study/autopilot.py prints exactly what
+    report.py prints -- a driver that paraphrases its own steps is a second
+    place for the wording of a result to drift.
+    """
+    pct = int(res["level"] * 100)
+    w = res.get("wilson")
+    if w is not None:
+        log(f"gamma = {_fmt(res['gamma'], w['half_width'])}")
+        log(f"  {pct}% [{w['interval'][0]:.5f}, {w['interval'][1]:.5f}]  "
+              f"eq. (720) bound -- scatter AND bias"
+              + ("" if w["complete"] else ", INCOMPLETE"))
+    else:
+        log(f"gamma = {_fmt(res['gamma'], res['se'])}")
+    if res["ci"][0] is not None:
+        log(f"  {pct}% [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
+              f"Student t({res['dof']}), {res['replicates']} replicates "
+              f"-- scatter only, no bias term")
+    if w is not None:
+        sp = res.get("wilson_bfs_span")
+        if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
+            log(f"  !! B_fs spans [{sp[0]:.2g}, {sp[1]:.2g}] over omega1 +/- 1 se "
+                  f"-- the bound's bias term is not determined by this pilot")
+    elif res.get("wilson_why"):
+        log(f"  no eq. (720) bound ({', '.join(res['wilson_why'])}) -- the "
+              f"interval above has no bias term")
+
+
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--study", required=True)
@@ -528,27 +558,7 @@ def _main(argv=None) -> None:
     rp = write_report(sd, res, final, consts, plan)
     dp = write_details(sd, res, final, consts, plan)
 
-    pct = int(a.level * 100)
-    w = res.get("wilson")
-    if w is not None:
-        print(f"gamma = {_fmt(res['gamma'], w['half_width'])}")
-        print(f"  {pct}% [{w['interval'][0]:.5f}, {w['interval'][1]:.5f}]  "
-              f"eq. (720) bound -- scatter AND bias"
-              + ("" if w["complete"] else ", INCOMPLETE"))
-    else:
-        print(f"gamma = {_fmt(res['gamma'], res['se'])}")
-    if res["ci"][0] is not None:
-        print(f"  {pct}% [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
-              f"Student t({res['dof']}), {res['replicates']} replicates "
-              f"-- scatter only, no bias term")
-    if w is not None:
-        sp = res.get("wilson_bfs_span")
-        if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
-            print(f"  !! B_fs spans [{sp[0]:.2g}, {sp[1]:.2g}] over omega1 +/- 1 se "
-                  f"-- the bound's bias term is not determined by this pilot")
-    elif res.get("wilson_why"):
-        print(f"  no eq. (720) bound ({', '.join(res['wilson_why'])}) -- the "
-              f"interval above has no bias term")
+    print_answer(res)
     print(f"\n  {rp}\n  {dp}\n  {fig_path}")
     if a.budget_analysis:
         print(f"  {write_budget_analysis(sd, res, final, plan)}")

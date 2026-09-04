@@ -45,6 +45,9 @@ ARTIFACTS: dict[str, str] = {
     "plan":             "plan.json",              # src/study/plan.py
     "final":            "final.json",             # src/study/run.py
     "answer":           "answer.json",            # src/study/report.py -- gamma +/- se
+    "autopilot":        "autopilot.json",         # src/study/autopilot.py -- the
+                                                  # decisions taken between the
+                                                  # four steps, and why
 }
 
 #: old filename -> the kinds that ever used it, most specific first.

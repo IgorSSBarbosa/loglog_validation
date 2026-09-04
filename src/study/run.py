@@ -48,7 +48,7 @@ from src.generate.generate import generate  # noqa: E402
 
 
 def execute(plan: dict, recipe: dict, sd: Path, *,
-            seed=None, keep_samples=False) -> dict:
+            seed=None, keep_samples=False, on_scale=None, quiet=False) -> dict:
     """Draw the plan's replicates; return the per-replicate summaries.
 
     The recipe says WHAT to draw (model, params) and the plan says HOW MUCH
@@ -61,22 +61,24 @@ def execute(plan: dict, recipe: dict, sd: Path, *,
     reps, seeds = [], []
     t0 = time.perf_counter()
     for k, ss in enumerate(spawn(seed, R)):
-        print(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...",
-              end="", flush=True, file=sys.stderr)
+        if not quiet:
+            print(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...",
+                  end="", flush=True, file=sys.stderr)
         t = time.perf_counter()
         if keep_samples:
             out = generate(model, scales, n, params, seed=ss,
-                           out_dir=sd, tag=f"samples/rep{k}")
+                           out_dir=sd, tag=f"samples/rep{k}", on_scale=on_scale)
             stats = {i: summarize_scale(out[i]) for i in scales}
         else:
             # reduce= collapses each scale inside generate() and frees the
             # draws immediately: a planned run is routinely hundreds of MB per
             # replicate, and nothing downstream reads the samples themselves.
             stats = generate(model, scales, n, params, seed=ss,
-                             reduce=summarize_scale)
+                             reduce=summarize_scale, on_scale=on_scale)
         reps.append(replicate_summary(stats, scales))
         seeds.append(seed_record(ss))
-        print(f" {time.perf_counter() - t:.1f}s", file=sys.stderr)
+        if not quiet:
+            print(f" {time.perf_counter() - t:.1f}s", file=sys.stderr)
     return {"replicates": R, "scales": scales, "n": n, "m0": plan["m0"],
             "rho": plan["rho"], "m": plan["m"], "model": model,
             "params": params, "per_replicate": reps, "seeds": seeds,

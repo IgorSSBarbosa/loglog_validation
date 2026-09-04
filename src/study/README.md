@@ -3,6 +3,65 @@
 For someone who has a model and wants $\hat\gamma$ with an honest error bar,
 without reading constants out of one JSON file and typing them into another.
 
+## All four at once
+
+```bash
+python3 src/study/autopilot.py -meta <recipe> --study mystudy --time 2h
+```
+
+`--time` is the **total** — pilot and run. The pilot is budgeted rather than
+assumed: it takes what it needs (capped at `--pilot-cap`, default 25%) and the
+run gets what is *measured* to be left.
+
+The pilot **doubles**. Round 1 draws `--replicates` replicates at the recipe's
+own $n$; if the constants are not good enough the next round draws as many
+again and pools them, so the total samples per scale go $nR,\ 2nR,\ 4nR,\ \dots$
+At most twice the cost of having started at the right size. **The scales never
+change** — they are the recipe's, and a ladder is a modelling decision.
+
+Replicates rather than $n$ per replicate, deliberately: for the pooled fit the
+two are identical (the information about $\omega_1$ is the total draws at each
+scale, however grouped), but every constant's stated error is
+$\mathrm{sd}(\text{per-replicate fits})/\sqrt R$ — so only one of them also
+improves the error bar the gate is testing.
+
+**Two gates, and either alone is not enough.**
+
+| gate | asks | catches |
+|---|---|---|
+| $B_{\mathrm{fs}}$ span over $\omega_1 \pm 1\,\mathrm{se}$ | is $\omega_1$ pinned down? | a loose pilot |
+| $\chi^2$ of a pure power-law fit | is there any curvature to pin down? | a ladder above where the correction lives |
+
+They are independent. A pilot can pass the span and fail the fit: measured on
+srw over $1024..32768$, the fit ran to $\omega_1 = 5.52 \pm 0.14$ with
+$a_1 = 3.4\times10^{14}$ and the span waved it through, because **$a_1$ cancels
+in the ratio** $B_{\mathrm{fs}}(\omega_1-\mathrm{se})/B_{\mathrm{fs}}(\omega_1+\mathrm{se})$
+— it enters $B_{\mathrm{fs}}$ linearly. The goodness-of-fit test reads the same
+pilot as $\chi^2/\mathrm{dof} = 0.14$, $p = 0.97$, and refuses it.
+
+Measured separation, one pilot round each:
+
+| ladder | $\chi^2/\mathrm{dof}$ | $p$ | verdict |
+|---|---|---|---|
+| $2..8192$, $n = 6104$ | 12.48 | $6\times10^{-24}$ | curvature resolved |
+| $2..512$, $n = 6000$ | 11.65 | $7\times10^{-15}$ | curvature resolved |
+| $1024..32768$, $n = 1500$ | 2.41 | 0.047 | flat — $\omega_1$ unfittable |
+| $4096..131072$, $n = 800$ | 2.92 | 0.020 | flat — $\omega_1$ unfittable |
+
+The test is over **all** scales, not the residual at the smallest one: a single
+point's $|r|/\sigma$ tops 1 about 10% of the time under the null, and ranked
+$4096..131072$ (1.87) above $1024..32768$ (1.18) — the flatter ladder as the
+healthier.
+
+**When it gives up it draws nothing** and prints the constants it did measure,
+their intervals, which gate failed, and whether the cause is the ladder or the
+budget. Spending the rest of the budget on constants known to be undetermined
+buys a confident wrong answer, which is worse than no answer; `--force`
+overrides. One `--seed` drives everything, spawning independent streams for the
+pilot and the run, and `autopilot.json` records every decision.
+
+## Or one step at a time
+
 ```bash
 D=experiments/01_srw/data
 

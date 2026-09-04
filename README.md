@@ -94,6 +94,12 @@ pip install -r requirements.txt
 
 D=experiments/01_srw/data
 
+# all four steps, deciding in between. --time is the TOTAL, pilot included
+python3 src/study/autopilot.py -meta experiments/01_srw/recipes/samples_pilot.json \
+        --study mystudy --time 2h
+
+# -- or one at a time, to read each verdict before spending the next hour --
+
 # 1. cheap pilot: measures d, omega1, a1, cv and this machine's throughput
 python3 src/study/pilot.py -meta experiments/01_srw/recipes/samples_pilot.json \
         --study mystudy --replicates 3

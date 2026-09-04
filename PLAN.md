@@ -100,6 +100,14 @@ loglog_validation/
                                   pilot is good enough to act on. Proposes;
                                   never draws
     study/run.py                  step 3: execute the accepted plan
+    study/autopilot.py            all four, deciding in between: --time is the
+                                  TOTAL, the pilot doubles its replicates and
+                                  pools until BOTH gates pass (B_fs span over
+                                  omega1 +/- 1 se, and a chi2 goodness-of-fit
+                                  test that there is any curvature to fit at
+                                  all), and the run gets the measured
+                                  remainder. Draws nothing when the pilot
+                                  fails, and says which gate and why
     study/report.py               step 4: gamma +/- error, the log-log plot,
                                   and a details file (d, omega1, a1, a0)
   calibration/                  <- checks whose subject is THIS REPO's machinery
