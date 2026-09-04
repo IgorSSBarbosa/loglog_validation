@@ -1314,8 +1314,8 @@ def sec_models_registry(a: Audit) -> None:
 
     a.begin("tools/models", "the registry -- a pure importer, no simulation of its own")
 
-    a.check("both models are registered", lambda: sorted(MODELS),
-            expect=["srw", "synthetic"])
+    a.check("all three models are registered", lambda: sorted(MODELS),
+            expect=["percolation2d", "srw", "synthetic"])
     a.raises("an unknown model is refused with the list of known ones", ValueError,
              lambda: get_model("nope"), contains="unknown model")
     srw, syn = get_model("srw"), get_model("synthetic")
@@ -1329,6 +1329,11 @@ def sec_models_registry(a: Audit) -> None:
             lambda: syn.target_fn is not None and syn.true_gamma_key == "gamma")
     a.close("srw's cost_hint is exactly i", lambda: srw.cost_hint(4096, {}), 4096.0, 0)
     a.close("synthetic's is constant in i", lambda: syn.cost_hint(4096, {}), 1.0, 0)
+    perc = get_model("percolation2d")
+    a.check("percolation2d also declares no target_fn -- 91/48 stays out of the code",
+            lambda: perc.target_fn is None and perc.true_gamma_key is None)
+    a.close("...and its cost_hint is exactly i**2, the lattice's own site count",
+            lambda: perc.cost_hint(512, {}), 512.0 ** 2, 0)
 
 
 def sec_loglog_plot(a: Audit) -> None:
@@ -1439,6 +1444,89 @@ def sec_srw(a: Audit) -> None:
             lambda: srw_mod.simulate(32, 5, {"q": 0.5}, rng).shape, expect=(5,))
     a.close("cost_hint is exactly i -- declared, not fitted",
             lambda: srw_mod.cost_hint(4096), 4096.0, 0)
+
+
+def sec_percolation2d(a: Audit) -> None:
+    """models/percolation2d -- the south-connected cluster at p_c, cost i**2"""
+    import itertools
+
+    from models import percolation2d as perc
+
+    a.begin("models/percolation2d",
+            "the south-connected cluster at p_c, cost i**2")
+
+    rng = np.random.default_rng(0)
+    y = perc.percolation2d(16, n=5_000, rng=rng)
+    a.check("returns n counts in [0, i**2]",
+            lambda: y.shape == (5_000,) and y.min() >= 0 and y.max() <= 256)
+    a.check("p = 1 fills the box exactly",
+            lambda: set(np.unique(perc.percolation2d(7, n=20, p=1.0, rng=rng))),
+            expect={49})
+    a.check("p = 0 leaves it empty",
+            lambda: set(np.unique(perc.percolation2d(7, n=20, p=0.0, rng=rng))),
+            expect={0})
+    a.close("i = 1 is a single Bernoulli(p): mean p",
+            lambda: float(perc.percolation2d(1, n=200_000, p=0.3,
+                                             rng=rng).mean()), 0.3, 0.01)
+
+    # The strongest check available here: E[Y_i] by exhaustive enumeration of
+    # all 2**(i*i) lattices, against Monte Carlo. A closed form, not a second
+    # simulation.
+    def brute_mean(i, p):
+        total = 0.0
+        for bits in itertools.product((False, True), repeat=i * i):
+            grid = np.array(bits, dtype=bool).reshape(i, i)
+            k = int(grid.sum())
+            lab = perc._label_block(grid[None])
+            total += p ** k * (1 - p) ** (i * i - k) * int(perc._south_counts(lab)[0])
+        return total
+
+    for i in (2, 3):
+        n = 200_000
+        draws = perc.percolation2d(i, n=n, rng=np.random.default_rng(100 + i))
+        a.close(f"E[Y_{i}] matches exhaustive enumeration over all 2**{i * i} lattices",
+                lambda draws=draws: float(draws.mean()),
+                brute_mean(i, perc.P_C_SQUARE_SITE),
+                4 * float(draws.std(ddof=1)) / math.sqrt(n))
+
+    a.close("P(Y_i = 0) = (1-p)**i exactly -- row 0 entirely closed, nothing else",
+            lambda: float((perc.percolation2d(4, n=200_000, p=0.5,
+                                              rng=np.random.default_rng(5)) == 0).mean()),
+            perc.zero_rate(4, 0.5), 0.004)
+
+    one = perc.percolation2d(9, n=300, rng=np.random.default_rng(3))
+    a.check("blocking over the sample axis is bit-identical to one unblocked call",
+            lambda: np.array_equal(
+                one, perc.percolation2d(9, n=300, rng=np.random.default_rng(3),
+                                        block_n=7)))
+    a.check("...at block_n = 1 as well",
+            lambda: np.array_equal(
+                one, perc.percolation2d(9, n=300, rng=np.random.default_rng(3),
+                                        block_n=1)))
+    a.check("the blank separator row keeps one sample's cluster out of the next",
+            lambda: list(perc._south_counts(perc._label_block(np.stack([
+                np.ones((6, 6), dtype=bool), np.zeros((6, 6), dtype=bool),
+                np.ones((6, 6), dtype=bool)])))), expect=[36, 0, 36])
+
+    a.raises("an unknown anchor is refused", ValueError,
+             lambda: perc.percolation2d(8, n=1, anchor="north"),
+             contains="unknown anchor")
+    a.raises("a box side below 1 is refused", ValueError,
+             lambda: perc.percolation2d(0, n=1), contains="box side")
+    a.raises("a p outside [0, 1] is refused", ValueError,
+             lambda: perc.percolation2d(4, n=1, p=1.5), contains="p must be in")
+
+    origin = perc.percolation2d(32, n=2_000, anchor="origin",
+                                rng=np.random.default_rng(7))
+    a.close("the origin anchor is 0 whenever the centre is closed -- Assumption 2 "
+            "fails on most draws, which is why ground rule 7 rejects it",
+            lambda: float((origin == 0).mean()), 1 - perc.P_C_SQUARE_SITE, 0.05)
+    a.check("simulate() is the registry's entry point and honours params",
+            lambda: perc.simulate(16, 5, {"anchor": "origin"}, rng).shape, expect=(5,))
+    a.check("an unseeded call still works (fresh entropy)",
+            lambda: perc.percolation2d(8, n=3).shape, expect=(3,))
+    a.close("cost_hint is exactly i**2 -- declared, not fitted",
+            lambda: perc.cost_hint(1024, {}), 1024.0 ** 2, 0)
 
 
 def sec_synthetic(a: Audit) -> None:
@@ -1569,6 +1657,20 @@ TINY_RECIPES = {
         "kind": "samples", "model": "srw", "params": {"q": 0.5},
         "scales": [8, 16, 32, 64, 128, 256],
         "n": {"rule": "snr", "budget": 2e8}, "seed": 19},
+    "samples_perc_south.json": {
+        "kind": "samples", "model": "percolation2d",
+        "params": {"p": 0.59274605079210, "anchor": "south"},
+        "scales": [8, 16, 32, 64], "n": {"rule": "neyman", "budget": 4e6},
+        "seed": 30},
+    "samples_perc_origin.json": {
+        "kind": "samples", "model": "percolation2d",
+        "params": {"p": 0.59274605079210, "anchor": "origin"},
+        "scales": [8, 16, 32, 64], "n": {"rule": "neyman", "budget": 4e6},
+        "seed": 31},
+    "cost_perc.json": {
+        "kind": "cost_probe", "model": "percolation2d",
+        "params": {"p": 0.59274605079210, "anchor": "south"},
+        "scales": [32, 64, 128, 256], "repeats": 5, "seed": 32},
     "cost_srw.json": {
         "kind": "cost_probe", "model": "srw", "params": {"q": 0.5},
         "scales": [4096, 8192, 16384, 32768, 65536], "repeats": 5, "seed": 20},
@@ -1751,8 +1853,9 @@ def sec_generate(a: Audit, sc: Scratch) -> None:
 
 
 def sec_estimate(a: Audit, sc: Scratch) -> None:
-    """src/estimate/ -- measure_cost.py (d) and estimate_omega1.py (omega1, a1)"""
-    a.begin("src/estimate/", "measure_cost.py (d) and estimate_omega1.py (omega1, a1)")
+    """src/estimate/ -- measure_cost.py (d), estimate_omega1.py (omega1, a1), compare_observables.py"""
+    a.begin("src/estimate/",
+            "measure_cost.py (d), estimate_omega1.py (omega1, a1), compare_observables.py")
 
     p = cli_ok(a, "measure_cost.py times a ladder and fits both cost models",
                ["src/estimate/measure_cost.py", "-meta", sc.recipe("cost_srw.json"),
@@ -1809,6 +1912,59 @@ def sec_estimate(a: Audit, sc: Scratch) -> None:
     cli_ok(a, "pointing it at a directory with no samples is a clear error",
            ["src/estimate/estimate_omega1.py", "-data", str(sc.data / "nothing")],
            expect_code=1, stderr_has="no data at")
+
+    # --- compare_observables.py: two arms, one budget ---
+    from src.estimate.compare_observables import _gamma_at_m0, _parse_arm, _score
+
+    a.close("_gamma_at_m0(m0=0) is the all-points slope on a pure power law",
+            lambda: _gamma_at_m0([8, 16, 32, 64, 128],
+                                 np.array([float(i) ** 1.5 for i in
+                                           (8, 16, 32, 64, 128)]), 0), 1.5, 1e-9)
+    a.check("_gamma_at_m0(m0=2) ignores the two smallest scales entirely",
+            lambda: abs(_gamma_at_m0(
+                [8, 16, 32, 64, 128],
+                np.array([float(i) ** 1.5 * (1.3 if i <= 16 else 1.0)
+                          for i in (8, 16, 32, 64, 128)]), 2) - 1.5) < 1e-9)
+    a.raises("...and refuses an m0 that would leave fewer than 2 scales", ValueError,
+             lambda: _gamma_at_m0([8, 16, 32],
+                                  np.array([1.0, 2.0, 3.0]), 2),
+             contains="drops exactly")
+    a.check("_score flags an arm whose bias exceeds its spread as BIAS-DOMINATED",
+            lambda: _score([1.0, 1.0, 1.0, 1.0], 0.5)["bias_dominated"])
+    a.check("...and does not flag a centred, noisy one",
+            lambda: not _score([0.4, 0.6, 0.4, 0.6], 0.5)["bias_dominated"])
+    a.check("_score with no truth reports spread only, no bias/rmse",
+            lambda: sorted(_score([1.0, 2.0], None)),
+            expect=["mean", "sd", "se_of_mean"])
+    a.raises("--arm without NAME=PATH is refused", Exception,
+             lambda: _parse_arm("recipes/samples_x.json"), contains="NAME=PATH")
+
+    p = cli_ok(a, "compare_observables.py runs both percolation anchors head to head",
+               ["src/estimate/compare_observables.py",
+                "--arm", "south=" + sc.recipe("samples_perc_south.json"),
+                "--arm", "origin=" + sc.recipe("samples_perc_origin.json"),
+                "--replicates", "3", "--m0", "1",
+                "--truth", "1.8958333333333333", "--seed", "5",
+                "--tag", "cmp_cli"],
+               stdout_has="head to head",
+               creates=sc.run("cmp_cli") / "observable_comparison.json")
+    if p:
+        a.check("...and reports each arm's per-scale cv, which is the Assumption 6 check",
+                lambda: "cv(Y_i) per scale" in p.stdout)
+        a.check("...the side-connected arm wins on RMSE, as ground rule 7 predicts",
+                lambda: "south wins" in p.stdout,
+                detail=[l.strip() for l in p.stdout.splitlines() if "wins by" in l])
+    cli_ok(a, "one arm is allowed, and then there is no head-to-head to print",
+           ["src/estimate/compare_observables.py",
+            "--arm", "south=" + sc.recipe("samples_perc_south.json"),
+            "--replicates", "2", "--seed", "6", "--tag", "cmp_one"],
+           stdout_has="arm 'south'",
+           creates=sc.run("cmp_one") / "observable_comparison.json")
+    cli_ok(a, "a cost-probe recipe handed to it fails immediately",
+           ["src/estimate/compare_observables.py",
+            "--arm", "x=" + sc.recipe("cost_perc.json"),
+            "--replicates", "2", "--tag", "cmp_wrong"],
+           expect_code=1, stderr_has="cost_probe recipe")
 
 
 def sec_budget(a: Audit, sc: Scratch) -> None:
@@ -2788,7 +2944,7 @@ STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
-    "models": [sec_srw, sec_synthetic],
+    "models": [sec_srw, sec_percolation2d, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
     "calibration": [sec_calibration],
     "static": [sec_static],

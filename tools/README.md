@@ -170,7 +170,7 @@ shadows an existing flat `samples.npz`).
 optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate/generate.py`,
 `src/estimate/measure_cost.py`, and `src/report/plot_loglog.py` dispatch through via a run's
 `"model"` name, instead of each experiment hardcoding its own simulator. This file
-is purely an importer: `from models import srw, synthetic`. It is `tools.models`
+is purely an importer: `from models import percolation2d, srw, synthetic`. It is `tools.models`
 and the simulator package is `models` — two names one letter-sequence apart, kept
 distinct by the repo's rule that every import is written out in full. The actual
 per-model logic lives in
@@ -202,7 +202,21 @@ per-model logic lives in
   estimators still run (comparing estimators against each other doesn't need a known
   truth); an explicit "exploratory" note is printed instead.
 
+- `percolation2d.py` — critical site percolation on the square lattice; $Y_i$ is the
+  number of open sites of an $i\times i$ box connected to the **south side**
+  (`PLAN.md` ground rule 7), with `anchor="origin"` kept only as the comparison arm.
+  `cost_hint(i) = i**2` exactly, which makes it the first model whose $d$ is a
+  geometric fact rather than a stated formula. Labels a whole block of samples with one
+  `ndimage.label` call over a vertically stacked image with blank separator rows, and
+  draws float32 uniforms blocked over the sample axis so the output is bit-identical at
+  any `block_n` — `srw`'s invariant, for `srw`'s reason. Same deliberate absence of
+  `target_fn`: $\gamma = d_f = 91/48$ is an acceptance criterion in
+  `experiments/03_percolation_zd/README.md`, not an input.
+
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
+`tools/tests/test_percolation2d.py` (exact enumeration of $\mathbb E Y_i$ over all
+$2^{i^2}$ configurations at $i=2,3$, an independent flood fill on random critical
+lattices, the exact zero rate $(1-p)^i$, and `block_n` invariance),
 `tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
 \sim\sqrt{2k/\pi}$ asymptotic, `block_n` exact-equivalence with the unblocked
 path, and a large-$(n,k)$ case that would be gigabytes unblocked). The four

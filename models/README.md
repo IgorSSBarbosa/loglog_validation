@@ -97,6 +97,61 @@ own arithmetic from `cost_scale`/`cost_d` for that reason.
 This is what `calibration/check_no_leakage.py`'s `cost` arm runs on: recovering $d$ from
 $\{0.5, 0.75, 1, 1.5, 2\}$ when the only $d$ anywhere in the repo's constants is 1.
 
+`percolation2d.py` — critical site percolation on the square lattice.
+`percolation2d(i, n=1, p=P_C_SQUARE_SITE, anchor="south", rng=None, block_n=None)`
+fills an $i\times i$ box with i.i.d. Bernoulli($p$) open sites and returns, per sample,
+the number of open sites connected to the **south side** by 4-connected open paths
+inside the box — `PLAN.md` ground rule 7's observable, and the reason this model
+exists. `anchor="origin"` returns the cluster of the box's centre instead; it is the
+comparison arm for `src/estimate/compare_observables.py`, not the default.
+
+$p_c = 0.59274605079210$ (Jacobsen 2015) is the **4-connected** threshold; passing the
+8-connected `structure` by mistake would silently simulate a supercritical system
+($p_c^{(8)} = 0.4073$), which is why `_FOUR_CONNECTED` is a named module constant with
+that warning on it.
+
+Two implementation choices carry the whole cost story:
+
+- **One `ndimage.label` call per block, not per sample.** A block's lattices are
+  stacked vertically into one tall image with a blank separator row after each; no open
+  path can cross a closed row, so labelling the stack once is exactly the per-sample
+  labelling, and the C-level union-find sees one large problem instead of $n$ tiny
+  ones. That matters because a `neyman` allocation asks for ~500k samples at $i=8$,
+  where per-call SciPy overhead would otherwise dominate. `test_percolation2d.py`'s
+  `test_block_stacking_does_not_leak_between_samples` is what pins the separator.
+- **float32 uniforms, blocked over the sample axis**, for exactly `srw.py`'s reasons:
+  one draw per site with no bit packing, so splitting into blocks consumes the RNG
+  stream in the same order an unblocked call would and the output is bit-identical at
+  any `block_n`. The cost is a realized $p$ within $2^{-24}\approx6\times10^{-8}$ of
+  the requested one — a distance to criticality whose correlation length
+  ($\xi\sim|p-p_c|^{-4/3}\approx4\times10^9$ sites) is seven orders beyond any box this
+  will run at.
+
+`cost_hint(i) = i**2`, exact: $i^2$ uniforms drawn, one near-linear union-find pass,
+nothing depending on $p$ or the anchor. **This is the first model where article
+Assumption 7's $\mathrm{cost}(i)=i^d$ is a geometric fact about a real simulation
+rather than a stated formula** — measured against the clock, declared $d=2$ vs affine
+$\hat d = 2.0285\pm0.0175$, a $+1.63\sigma$ gap (`experiments/03_percolation_zd/`, P1).
+
+No `target_fn`/`true_gamma_key`, the same deliberate absence as `srw`: $\gamma = d_f =
+91/48$ is known from the literature but stays out of the code path and lives as a
+written acceptance criterion in `experiments/03_percolation_zd/README.md`. $\omega_1$
+is genuinely *unknown* here (literature $\Omega=72/91\approx0.79$; measured $\approx0.35$
+over $8\le i\le512$, almost certainly an effective exponent) — this rung measures it.
+
+Assumption 2 ($Y_i>0$) is not asserted, unlike `synthetic.py`. For `"south"` the
+violation is real but exponentially rare — $Y_i = 0$ **iff** row 0 is entirely closed,
+exactly $(1-p_c)^i$, which `zero_rate` returns in closed form and
+`test_zero_rate_is_exact` checks — and for `"origin"` it is the normal case. An assert
+would either fire once in ten million runs for no actionable reason, or make the
+comparison arm unrunnable.
+
+Verified: `tools/tests/test_percolation2d.py` — **exact enumeration** of
+$\mathbb{E}Y_i$ over all $2^{i^2}$ configurations at $i=2,3$ (a closed form, not
+another Monte Carlo), an independent pure-Python flood fill matching site-for-site on
+random critical lattices, $p\in\{0,1\}$, $i=1$ (Bernoulli), `block_n` invariance, the
+exact zero rate, and the origin arm's failure of Assumption 2.
+
 Neither file imports the other, or anything from `tools/`/`src/`/`experiments/` --
 `tools/models.py` is the only thing that imports these, as `from models import srw`.
 Note the two names that look alike and are not: `models` is this package of

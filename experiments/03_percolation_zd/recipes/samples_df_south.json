@@ -1,0 +1,22 @@
+{
+  "kind": "samples",
+  "model": "percolation2d",
+  "params": {
+    "p": 0.59274605079210,
+    "anchor": "south"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 4000000000.0
+  },
+  "seed": 20260904
+}

@@ -23,6 +23,7 @@ from typing import Callable
 
 import numpy as np
 
+from models import percolation2d as model_percolation2d
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -77,6 +78,15 @@ MODELS: dict[str, ModelSpec] = {
         # driver, just the absence of a target_fn here. The gamma-hat
         # estimators themselves still run (comparing estimators against each
         # other doesn't need a known truth), flagged as exploratory instead.
+    ),
+    "percolation2d": ModelSpec(
+        simulate=model_percolation2d.simulate,
+        cost_hint=model_percolation2d.cost_hint,
+        # No target_fn/true_gamma_key, for the same reason as srw above:
+        # gamma = d_f = 91/48 is known from the literature but is kept OUT of
+        # the code path so no estimator is handed the answer it is measuring.
+        # It lives as a written acceptance criterion in
+        # experiments/03_percolation_zd/README.md. See models/percolation2d.py.
     ),
 }
 

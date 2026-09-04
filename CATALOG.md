@@ -44,6 +44,12 @@ flowchart TB
         ALLOC --> AE --> PA
     end
 
+    subgraph expP["Experiment P — which observable? (percolation)"]
+        CO["estimate/compare_observables.py<br/>R full experiments per arm"]
+        P2D["models/percolation2d.py<br/>south side vs origin, p_c, d=2"]
+        P2D --> CO
+    end
+
     subgraph check["calibration/ — are the error bars real?"]
         CC["calibration/check_coverage.py<br/>arms: planted / planting / rate / wilson"]
         COV["coverage.py<br/>coverage_test, t vs normal"]
@@ -122,7 +128,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
-| `models.py` | 95 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic` |
+| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
 
 ### `src/` — the scripts a human runs
@@ -135,6 +141,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `generate/generate.py` | 357 | `experiment`, `tool` | Draw samples per a recipe. Allocation rules (`snr`/`neyman`), chunked output for large $n$. | `allocation`, `models`, `persistence` |
 | `estimate/measure_cost.py` | 214 | `experiment`, `budget tool` | **Experiment A**: time `simulate()` per scale, fit $d$, and score it against the model's declared `cost_hint`. | `cost_model`, `loglog`, `models`, `persistence` |
 | `estimate/estimate_omega1.py` | 198 | `experiment`, `statistical tool` | **Experiment B**: $\omega_1$, $a_1$, $\gamma$, $a_0$ from one run. | `correction`, `loglog`, `persistence` |
+| `estimate/compare_observables.py` | 265 | `experiment`, `statistical tool` | Two observables of the same $\gamma$, one budget: $R$ independent full experiments per arm, scored by bias/sd/RMSE against a reporting-only `--truth`. Written for percolation's side-vs-origin question. | `generate`, `loglog`, `models`, `rng`, `artifacts` |
 | `budget/allocation_experiment.py` | 348 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
 | `budget/allocation_table.py` | 630 | `budget tool`, `statistical tool` | Planning: precision vs wall clock. Discovers run groups, pools replicates, reports provenance. **Largest module — see §5.** | `allocation`, `correction`, `persistence` |
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
@@ -228,6 +235,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `generate`, `reproduce` | generate | draw / regenerate from a recipe |
 | `measure` | measure_cost | time `simulate()` per scale |
 | `estimate` | estimate_omega1 | both $\omega_1$ estimates for a run |
+| `compare`, `format_report` | compare_observables | $R$ replicates per arm; bias/sd/RMSE head to head |
 | `run_cell` | allocation_experiment | one replicate |
 | `sweep` | allocation_experiment | the $m_0\times B$ grid, both arms |
 | `summarize` | allocation_experiment | per-budget arm scoring |

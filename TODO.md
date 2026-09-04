@@ -469,4 +469,29 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
 - [ ] Phase 1 — SRW
 - [ ] Phase 2 — RWRE (cross-check against `critical_exponents/estimators/log_log_plot.py`)
 - [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster
+  - [x] ~~$d=2$ model: `models/percolation2d.py`, `MODELS["percolation2d"]`. $Y_i$ =
+        open sites of an $i\times i$ box connected to the SOUTH side, at
+        $p_c=0.59274605079210$, 4-connected (ground rule 7). No `target_fn`: $91/48$
+        is an acceptance criterion, not an input. `anchor="origin"` exists only as the
+        comparison arm. Verified: `tools/tests/test_percolation2d.py` — exact
+        enumeration of $\mathbb{E}Y_i$ over all $2^{i^2}$ configurations at $i=2,3$, an
+        independent flood fill on random critical lattices, $p\in\{0,1\}$, $i=1$,
+        block-invariance, and $P(Y_i=0)=(1-p)^i$ exactly~~
+  - [x] ~~$d=2$ cost model: affine $\hat d = 2.0285\pm0.0175$ vs the declared $2$
+        ($+1.63\sigma$). **First rung where Assumption 7 is a measured geometric fact**,
+        not a stated formula. See `experiments/03_percolation_zd/README.md`, P1~~
+  - [x] ~~$d=2$ first $\hat d_f$: $1.9161$ (direct fit of eq. 232) / $1.9059$
+        (bias-decay), vs $91/48=1.89583$. cv$(Y_i)$ flat at $\approx0.43$ across
+        $i=8..512$, so Assumption 6 looks satisfied. P2~~
+  - [x] ~~Side-vs-origin head to head at equal budget
+        (`src/estimate/compare_observables.py`, P3)~~
+  - [ ] $\omega_1$ for $d=2$ is **unsettled**: the two estimators give $0.33$ and
+        $0.38$ over $8\le i\le512$, against a literature $\Omega=72/91\approx0.79$.
+        Almost certainly an effective exponent contaminated by the analytic $i^{-1}$
+        boundary term over so short a window. Needs a wider ladder (to $i\sim4096$),
+        replicates with error bars, and probably a two-correction fit before anything
+        is claimed either way
+  - [ ] Wilson interval (eq. 720) on $\hat d_f$: needs $\omega_1$ first
+  - [ ] $d\ge3$: a general-$d$ simulator (`percolation_zd`), where $\mathrm{cost}(i)=i^d$
+        starts to bite and the allocation theory should earn its keep
 - [ ] Phase 4 — Percolation on hierarchical/Bethe graphs, exact recursion cross-check

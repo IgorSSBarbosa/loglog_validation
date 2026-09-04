@@ -86,6 +86,11 @@ loglog_validation/
                                   cross-checks the wall clock against the model's
                                   own declared cost_hint
     estimate/estimate_omega1.py   Experiment B's analysis driver (omega_1, a_1)
+    estimate/compare_observables.py  two observables of the SAME gamma at one
+                                  budget: R independent full experiments per arm,
+                                  scored bias/sd/RMSE against a reporting-only
+                                  --truth. Written for ground rule 7's question
+                                  (side-connected vs origin cluster), model-agnostic
     budget/allocation_experiment.py  Experiment C: sweep (budget x m0), paired arms
     budget/allocation_table.py    precision vs wall clock, from measured constants
     report/plot_loglog.py         single shared log-log plotter; overlays a known
@@ -200,6 +205,16 @@ loglog_validation/
                                   E|S_k| is known exactly but is deliberately kept out
                                   of the code path (user, 2026-08-20), stated as a
                                   README acceptance criterion instead
+    percolation2d.py              critical site percolation on the square lattice,
+                                  p_c = 0.59274605079210, 4-connected. Y_i = open
+                                  sites of an i x i box connected to the SOUTH SIDE
+                                  (ground rule 7); anchor="origin" exists only as
+                                  the comparison arm. cost_hint(i) = i**2, so this is
+                                  the first model where Assumption 7's d is a
+                                  geometric fact and not a stated formula. No
+                                  target_fn: gamma = d_f = 91/48 is an acceptance
+                                  criterion in experiments/03_percolation_zd/, same
+                                  decision as srw
   derivations/                  <- standalone write-ups too long for a docstring:
                                   the gamma MLE; the dropped allocation constant
                                   and the 88%-coverage defect
@@ -287,7 +302,10 @@ expansion, are the moment assumptions plausible) and **computational** (is $cost
    fact to verify (BFS/union-find over $i^d$ sites), not an assumption. $d=2$ has known
    $d_f = 91/48$; higher $d$ up to the mean-field threshold ($d\ge 6$) are progressively
    more expensive and are where the budget-allocation theory should matter most in
-   practice. Side-connected cluster (ground rule 7), not origin cluster.
+   practice. Side-connected cluster (ground rule 7), not origin cluster. **$d=2$ is
+   under way** (`models/percolation2d.py`): $\hat d = 2.03\pm0.02$ measured against the
+   declared $2$, and a first $\hat d_f$ within $1.1\%$ of $91/48$ — see
+   `experiments/03_percolation_zd/README.md`. $\omega_1$ there is still open.
 5. **Hierarchical / Bethe lattice** — exactly solvable via branching-process recursion
    (also currently an empty article appendix), so simulation can be checked against an
    exact generating-function computation rather than only Monte Carlo — the strongest

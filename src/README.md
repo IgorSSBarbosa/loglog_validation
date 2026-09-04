@@ -5,12 +5,13 @@ those scripts (and each other) call (user's own framing, 2026-08-12). One shared
 of each action, used by every experiment via a recipe's `"model"` field (dispatched
 through `tools/models.py`'s registry), instead of each experiment keeping its own copy.
 
-Twelve drivers in five layers, named for the question they answer:
+Thirteen drivers in five layers, named for the question they answer:
 
 ```
 src/
   generate/   generate.py                                 draw samples
   estimate/   measure_cost.py  estimate_omega1.py         measure the constants
+              compare_observables.py                      two observables, one budget
   budget/     allocation_experiment.py  allocation_table.py    spend a budget well
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
   study/      pilot.py  plan.py  run.py  report.py    the whole thing, end to end
@@ -46,6 +47,13 @@ python3 src/report/plot_cost.py -data experiments/01_srw/data/cost_probe
 # 5. Estimate the correction-to-scaling exponent omega_1 from a run (Experiment B)
 python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_omega1.json --tag omega1
 python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1 --expect-omega1 1.0
+
+# 5b. Compare two observables of the SAME gamma at equal budget (which one
+#     converges faster?) -- e.g. percolation's side-connected vs origin cluster
+python3 src/estimate/compare_observables.py \
+  --arm south=experiments/03_percolation_zd/recipes/samples_compare_south.json \
+  --arm origin=experiments/03_percolation_zd/recipes/samples_compare_origin.json \
+  --replicates 12 --truth 1.8958333333333333 --tag compare_anchors
 
 # 6. Test the budget-allocation rule prop:opt (Experiment C)
 python3 src/budget/allocation_experiment.py -meta experiments/01_srw/recipes/sweep_allocation.json --tag allocation
@@ -145,6 +153,26 @@ separate scripts here). `--expect-omega1`/`--expect-gamma` print a PASS/FAIL aga
 known values for reporting only — those values are never passed to the estimators, so
 the measurement stays blind to the answer it is checking. See
 `experiments/01_srw/README.md` for the recipe, the allocation rule, and the result.
+
+`compare_observables.py` — two (or more) samples recipes meant to estimate the *same*
+$\gamma$, run at the same budget, scored against each other. Every other driver here
+asks whether an estimator is correct given an observable; this asks whether a different
+choice of $Y_i$ converges faster. Each arm draws `--replicates` **complete independent
+experiments** (own `SeedSequence` per (arm, replicate), nothing shared across arms,
+replicates or scales — ground rule 2), yielding one $\hat\gamma$ per replicate and hence
+a bias, an sd and an RMSE against `--truth`. `--truth` is reporting-only, like
+`estimate_omega1.py`'s `--expect-gamma`. Two estimators are reported per arm
+(`gamma_all_points` and the drop-leading fit at `--m0`), because an arm heavy in
+finite-size bias is helped much more by dropping scales, and that difference is itself
+the finding. An arm whose $|$bias$|$ exceeds its sd is flagged **BIAS-DOMINATED**, since
+the head-to-head "needs $k^2\times$ the budget" figure is only meaningful while both arms
+are variance-dominated. Samples are not persisted (each replicate is reduced to per-scale
+`(mean, se, n)` as it is drawn); the spawning is deterministic, so any replicate is
+reproducible from the recorded seed. Written for `experiments/03_percolation_zd`'s
+side-vs-origin question (Igor, 2026-09-04) but model-agnostic. Verified:
+`tools/tests/test_compare_observables.py` (window selection, the bias/RMSE scoring, and
+an end-to-end run on planted `synthetic` arms differing only in $\sigma_\infty^2$, where
+the quieter arm must win and both must stay unbiased).
 
 ## `budget/`
 

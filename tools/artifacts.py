@@ -47,6 +47,9 @@ ARTIFACTS: dict[str, str] = {
     "autopilot":        "autopilot.json",         # src/study/autopilot.py -- the
                                                   # decisions taken between the
                                                   # four steps, and why
+    "observable_comparison": "observable_comparison.json",
+                                                  # src/estimate/compare_observables.py
+                                                  # -- two observables, one budget
     "no_leakage":       "no_leakage.json",        # calibration/check_no_leakage.py
                                                   # -- planted truth vs recovered
 }
