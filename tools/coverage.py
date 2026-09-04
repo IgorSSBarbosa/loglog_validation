@@ -14,8 +14,8 @@ often it contains the truth. PLAN.md checkpoint 0.4.
 NOT article eq. (720). `wilson_score_interval` here is the textbook binomial
 score interval, used only to put an honest CI on a measured COVERAGE (a
 proportion). The article's Wilson interval of eq. (720) is a different object
--- a four-term bound on gamma-hat -- and belongs in `tools/wilson.py`, which
-is still unwritten. Do not conflate them.
+-- a four-term bound on gamma-hat -- and lives in `tools/wilson.py`. Both now
+appear in a report; do not conflate them.
 """
 
 from __future__ import annotations

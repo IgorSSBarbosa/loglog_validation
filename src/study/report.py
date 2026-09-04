@@ -27,6 +27,15 @@ wrong is invisible. Two are reported, and they answer different questions:
 Disagreement between them is informative rather than alarming: the replicate
 interval measures scatter and ignores bias; the bound covers both.
 
+The bound is only as good as the pilot's omega1, and not linearly so: omega1
+sits in an exponent, B_fs ~ rho**(-omega1*m0). Measured here, a pilot giving
+omega1 = 13.1 +/- 3.5 produced B_fs = 9.4e-07 and a bound that EXCLUDED the
+truth while printing tight; the same run under omega1 = 0.885 +/- 0.125 gives
+B_fs = 4.8e-03 and covers it. So B_fs is recomputed across omega1 +/- 1 se and
+the span is reported whenever it exceeds `_BFS_SPAN_LIMIT`. A bound whose bias
+term moves two orders of magnitude inside its own input's error bar is a
+statement about the pilot, not about gamma.
+
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/report.py --study mystudy --data-root ... --budget-analysis
@@ -53,11 +62,64 @@ from tools.correction import fit_correction  # noqa: E402
 from tools.coverage import interval  # noqa: E402
 from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
 from tools.loglog_plot import loglog_plot  # noqa: E402
-from tools.wilson import sigma_se  # noqa: E402
+from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
+from tools.wilson import (  # noqa: E402
+    finite_size_bias, sigma_se, wilson_interval)
 
 from src.budget.allocation_table import human_time  # noqa: E402
 
 LEVEL = 0.95
+
+#: How far B_fs may swing across omega1 +/- 1 se before the bound is called
+#: undetermined. 10x is generous -- a bound is allowed to be loose -- but past
+#: it the number being printed is the pilot's guess about an exponent, not a
+#: statement about gamma.
+_BFS_SPAN_LIMIT = 10.0
+
+
+def wilson_inputs(final: dict, cv: np.ndarray, reps: list) -> dict:
+    """The eq. (720) constants, each from the only place it can honestly come from.
+
+    omega1 and a1 come from the PILOT, never from a refit on the final data,
+    and this is not a preference. The plan deepens m0 precisely to put the
+    ladder where the correction has died -- that is what makes gamma-hat
+    unbiased -- so refitting omega1 there fits noise. On this repo's own srw
+    run the final refit returned omega1 = 0.0295 with converged = False, and
+    feeding that to B_fs turns a half-width of 1.1e-3 into 1.5. The pilot,
+    which deliberately ladders down to the small scales, measured 0.885.
+
+    sigma_inf2 and sigma_max2 come from cv, which IS a function of the sample
+    mean and so survives summarization; Lambda comes from the log_moment field
+    (`tools/summary.py`), absent from any run drawn before that field existed.
+
+    Returns the kwargs `wilson_interval` wants, plus `why` naming whatever is
+    missing. A missing piece is reported, never defaulted: eq. (720) with a
+    term silently set to zero is not a bound.
+    """
+    why = []
+    c = (final.get("plan") or {}).get("constants_at_plan_time") or {}
+    omega1 = (c.get("omega1") or {}).get("value")
+    a1 = (c.get("a1") or {}).get("value")
+    omega1_se = (c.get("omega1") or {}).get("se")
+    if omega1 is None or a1 is None:
+        why.append("omega1/a1 (the plan recorded no constants_at_plan_time)")
+
+    lm = [r.get("log_moment") for r in reps]
+    if any(x is None for x in lm):
+        Lambda = None
+        why.append("Lambda (this run predates the log_moment summary field)")
+    else:
+        # Lambda is max_k E|log xi_k|^(2+delta): an expectation, so replicates
+        # average; the max is over scales.
+        Lambda = float(np.mean(np.array(lm, float), axis=0).max())
+
+    return {
+        "sigma_inf2": float(cv[-1] ** 2),   # largest scale -- moment_bounds' definition
+        "sigma_max2": float((cv ** 2).max()),
+        "omega1": omega1, "a1": a1, "omega1_se": omega1_se,
+        "Lambda": Lambda, "delta": LOG_MOMENT_DELTA if Lambda is not None else None,
+        "why": why,
+    }
 
 
 def analyse(final: dict, level: float = LEVEL) -> dict:
@@ -90,8 +152,38 @@ def analyse(final: dict, level: float = LEVEL) -> dict:
     fit = fit_correction(scales, y_pool, sigma_log=sig_pool)
 
     # Wilson's fourth term, from the closed form rather than a 5-point spread.
-    sigma_inf2 = float(np.mean(cv ** 2))
+    # sigma_inf2 is cv^2 at the LARGEST scale, which is `moment_bounds`'
+    # definition and Assumption 6's honest finite-sample stand-in for the
+    # limit -- not a mean over scales, which would average the limit together
+    # with the scales still converging to it.
+    wi = wilson_inputs(final, cv, reps)
+    sigma_inf2 = wi["sigma_inf2"]
     w_sd = sigma_se(n, m, rho, sigma_inf2)      # (n, m, rho, sigma_inf2) -- not cv first
+
+    # Theorem thm:wilson (eq. 720). A BOUND on |gamma_hat - gamma|, so it
+    # overcovers; unlike the replicate interval it carries the finite-size
+    # bias, which is exactly the term R replicates can never reveal.
+    wilson = None
+    if not wi["why"]:
+        wilson = wilson_interval(gamma, n, m, m0, rho,
+                                 sigma_inf2=wi["sigma_inf2"], sigma_max2=wi["sigma_max2"],
+                                 a1=wi["a1"], omega1=wi["omega1"],
+                                 Lambda=wi["Lambda"], delta=wi["delta"], level=level)
+    wilson_why = wi["why"]
+
+    # B_fs = |a1| * rho**(-omega1*m0) / (rho**omega1 - 1): omega1 sits in an
+    # EXPONENT, so the pilot's error bar on it does not propagate linearly.
+    # Measured on a deliberately bad pilot (omega1 = 13.1 +/- 3.5), B_fs ranged
+    # over eleven orders of magnitude inside +/- 2 se, and the bound it produced
+    # excluded the truth while looking tight. So the span is computed and
+    # reported rather than left for the reader to wonder about: a bias term
+    # this sensitive to its input is not a bound, whatever it prints.
+    b_span = None
+    if wilson is not None and wi["omega1_se"]:
+        lo_w = max(1e-3, wi["omega1"] - wi["omega1_se"])
+        hi_w = wi["omega1"] + wi["omega1_se"]
+        b_span = sorted(finite_size_bias(m, m0, rho, wi["a1"], w)
+                        for w in (lo_w, hi_w))
 
     sd_over_reps = float(np.std(gammas, ddof=1)) if R > 1 else None
     return {"gamma": gamma, "se": se, "level": level, "replicates": R,
@@ -100,7 +192,10 @@ def analyse(final: dict, level: float = LEVEL) -> dict:
             "gamma_all_points": float(gamma_all_points(scales, y_pool)),
             "fit": fit, "scales": scales, "n": n, "m0": m0, "m": m, "rho": rho,
             "y_bar": y_pool.tolist(), "sigma_log": sig_pool.tolist(),
-            "cv": cv.tolist(), "sigma_inf2": sigma_inf2, "wilson_sd": w_sd}
+            "cv": cv.tolist(), "sigma_inf2": sigma_inf2, "wilson_sd": w_sd,
+            "sigma_max2": wi["sigma_max2"], "Lambda": wi["Lambda"],
+            "wilson": wilson, "wilson_why": wilson_why,
+            "wilson_bfs_span": b_span, "omega1_se": wi["omega1_se"]}
 
 
 def _fmt(v, se=None, digits=4):
@@ -133,6 +228,48 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
     else:
         lines += ["No interval: one replicate gives no spread. "
                   "Re-plan with `--replicates 3` or more.", ""]
+    w = res.get("wilson")
+    if w is not None:
+        wlo, whi = w["interval"]
+        lines += [
+            f"Article eq. (720), Theorem thm:wilson -- a **bound**, not an "
+            f"interval with exact coverage, so it overcovers: "
+            f"**[{wlo:.5f}, {whi:.5f}]** (half-width {w['half_width']:.3g}, "
+            f"dominated by `{w['dominant']}`).", "",
+            "| term | value | what it is |",
+            "|---|---|---|",
+            f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot's "
+            f"omega1/a1 |",
+            f"| B_good | {w['B_good']:.3g} | Jensen bias of the log |",
+            f"| B_bad | {w['B_bad']:.3g} | the stray-sample-mean event, needs "
+            f"Lambda = {res['Lambda']:.3g} |",
+            f"| {w['quantile']:.3g}·sigma_se | {w['se_term']:.3g} | the only "
+            f"random term; sigma_se is a closed form, so no t widening |",
+            "",
+            f"The two intervals answer different questions and are both "
+            f"correct. The replicate interval above measures SCATTER and has "
+            f"no bias term at all; this one BOUNDS scatter and bias together. "
+            f"Disagreement between them is informative, not alarming.", "",
+        ]
+        if not w["complete"]:
+            lines += [f"> Incomplete bound: {', '.join(w['missing_terms'])}. "
+                      f"A bound missing a term is not a bound -- the half-width "
+                      f"above is a LOWER estimate of the true one.", ""]
+        sp = res.get("wilson_bfs_span")
+        if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
+            lines += [
+                f"> **B_fs is not determined by this pilot.** omega1 sits in an "
+                f"exponent, so moving it by its own +/- 1 se "
+                f"({res['omega1_se']:.3g}) swings B_fs across "
+                f"[{sp[0]:.3g}, {sp[1]:.3g}] -- a factor of {sp[1] / sp[0]:.3g}. "
+                f"The bound above uses the central value and can be far too "
+                f"narrow; on this repo's own test of a loose pilot it excluded "
+                f"the truth while printing a tight interval. Deepen the pilot "
+                f"(more replicates, and a ladder reaching down to scales where "
+                f"the correction is still visible) before quoting it.", ""]
+    elif res.get("wilson_why"):
+        lines += [f"No eq. (720) bound: {', '.join(res['wilson_why'])}.", ""]
+
     bias_pred = plan.get("bias")
     if bias_pred is not None and res["se"] and bias_pred > 0.5 * res["se"]:
         lines += [
@@ -286,15 +423,34 @@ def _plot(sd: Path, res: dict, final: dict) -> Path:
     """The log-log chart, from the run's summaries rather than its samples.
 
     Uses tools/loglog_plot.py's shared chart, not a private one -- the summary
-    triple (y_bar, se, n) is exactly what `loglog_points` accepts. The fitted
-    line is the closed-form gamma anchored at the eq. (232) fit's a0, so the
-    slope drawn is the slope reported.
+    triple (y_bar, se, n) is exactly what `loglog_points` accepts.
+
+    The line is the REPORTED gamma, anchored on the data's own sigma_log-
+    weighted centroid. It is deliberately not `fit["a0"] * i**gamma`, which is
+    what this drew until 2026-09-04 and which sat 13-15% below every point:
+    eq. (232) is a0 * i**gamma * exp(a1 * i**-omega1), so a0 alone is the curve
+    only once the correction has vanished, and when omega1 comes back near zero
+    (as it must on a ladder chosen to have no correction left -- see
+    `wilson_inputs`) the term a1*i**-omega1 is nearly constant and therefore
+    degenerate with log a0. The fit then splits the true prefactor between
+    them: on this repo's srw run, a0 = 0.6703 against a truth of 0.7979, with
+    the missing factor 1.15 hiding in exp(a1*i**-omega1).
+
+    Anchoring instead of fitting also keeps the drawn line honest about which
+    estimator it depicts. The reported gamma comes from eq. (526)'s weights,
+    which sum to zero and so annihilate the intercept exactly -- a0 is not
+    something that estimator has an opinion about, and borrowing one from a
+    different (nonlinear, 4-parameter) fit mixed two estimators in one line.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    a0, gamma = res["fit"]["a0"], res["gamma"]
+    gamma = res["gamma"]
+    scales = np.asarray(res["scales"], float)
+    log_y = np.log(np.asarray(res["y_bar"], float))
+    w = 1.0 / np.asarray(res["sigma_log"], float) ** 2
+    a0 = float(np.exp(np.sum(w * (log_y - gamma * np.log(scales))) / np.sum(w)))
     summary = {i: (y, y * s, res["n"])
                for i, y, s in zip(res["scales"], res["y_bar"], res["sigma_log"])}
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
@@ -341,7 +497,18 @@ def _main(argv=None) -> None:
     print(f"gamma = {_fmt(res['gamma'], res['se'])}")
     if res["ci"][0] is not None:
         print(f"  {int(a.level * 100)}% CI [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
-              f"(t({res['dof']}) quantile, {res['replicates']} replicates)")
+              f"(Student t({res['dof']}), {res['replicates']} replicates -- scatter only)")
+    w = res.get("wilson")
+    if w is not None:
+        print(f"  {int(a.level * 100)}% eq. (720) [{w['interval'][0]:.5f}, "
+              f"{w['interval'][1]:.5f}]  (bound, so it overcovers; carries the bias"
+              + ("" if w["complete"] else ", INCOMPLETE") + ")")
+        sp = res.get("wilson_bfs_span")
+        if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
+            print(f"  !! B_fs spans [{sp[0]:.2g}, {sp[1]:.2g}] over omega1 +/- 1 se "
+                  f"-- the bound's bias term is not determined by this pilot")
+    elif res.get("wilson_why"):
+        print(f"  no eq. (720) bound: {', '.join(res['wilson_why'])}")
     print(f"\n  {rp}\n  {dp}\n  {fig_path}")
     if a.budget_analysis:
         print(f"  {write_budget_analysis(sd, res, final, plan)}")

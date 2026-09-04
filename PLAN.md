@@ -127,7 +127,13 @@ loglog_validation/
                                   closed-form weights (eq. 526) -- the canonical
                                   definition, imported by allocation.py and wilson.py
     correction.py                omega_1 and a_1: direct fit of eq. 232, bias decay
-    wilson.py                    Wilson CI (eq. 720), for gamma only
+    wilson.py                    Wilson CI (eq. 720), for gamma only -- all four
+                                  terms, assembled in src/study/report.py beside
+                                  the Student-t replicate interval. B_fs takes
+                                  omega1/a1 from the PILOT (a final-run refit has
+                                  no correction left to fit) and is re-evaluated
+                                  across omega1 +/- 1 se, since omega1 sits in an
+                                  exponent
     allocation.py                budget allocation rule (eq. 945-946) + cost
                                   accounting + the tuned constant kappa the rate
                                   theorem drops

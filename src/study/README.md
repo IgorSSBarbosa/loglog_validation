@@ -189,17 +189,45 @@ A finite-size bias shifts every replicate the same way, so **no number of
 replicates reveals it**. `report.md` says so explicitly whenever the plan's
 predicted bias is comparable to the measured standard error.
 
-Two errors are reported for that reason:
+Two intervals are reported for that reason, and both are correct — they
+answer different questions:
 
 | | what it is | blind to |
 |---|---|---|
-| replicate interval | $\hat\gamma \pm t_{R-1}\,\mathrm{sd}/\sqrt R$ | bias |
-| closed-form sd | $\sqrt{12\sigma_\infty^2/(nm^3)}/\log\rho$, eq. (583)/(720) | nothing — but it is a *bound* |
+| replicate interval | $\hat\gamma \pm t_{R-1}\,\mathrm{sd}/\sqrt R$ — the ordinary Student-$t$ interval, nothing exotic | bias |
+| eq. (720) bound | $B_{\mathrm{fs}} + B_{\mathrm{good}} + B_{\mathrm{bad}} + \Phi(\alpha)\sigma_{\mathrm{se}}$, Theorem thm:wilson | nothing — but it *over*covers |
 
 The $t_{R-1}$ quantile is not decoration: at $R=5$,
 $\Pr(|t_4|<1.96) = 0.8784$, so pairing a 5-point standard error with $1.96$
 gives an interval labelled 95% that covers 88%. This repo published exactly
 that mistake until `calibration/check_coverage.py` measured it.
+
+The bound needs three things the replicate interval does not. $\Lambda$ for
+$B_{\mathrm{bad}}$ comes from the `log_moment` summary field (`tools/summary.py`);
+a run drawn before that field existed gets no bound and is told which term is
+missing, never a term silently set to zero. $\sigma_\infty^2$ and
+$\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ come **from the pilot,
+never from a refit on the final data** — the plan deepens $m_0$ precisely to put
+the ladder where the correction has died, so refitting $\omega_1$ there fits
+noise. On this repo's own srw run the final refit returned $\omega_1 = 0.0295$
+with `converged = False`, against the pilot's $0.885$.
+
+### The bound inherits $\omega_1$'s error bar exponentially
+
+$B_{\mathrm{fs}} \sim \rho^{-\omega_1 m_0}$, so a loose $\omega_1$ does not
+widen the bound — it *moves* it, by orders of magnitude. Measured:
+
+| pilot | $B_{\mathrm{fs}}$ | span over $\omega_1 \pm 1\,\mathrm{se}$ | covers $1/2$? |
+|---|---|---|---|
+| $\omega_1 = 0.885 \pm 0.125$ (5 reps, ladder $2..8192$) | $4.8\times10^{-3}$ | $5.8\times$ | yes |
+| $\omega_1 = 13.1 \pm 3.5$ (4 reps, ladder $16..2048$) | $9.4\times10^{-7}$ | $2.8\times10^{10}$ | **no** |
+
+The second printed a tight interval that excluded the truth. So `report.py`
+recomputes $B_{\mathrm{fs}}$ across $\omega_1 \pm 1$ se and says so loudly when
+the span exceeds $10\times$: a bias term that moves two orders of magnitude
+inside its own input's error bar is a statement about the pilot, not about
+$\gamma$. The fix is a deeper pilot — more replicates, and a ladder reaching
+down to scales where the correction is still visible.
 
 ## The allocation rule matters more than the pilot's budget
 

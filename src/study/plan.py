@@ -112,6 +112,33 @@ def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput
     return plan_for_budget(hi, **kw)
 
 
+def budget_ladder(B: float, *, replicates: int,
+                  factors=(1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16),
+                  **kw) -> list[dict]:
+    """What the same constants buy at neighbouring budgets -- the plan in context.
+
+    Indexed by BUDGET, not by m0. See src/budget/allocation_table.py's
+    `build_budget_rows` for the argument: indexing by m0 asks "at what budget
+    is this m0 optimal", so every row slides whenever a constant moves and two
+    honest tables look unlike each other. Indexed by budget the question is
+    "given this much time, what should I run", and the answer barely moves.
+
+    Budgets are PER REPLICATE, the unit the plan itself is sized in, and go
+    through the same `plan_for_budget` that produced the proposal -- so the
+    marked row IS the proposal, rather than a second computation of it that
+    could drift.
+    """
+    rows = []
+    for f in factors:
+        p = plan_for_budget(B * f, **kw)
+        if not p.get("feasible"):
+            continue
+        p["chosen"] = f == 1
+        p["total_seconds"] = p["seconds"] * replicates
+        rows.append(p)
+    return rows
+
+
 def error_budget(consts, *, d, omega1, rho, m, a1, cv) -> list[dict]:
     """Per-constant: its se, how far that moves m0, and the RMSE cost."""
     out = []
@@ -248,6 +275,11 @@ def _main(argv=None) -> None:
 
     kw = dict(d=d, omega1=omega1, rho=a.rho, m=a.m, a1=a1, cv=cv, throughput=tp)
     R = max(1, a.replicates)
+    # Resolved once, so the accept hint below quotes the duration actually
+    # planned on. It used to interpolate `a.time` itself, which is None
+    # whenever --time was omitted -- printing "--time None", a command that
+    # dies in parse_duration.
+    time_text = a.time or "60s"
     if a.target_se:
         pl = budget_for_target(a.target_se, **kw)
         head = f"to reach se(gamma) <= {a.target_se:g}"
@@ -255,7 +287,7 @@ def _main(argv=None) -> None:
         # The budget is split between replicates, so --time means the TOTAL
         # wall clock. Asking for 2h and being handed a 6h run would be the
         # kind of silent surprise this whole workflow exists to remove.
-        seconds = parse_duration(a.time or "60s")
+        seconds = parse_duration(time_text)
         pl = plan_for_budget(seconds * tp / R, **kw)
         head = f"in {human_time(seconds)} total"
     if not pl.get("feasible"):
@@ -275,6 +307,16 @@ def _main(argv=None) -> None:
     if R > 1:
         print(f"         ~ {pl['sd'] / sqrt(R):.4g} on the mean of {R}, before the "
               f"t({R - 1}) widening")
+
+    print(f"\nwhat other budgets buy, same constants "
+          f"(budget is PER REPLICATE; total is x{R})")
+    print(f"  {'per rep':>9} {'total':>9} {'m0':>4} {'n per scale':>14}"
+          f"{'se(gamma)':>12}{'|bias|':>11}{'sd':>11}   scales")
+    for r in budget_ladder(pl["budget"], replicates=R, **kw):
+        print(f"  {human_time(r['seconds']):>9} {human_time(r['total_seconds']):>9} "
+              f"{r['m0']:>4} {r['n']:>14,}{r['rmse']:>12.3e}{r['bias']:>11.3e}"
+              f"{r['sd']:>11.3e}   {r['scales'][0]}..{r['scales'][-1]}"
+              f"{'   <-- the plan above' if r['chosen'] else ''}")
 
     if a.accept:
         if "recipe" not in pilot:
@@ -296,7 +338,7 @@ def _main(argv=None) -> None:
         print("\nnothing was drawn and no plan was written.")
         print(f"  To accept:  python3 src/study/plan.py --study {a.study} "
               f"--data-root {a.data_root} "
-              + (f"--target-se {a.target_se:g}" if a.target_se else f"--time {a.time}")
+              + (f"--target-se {a.target_se:g}" if a.target_se else f"--time {time_text}")
               + " --accept")
 
 

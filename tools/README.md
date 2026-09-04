@@ -413,24 +413,38 @@ Not started yet — planned module (see `PLAN.md` repo layout): `bootstrap.py`.
 
 ---
 
-`summary.py` — the three numbers a replicate is reduced to, defined once.
+`summary.py` — the four numbers a replicate is reduced to, defined once.
 
-`summarize_scale(draws)` returns $(\overline Y_i,\ \sigma_{\log},\ \mathrm{cv})$ for
-one scale in a single pass: the sample mean, its standard error *on the log scale*
-$\mathrm{sd}/(\sqrt n\,\overline Y_i)$ — which is what the log-log fit weights by —
-and $\mathrm{sd}/\overline Y_i$, which is what an allocation needs.
-`replicate_summary(stats, scales)` transposes `{scale: triple}` into one list per
+`summarize_scale(draws)` returns
+$(\overline Y_i,\ \sigma_{\log},\ \mathrm{cv},\ \mathrm{log\_moment})$ for one
+scale in a single pass: the sample mean; its standard error *on the log scale*
+$\mathrm{sd}/(\sqrt n\,\overline Y_i)$ — which is what the log-log fit weights by;
+$\mathrm{sd}/\overline Y_i$, which is what an allocation needs; and
+$\mathbb{E}|\log \xi|^{2+\delta}$ with $\xi = Y_i/\mathbb{E}Y_i$, the per-scale
+ingredient of $\Lambda$ in eq. (720)'s bad-event term.
+`replicate_summary(stats, scales)` transposes `{scale: tuple}` into one list per
 name, ordered by `scales` rather than by the mapping's key order.
 
-Those three are the entire interface between drawing and fitting: nothing downstream
+Those four are the entire interface between drawing and fitting: nothing downstream
 (`correction.fit_correction`, `report.analyse`, `plan.py`) ever looks at a raw draw.
 That is what lets `run.py` pass `summarize_scale` straight to
 `generate(..., reduce=)` and never write a sample to disk — a planned run is
 routinely hundreds of MB per replicate.
 
+`log_moment` is the one that had to be computed *here* rather than recovered
+later. The first three are functions of the sample mean and could in principle be
+rebuilt from stored summaries; $\Lambda$ is an expectation over individual draws
+and is gone the moment they are freed. Without it eq. (720) is missing `B_bad` and
+stops being a bound — which is exactly what `src/study/report.py` reports for any
+run drawn before this field existed, rather than quietly setting the term to zero.
+`LOG_MOMENT_DELTA = 1.0` must match the $\delta$ `tools/wilson.py` evaluates
+`B_bad` with; a summary on disk carries the number, not the exponent behind it.
+
 The module exists because the definition was written twice, verbatim, in
 `src/study/pilot.py` and `src/study/run.py`. Deliberately free of any dependency on
 `src/`: a summary is a fact about an array, not about how the array was obtained.
-Verified: `tools/tests/test_summary.py` (5 cases — the closed forms, that
+Verified: `tools/tests/test_summary.py` (7 cases — the closed forms, that
 $\sigma_{\log}$ falls like $1/\sqrt n$ while cv does not, plain-`float` output for
-JSON, and scale ordering).
+JSON, scale ordering, that `log_moment` agrees to 1e-12 with `wilson.moment_bounds`
+computed from the samples themselves, and that a zero draw is dropped rather than
+turned into an infinite $\Lambda$).
