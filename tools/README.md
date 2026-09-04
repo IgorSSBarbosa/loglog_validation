@@ -148,8 +148,10 @@ used, alongside `params`/`scales`/`n`/`seed`/`timing_seconds`), plus `content_id
 for deterministic hash-based tags and `normalize_scales_n` for scalar-or-sequence
 `n`. Nested by tag deliberately (not `<out_dir>/<tag>.npz` + `<out_dir>/<tag>.json`
 flat files) so `data/` stays navigable once there are dozens of runs. Named
-`persistence.py`, not `io.py` — that name would shadow the stdlib `io` module once
-`tools/` is on `sys.path`, as every file in `tools/tests/` already puts it.
+`persistence.py`, not `io.py` — originally because `io.py` would shadow the stdlib
+`io` once `tools/` itself was on `sys.path`. That hazard is gone (nothing puts
+`tools/` on the path any more; the module is `tools.persistence`), but the name has
+been on disk long enough that renaming it back would only churn.
 Verified: `tools/tests/test_persistence.py` (10 cases — save/load roundtrip,
 content-hash determinism, missing-file handling, the one-run-one-folder shape).
 
@@ -168,11 +170,10 @@ shadows an existing flat `samples.npz`).
 optional `target_fn(i, params)` and `true_gamma_key`) that `src/generate/generate.py`,
 `src/estimate/measure_cost.py`, and `src/report/plot_loglog.py` dispatch through via a run's
 `"model"` name, instead of each experiment hardcoding its own simulator. This file
-is purely an importer: it adds the sibling `models/` directory to `sys.path` and
-imports each `models/<name>.py` as a bare top-level name (`srw`, `synthetic`) --
-deliberately never through the literal name `models`, since this file is itself
-`tools/models.py` and would otherwise self-referentially collide with its own
-module identity (see its docstring). The actual per-model logic lives in
+is purely an importer: `from models import srw, synthetic`. It is `tools.models`
+and the simulator package is `models` — two names one letter-sequence apart, kept
+distinct by the repo's rule that every import is written out in full. The actual
+per-model logic lives in
 `models/<name>.py`, one level up — see `models/README.md`:
 - `synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`,
   `mean_Y`, article eq. 232). Has both `target_fn` and `true_gamma_key="gamma"`,

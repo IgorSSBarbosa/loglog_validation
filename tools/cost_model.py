@@ -13,9 +13,7 @@ callers.
 
 from __future__ import annotations
 
-import sys
 import time
-from pathlib import Path
 from typing import Callable, Sequence
 
 import numpy as np
@@ -24,26 +22,21 @@ import numpy as np
 # (repo root on sys.path, e.g. experiments/*/measure_cost.py) or as a bare
 # `cost_model` (tools/ itself on sys.path, e.g. tools/tests/test_loglog.py's
 # convention) -- either way, `loglog` needs its own directory on the path.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from loglog import gamma_all_points  # noqa: E402
-
+from tools.loglog import gamma_all_points
 
 def _ols_cost_exponent(scales: Sequence, elapsed: Sequence) -> float:
     return gamma_all_points(scales, elapsed)
 
-
 COST_ESTIMATORS: dict[str, Callable[[Sequence, Sequence], float]] = {
     "ols": _ols_cost_exponent,
 }
-
 
 def estimate_cost_exponent(scales: Sequence, elapsed: Sequence, method: str = "ols") -> float:
     """Estimate d from cost(i) = c * i**d, given elapsed[i] measured at each scales[i]."""
     if method not in COST_ESTIMATORS:
         raise ValueError(f"unknown method {method!r}; known: {list(COST_ESTIMATORS)}")
     return COST_ESTIMATORS[method](scales, elapsed)
-
 
 # --------------------------------------------------------------------------
 # Aggregating repeated timings at one scale
@@ -59,13 +52,11 @@ def estimate_cost_exponent(scales: Sequence, elapsed: Sequence, method: str = "o
 # one-sided jitter like min, but with a distribution-free confidence interval
 # from order statistics, so the cost curve can carry honest error bars.
 
-
 def _iqmean(times: np.ndarray) -> float:
     """Mean of the central 50% (inter-quartile mean): trims both tails."""
     lo, hi = np.quantile(times, 0.25), np.quantile(times, 0.75)
     central = times[(times >= lo) & (times <= hi)]
     return float(central.mean()) if central.size else float(np.median(times))
-
 
 AGGREGATORS: dict[str, Callable[[np.ndarray], float]] = {
     "min": lambda t: float(t.min()),
@@ -77,7 +68,6 @@ AGGREGATORS: dict[str, Callable[[np.ndarray], float]] = {
 
 DEFAULT_AGGREGATOR = "median"
 
-
 def aggregate(times: Sequence[float], method: str = DEFAULT_AGGREGATOR) -> float:
     """Collapse repeated timings at one scale to a single cost estimate."""
     if method not in AGGREGATORS:
@@ -86,7 +76,6 @@ def aggregate(times: Sequence[float], method: str = DEFAULT_AGGREGATOR) -> float
     if arr.size == 0:
         raise ValueError("cannot aggregate an empty timing sample")
     return AGGREGATORS[method](arr)
-
 
 def median_ci(times: Sequence[float], confidence: float = 0.95) -> tuple[float, float]:
     """Distribution-free CI for the median, from the order statistics.
@@ -109,11 +98,9 @@ def median_ci(times: Sequence[float], confidence: float = 0.95) -> tuple[float, 
     r = max(1, min(r, N // 2))
     return float(arr[r - 1]), float(arr[N - r])
 
-
 # --------------------------------------------------------------------------
 # Affine-plus-power cost model
 # --------------------------------------------------------------------------
-
 
 def estimate_cost_affine(scales: Sequence, elapsed: Sequence) -> dict:
     """Fit cost(i) = a + b * i**d, returning {'a', 'b', 'd', 'rel_rmse', 'converged'}.
@@ -184,7 +171,6 @@ def estimate_cost_affine(scales: Sequence, elapsed: Sequence) -> dict:
         "converged": bool(fit.success),
     }
 
-
 # --------------------------------------------------------------------------
 # Declared vs measured cost: the cross-check
 # --------------------------------------------------------------------------
@@ -205,7 +191,6 @@ def declared_exponent(scales: Sequence, cost_hint, params: dict | None = None
     if np.allclose(c, c[0]):
         return 0.0                      # constant cost, e.g. the synthetic model
     return float(np.polyfit(np.log(i), np.log(c), 1)[0])
-
 
 def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
                         params: dict | None = None,
@@ -265,7 +250,6 @@ def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
         "tolerance_rel": tolerance_rel,
     }
 
-
 def format_cost_comparison(cmp: dict) -> str:
     """One block, warning first when the two disagree."""
     lines = []
@@ -286,7 +270,6 @@ def format_cost_comparison(cmp: dict) -> str:
         lines.append(f"  gap = {cmp['z']:+.2f} sigma, {100 * cmp['rel_gap']:.2f}% relative"
                      + ("" if cmp["agree"] else "   -> DISAGREE"))
     return "\n".join(lines)
-
 
 # --------------------------------------------------------------------------
 # Timing a model: the two probes
@@ -325,7 +308,6 @@ PROBE_TIME_BUDGET = 20.0
 #: Fewest rungs worth fitting: `estimate_cost_affine` has 3 free parameters.
 PROBE_MIN_SCALES = 4
 
-
 def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
                   aggregator: str = DEFAULT_AGGREGATOR) -> tuple[float, list[float]]:
     """Time `spec.simulate(i, 1, params, rng)` `repeats` times.
@@ -347,14 +329,12 @@ def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
         times.append(time.perf_counter() - t0)
     return aggregate(times, aggregator), times
 
-
 def _probe(scales, times_by_scale, repeats, aggregator, **extra) -> dict:
     """The common probe payload both timing strategies return."""
     return {"scales": [int(k) for k in scales],
             "elapsed": [aggregate(times_by_scale[k], aggregator) for k in scales],
             "elapsed_all": {str(k): times_by_scale[k] for k in scales},
             "repeats": repeats, "aggregator": aggregator, **extra}
-
 
 def time_over_scales(spec, scales, params: dict, rng, repeats: int = PROBE_REPEATS,
                      aggregator: str = DEFAULT_AGGREGATOR) -> dict:
@@ -363,7 +343,6 @@ def time_over_scales(spec, scales, params: dict, rng, repeats: int = PROBE_REPEA
                                             aggregator)[1]
                       for k in scales}
     return _probe([int(k) for k in scales], times_by_scale, repeats, aggregator)
-
 
 def climb_to_target(spec, params: dict, rng, start: int,
                     repeats: int = PROBE_REPEATS,
@@ -399,7 +378,6 @@ def climb_to_target(spec, params: dict, rng, start: int,
     out["reached_target"] = bool(out["elapsed"] and
                                  out["elapsed"][-1] >= target_seconds)
     return out
-
 
 def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:
     """Fit d from a probe, both ways, plus the overhead diagnostic.

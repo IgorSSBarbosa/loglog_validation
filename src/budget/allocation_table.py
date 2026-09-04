@@ -38,25 +38,26 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, find_artifacts  # noqa: E402
-from allocation import (  # noqa: E402
+from tools.artifacts import artifact_path, find_artifacts  # noqa: E402
+from tools.allocation import (  # noqa: E402
     allocation_constants,
     optimal_allocation,
     predict_error,
     total_cost,
     tuned_allocation,
 )
-from constants import (  # noqa: E402
+from tools.constants import (  # noqa: E402
     Constant,
     format_table,
     measured,
     override,
     require,
 )
-from correction import fit_correction  # noqa: E402
-from persistence import load_samples  # noqa: E402
+from tools.correction import fit_correction  # noqa: E402
+from tools.persistence import load_samples  # noqa: E402
 
 # There are no fallback constants any more, deliberately -- see tools/constants.py
 # for the full argument. Briefly: the old FALLBACK_D = 1.0 and

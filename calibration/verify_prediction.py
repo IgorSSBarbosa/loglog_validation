@@ -33,21 +33,20 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                           # repo root; calibration/ -> ../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
-sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
-sys.path.insert(0, str(ROOT / "src" / "budget"))    # the table being checked
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, write_artifact  # noqa: E402
-from allocation import allocation_constants, predict_error, total_cost  # noqa: E402
-from loglog import gamma_closed_form  # noqa: E402
-from models import get_model  # noqa: E402
-from persistence import run_dir as _run_dir  # noqa: E402
+from tools.artifacts import artifact_path, write_artifact  # noqa: E402
+from tools.allocation import allocation_constants, predict_error, total_cost  # noqa: E402
+from tools.loglog import gamma_closed_form  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools.persistence import run_dir as _run_dir  # noqa: E402
 
-from generate import generate  # noqa: E402
+from src.generate.generate import generate  # noqa: E402
 
-from constants import format_table, measured, require  # noqa: E402
+from tools.constants import format_table, measured, require  # noqa: E402
 
-from allocation_table import (  # noqa: E402
+from src.budget.allocation_table import (  # noqa: E402
     choose_group,
     discover_groups,
     measured_a1,

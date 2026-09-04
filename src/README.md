@@ -250,10 +250,13 @@ drives from one long-lived `Generator`, so it takes an rng rather than a seed �
 equivalence to `generate` is asserted by `test_srw_replicate_matches_generate` instead
 of by a comment.
 
-**Each driver bootstraps its own `sys.path`.** Two levels up from `src/<layer>/x.py` is
-the repo root, so each inserts `ROOT/"tools"` (plus a sibling layer where it needs one)
-before importing `tools/*.py` by bare name — which is what lets them be run from
-anywhere without an install step. `tools/tests/test_artifacts.py` compiles every file
+**Each driver puts the repo root on `sys.path`, once.** Two levels up from
+`src/<layer>/x.py` is the repo root, so each inserts exactly that one directory (guarded, since these drivers also import each other) and
+then imports everything by its full path — `tools.loglog`, `src.generate.generate`,
+`models.srw` — which is what lets them be run from anywhere without an install step.
+Nothing under `tools/` or `models/` touches `sys.path` at all: only the file you
+actually type on the command line does. See the "Imports" section of the top-level
+`README.md`. `tools/tests/test_artifacts.py` compiles every file
 under `src/`, `tools/` and `models/` and runs `--help` on every entry point, after a
 `from __future__` ordering bug shipped past 288 tests because nothing imported the two
 modules it broke.

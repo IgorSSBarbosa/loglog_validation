@@ -51,31 +51,31 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                           # repo root; calibration/ -> ../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
-sys.path.insert(0, str(ROOT / "src" / "generate"))  # the shared draw loop
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from allocation import (  # noqa: E402
+from tools.allocation import (  # noqa: E402
     ladder,
     n_for_budget,
     rate_exponent,
     rate_exponent_se,
 )
-from correction import fit_correction  # noqa: E402
-from wilson import (  # noqa: E402
+from tools.correction import fit_correction  # noqa: E402
+from tools.wilson import (  # noqa: E402
     format_interval,
     sigma_se,
     wilson_interval,
 )
-from coverage import (  # noqa: E402
+from tools.coverage import (  # noqa: E402
     coverage_multi,
     coverage_test,
     format_result,
     rescore,
     se_ratio,
 )
-from loglog import gamma_closed_form  # noqa: E402
-from models import get_model  # noqa: E402
-from generate import generate  # noqa: E402
+from tools.loglog import gamma_closed_form  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from src.generate.generate import generate  # noqa: E402
 
 # Experiment B's actual configuration (experiments/01_srw/recipes/samples_omega1.json,
 # snr allocation at B = 5e10), replayed verbatim so the coverage measured here
@@ -291,7 +291,7 @@ def make_rate_experiment(budgets, replicates: int, d: float, omega1: float,
     so it can be wrong by being derived under an assumption that does not hold,
     not by being noisy. Worth its own arm.
     """
-    from allocation import optimal_allocation
+    from tools.allocation import optimal_allocation
 
     truth_slope = -omega1 / (d + 2 * omega1)
 

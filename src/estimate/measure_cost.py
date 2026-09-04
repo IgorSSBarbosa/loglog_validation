@@ -50,10 +50,11 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, default_out_dir, load_recipe  # noqa: E402
-from cost_model import (  # noqa: E402
+from tools.artifacts import artifact_path, default_out_dir, load_recipe  # noqa: E402
+from tools.cost_model import (  # noqa: E402
     DEFAULT_AGGREGATOR,
     compare_cost_models,
     fit_cost_probe,
@@ -61,9 +62,9 @@ from cost_model import (  # noqa: E402
     median_ci,
     time_over_scales,
 )
-from loglog import gamma_drop_leading  # noqa: E402
-from models import get_model  # noqa: E402
-from persistence import content_id, run_dir as _run_dir  # noqa: E402
+from tools.loglog import gamma_drop_leading  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools.persistence import content_id, run_dir as _run_dir  # noqa: E402
 
 ACCEPTANCE_RANGE = (0.8, 1.2)  # around the known ground truth d = 1, for models where that applies
 

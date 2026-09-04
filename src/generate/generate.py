@@ -42,14 +42,15 @@ import psutil
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from allocation import neyman_allocation, snr_allocation  # noqa: E402
-from artifacts import ARTIFACTS, artifact_path, default_out_dir, load_recipe  # noqa: E402
-from cost_model import declared_exponent  # noqa: E402
-from rng import as_seed_sequence, seed_record  # noqa: E402
-from models import get_model  # noqa: E402
-from persistence import (  # noqa: E402
+from tools.allocation import neyman_allocation, snr_allocation  # noqa: E402
+from tools.artifacts import ARTIFACTS, artifact_path, default_out_dir, load_recipe  # noqa: E402
+from tools.cost_model import declared_exponent  # noqa: E402
+from tools.rng import as_seed_sequence, seed_record  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools.persistence import (  # noqa: E402
     content_id,
     load_metadata,
     normalize_scales_n,

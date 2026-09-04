@@ -92,7 +92,7 @@ def allocation_constants(d: float, omega1: float, rho: float, m: int,
     """
     import numpy as np
 
-    from loglog import closed_form_weights
+    from tools.loglog import closed_form_weights
 
     if m < 2:
         raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")

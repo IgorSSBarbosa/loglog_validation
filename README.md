@@ -128,6 +128,13 @@ pilot cannot determine $\omega_1$.
   each file as `produced_by`). `data/` is gitignored — copy a figure into the
   experiment's `images/` when it becomes evidence worth keeping.
 
+- **Imports** are always written out in full — `from tools.loglog import ...`,
+  `from src.generate.generate import ...`, `from models import srw` — never by bare
+  name. Only the file you type on the command line puts the repo root on `sys.path`
+  (two guarded lines, next to its `ROOT =`); `conftest.py` does the same for pytest, and
+  nothing under `tools/` or `models/` touches the path at all. `PLAN.md`'s *Imports*
+  section has the reasoning.
+
 ## Status
 
 Experiments **B** ($\omega_1$) and **C** ($\gamma$ under a budget) pass, along with

@@ -56,13 +56,14 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path  # noqa: E402
-from loglog import compare_methods  # noqa: E402
-from loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402
-from models import get_model  # noqa: E402
-from persistence import load_metadata, load_samples  # noqa: E402
+from tools.artifacts import artifact_path  # noqa: E402
+from tools.loglog import compare_methods  # noqa: E402
+from tools.loglog_plot import estimates_plot, loglog_plot, loglog_points  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools.persistence import load_metadata, load_samples  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> None:

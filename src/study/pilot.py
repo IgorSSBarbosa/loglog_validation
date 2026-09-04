@@ -38,21 +38,20 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "src" / "generate"))
-sys.path.insert(0, str(ROOT / "src" / "estimate"))
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
-from constants import format_table, measured, override, save  # noqa: E402
-from correction import fit_correction  # noqa: E402
-from cost_model import (  # noqa: E402
+from tools.artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
+from tools.constants import format_table, measured, override, save  # noqa: E402
+from tools.correction import fit_correction  # noqa: E402
+from tools.cost_model import (  # noqa: E402
     PROBE_MIN_SCALES, PROBE_REPEATS, aggregate, climb_to_target,
     estimate_cost_affine, fit_cost_probe)
-from models import get_model  # noqa: E402
-from rng import spawn  # noqa: E402
-from summary import replicate_summary, summarize_scale  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools.rng import spawn  # noqa: E402
+from tools.summary import replicate_summary, summarize_scale  # noqa: E402
 
-from generate import generate, resolve_n  # noqa: E402
+from src.generate.generate import generate, resolve_n  # noqa: E402
 
 #: Seed for the cost probe. Fixed, and deliberately not the pilot's own: the
 #: probe measures how long simulate() TAKES, not what it returns, so it needs

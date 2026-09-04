@@ -34,20 +34,20 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "src" / "budget"))
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from allocation import allocation_constants, ladder, predict_error, tuned_allocation  # noqa: E402
-from artifacts import (  # noqa: E402
+from tools.allocation import allocation_constants, ladder, predict_error, tuned_allocation  # noqa: E402
+from tools.artifacts import (  # noqa: E402
     artifact_path,
     read_artifact,
     recipe_name,
     recipes_dir,
     write_artifact,
 )
-from constants import format_table, load, require  # noqa: E402
+from tools.constants import format_table, load, require  # noqa: E402
 
-from allocation_table import human_time, input_sensitivity  # noqa: E402
+from src.budget.allocation_table import human_time, input_sensitivity  # noqa: E402
 
 #: An se(omega1) above this moves the optimal m0 by roughly a full step. Not a
 #: hard limit -- plan never refuses -- but the threshold at which the warning

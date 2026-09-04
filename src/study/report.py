@@ -44,18 +44,18 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "src" / "budget"))
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, write_artifact  # noqa: E402
-from constants import format_table, load, measured  # noqa: E402
-from correction import fit_correction  # noqa: E402
-from coverage import interval  # noqa: E402
-from loglog import gamma_all_points, gamma_closed_form  # noqa: E402
-from loglog_plot import loglog_plot  # noqa: E402
-from wilson import sigma_se  # noqa: E402
+from tools.artifacts import artifact_path, write_artifact  # noqa: E402
+from tools.constants import format_table, load, measured  # noqa: E402
+from tools.correction import fit_correction  # noqa: E402
+from tools.coverage import interval  # noqa: E402
+from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
+from tools.loglog_plot import loglog_plot  # noqa: E402
+from tools.wilson import sigma_se  # noqa: E402
 
-from allocation_table import human_time  # noqa: E402
+from src.budget.allocation_table import human_time  # noqa: E402
 
 LEVEL = 0.95
 

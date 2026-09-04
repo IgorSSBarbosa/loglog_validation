@@ -68,10 +68,10 @@ deliberately useless for testing the budget machinery. Verified indirectly via `
 (checkpoint 0.2's noiseless-recovery checks) and `tools/tests/test_models.py`.
 
 Neither file imports the other, or anything from `tools/`/`src/`/`experiments/` --
-`tools/models.py` is the only thing that imports these, and it does so by adding this
-directory to `sys.path` and importing `srw`/`synthetic` as bare top-level modules
-(never through the name `models`, to avoid colliding with its own identity as
-`tools/models.py` — see that file's docstring for the full explanation).
+`tools/models.py` is the only thing that imports these, as `from models import srw`.
+Note the two names that look alike and are not: `models` is this package of
+simulators, `tools.models` is the registry that indexes them. Writing both out in
+full is what keeps them apart.
 
 Adding a new model: write `models/<name>.py` with at least a `simulate` function
 (plus a `cost_hint` if the budget machinery is to be used on it), then add one

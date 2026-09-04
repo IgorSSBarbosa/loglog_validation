@@ -52,7 +52,7 @@ from typing import Sequence
 
 import numpy as np
 
-from loglog import closed_form_weights
+from tools.loglog import closed_form_weights
 
 #: Taylor constant of Lemma lem:q-bound: |q(x)| <= c0 (x-1)^2 for x >= 1/2.
 C0 = 4.0 * math.log(2.0) - 2.0

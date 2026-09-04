@@ -36,7 +36,7 @@ from pathlib import Path
 
 import numpy as np
 
-from artifacts import artifact_path, read_artifact
+from tools.artifacts import artifact_path, read_artifact
 
 
 def normalize_scales_n(scales, n) -> tuple[list[int], list[int]]:

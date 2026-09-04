@@ -54,10 +54,11 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
-from allocation import (  # noqa: E402
+from tools.artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
+from tools.allocation import (  # noqa: E402
     ladder,
     n_for_budget,
     optimal_allocation,
@@ -66,12 +67,11 @@ from allocation import (  # noqa: E402
     total_cost,
     tuned_allocation,
 )
-from loglog import gamma_all_points, gamma_closed_form  # noqa: E402
-from persistence import run_dir as _run_dir  # noqa: E402
-from rng import spawn  # noqa: E402
+from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
+from tools.persistence import run_dir as _run_dir  # noqa: E402
+from tools.rng import spawn  # noqa: E402
 
-sys.path.insert(0, str(ROOT / "src" / "generate"))   # the shared draw loop
-from generate import generate  # noqa: E402
+from src.generate.generate import generate  # noqa: E402
 
 
 

@@ -51,13 +51,9 @@ sees).
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Bounds on omega1 for both fits. The lower bound keeps the optimizer away
 # from omega1 -> 0, where i**-omega1 -> 1 becomes degenerate with the
@@ -65,7 +61,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # keeps it away from omega1 -> inf, where the correction vanishes at every
 # scale and a1 is unidentifiable. Neither is a claim about the true value.
 _OMEGA1_BOUNDS = (1e-3, 20.0)
-
 
 def fit_correction(
     scales: Sequence,
@@ -148,7 +143,6 @@ def fit_correction(
         "rel_rmse": float(np.sqrt(np.mean((best.fun / w) ** 2))),
         "converged": bool(best.success),
     }
-
 
 def omega1_from_bias_decay(
     scales: Sequence,

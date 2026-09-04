@@ -42,14 +42,14 @@ import numpy as np  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
-sys.path.insert(0, str(ROOT / "src" / "budget"))   # allocation_experiment lives in the budget layer
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import read_artifact  # noqa: E402
-from coverage import combine_se, consistency_threshold  # noqa: E402
-from allocation import rate_exponent, rate_exponent_se  # noqa: E402
-from allocation_experiment import summarize  # noqa: E402
-from allocation_table import (  # noqa: E402
+from tools.artifacts import read_artifact  # noqa: E402
+from tools.coverage import combine_se, consistency_threshold  # noqa: E402
+from tools.allocation import rate_exponent, rate_exponent_se  # noqa: E402
+from src.budget.allocation_experiment import summarize  # noqa: E402
+from src.budget.allocation_table import (  # noqa: E402
     discover_groups,
     measured_correction,
     measured_cost_exponent,

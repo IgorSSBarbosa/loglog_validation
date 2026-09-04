@@ -10,29 +10,21 @@ a known closed form for it, a `target_fn(i, params) -> E[Y_i]` and a
 `true_gamma_key` naming which params key holds the true gamma) and adding
 one entry here -- no changes to the driver scripts themselves.
 
-Import note: the models/ directory is deliberately never imported by its own
-name ("models") from here -- this file is itself named tools/models.py, and
-since it's usually already bound to `sys.modules["models"]` by the time this
-line runs (callers reach it via a bare `from models import get_model`, tools/
-itself being on sys.path), `from models.srw import ...` would self-referentially
-resolve back to *this* module instead of the models/ directory. Instead,
-models/ itself is added to sys.path and its contents imported as bare
-top-level names (`srw`, `synthetic`) -- never through the word "models".
+Import note: this file is `tools.models` and the simulator package is
+`models` -- two different names for two different things, which is exactly why
+every import in this repo is written out in full. `from models import srw`
+below reaches models/srw.py, never this file.
 """
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "models"))
-
-import srw as model_srw  # noqa: E402
-import synthetic as model_synthetic  # noqa: E402
+from models import srw as model_srw
+from models import synthetic as model_synthetic
 
 
 @dataclass(frozen=True)

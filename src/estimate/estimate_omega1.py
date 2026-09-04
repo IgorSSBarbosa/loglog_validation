@@ -37,12 +37,13 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
-sys.path.insert(0, str(ROOT / "tools"))      # helper modules, as bare imports
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path  # noqa: E402
-from correction import fit_correction, omega1_from_bias_decay  # noqa: E402
-from loglog import gamma_drop_leading  # noqa: E402
-from persistence import load_metadata, load_samples  # noqa: E402
+from tools.artifacts import artifact_path  # noqa: E402
+from tools.correction import fit_correction, omega1_from_bias_decay  # noqa: E402
+from tools.loglog import gamma_drop_leading  # noqa: E402
+from tools.persistence import load_metadata, load_samples  # noqa: E402
 
 # Windows retaining fewer than this many scales are dropped before fitting the
 # bias decay: a gamma-hat from 2-3 points is dominated by its own noise, and

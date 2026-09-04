@@ -36,16 +36,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "src" / "generate"))
-sys.path.insert(0, str(ROOT / "src" / "budget"))
+if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
+    sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from artifacts import artifact_path, load_recipe, write_artifact  # noqa: E402
-from rng import seed_record, spawn  # noqa: E402
-from summary import replicate_summary, summarize_scale  # noqa: E402
+from tools.artifacts import artifact_path, load_recipe, write_artifact  # noqa: E402
+from tools.rng import seed_record, spawn  # noqa: E402
+from tools.summary import replicate_summary, summarize_scale  # noqa: E402
 
-from allocation_table import human_time  # noqa: E402
-from generate import generate  # noqa: E402
+from src.budget.allocation_table import human_time  # noqa: E402
+from src.generate.generate import generate  # noqa: E402
 
 
 def execute(plan: dict, recipe: dict, sd: Path, *,

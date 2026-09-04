@@ -150,16 +150,15 @@ loglog_validation/
                                   replicate onto one stream (see its docstring)
     persistence.py                sample+metadata save/load, shared by every model: one
                                   run = one `<out_dir>/<tag>/` folder holding samples.npz
-                                  + samples_meta.json (not `io.py`: that name would shadow
-                                  the stdlib `io` module once tools/ is on sys.path)
+                                  + samples_meta.json (named persistence.py, not io.py,
+                                  back when tools/ went on sys.path and io.py would have
+                                  shadowed the stdlib; kept for continuity)
     models.py                    MODELS registry (name -> ModelSpec: simulate, optional
                                   cost_hint/target_fn/true_gamma_key) -- purely an
                                   importer; one entry per models/<name>.py (see below),
-                                  which it reaches by adding models/ to sys.path and
-                                  importing "srw"/"synthetic" as bare names, never
-                                  through the literal name "models" (self-collision
-                                  with this file's own identity as tools/models.py
-                                  -- see its docstring)
+                                  reached as `from models import srw, synthetic`.
+                                  `models` (the simulators) and `tools.models` (this
+                                  registry) are different modules -- see Imports, below
     loglog_plot.py               the shared charts
     tests/                       pytest unit tests, run against closed forms (see note
                                   above -- gitignored)
@@ -208,6 +207,42 @@ loglog_validation/
       images/                    this experiment's figures only (committed evidence,
                                   ground rule 1), never shared
 ```
+
+## Imports
+
+Every module in this repo is imported by its full path, from the repo root down:
+
+```python
+from tools.loglog import gamma_closed_form
+from src.generate.generate import generate
+from models import srw
+```
+
+Never by a bare name (`from loglog import ...`). One name, one module: nothing is
+reachable under two spellings, so nothing can be loaded twice into two module objects
+with separate state, and `models` (the simulators) never collides with `tools.models`
+(the registry that indexes them). It also means a language server can resolve every
+import in the repo with no configuration, since the repo root is its search root too.
+
+That needs exactly one directory on `sys.path` -- the repo root -- and exactly two
+places put it there:
+
+- **each entry-point script**, in two lines next to its `ROOT =`, because
+  `python3 src/study/pilot.py` puts `src/study/` on the path and never the root.
+  These are the files you type on the command line: everything under `src/` and
+  `calibration/`. Guarded by `if str(ROOT) not in sys.path` -- several of these
+  are also imported by each other, and an unguarded insert would stack a dozen
+  copies of the root onto the path.
+- **`conftest.py`** at the root, for pytest.
+
+Nothing else. A module under `tools/` or `models/` must never touch `sys.path` --
+importing a helper should not rearrange the caller's import machinery. Adding a new
+driver under `src/<layer>/` means copying the two-line `ROOT` preamble from a sibling;
+adding a new helper means writing no preamble at all.
+
+The `# noqa: E402` on an entry point's imports is expected -- the `sys.path` line has
+to run before them. If you see one anywhere else, the file is doing something it
+shouldn't.
 
 ## Experiment ladder
 
