@@ -8,7 +8,13 @@ Writes three things into the study directory:
   plot.png     Y_bar_i vs i on log-log with the fitted slope
 
 The error bar is where this file spends most of its care, because getting it
-wrong is invisible. Two are reported, and they answer different questions:
+wrong is invisible. Two are reported, and they answer different questions. The
+eq. (720) bound LEADS whenever it can be assembled: the replicate interval is a
+statement about R numbers scattering around their own mean, the bound is a
+statement about gamma. This repo has measured a study whose t interval was
+[0.50119, 0.50270] -- excluding the true 1/2 -- while the bound carrying the
+same run's bias covered it. Leading with the tighter number was leading with
+the one that can be confidently wrong.
 
   replicate interval   gamma +/- t(R-1) * sd(fits)/sqrt(R).
                        The t quantile, NOT the normal one: at R = 5,
@@ -215,27 +221,53 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
     """report.md -- gamma, its error, the plot. The thing you show someone."""
     R = res["replicates"]
     lo, hi = res["ci"]
-    lines = [
-        f"# gamma for `{final['model']}`", "",
-        f"## {_fmt(res['gamma'], res['se'])}", "",
-    ]
-    if lo is not None:
-        lines += [f"{int(res['level'] * 100)}% interval **[{lo:.5f}, {hi:.5f}]**, "
-                  f"from {R} replicates using the t({res['dof']}) quantile.", "",
-                  "> The t quantile, not the normal one. At R = 5, "
-                  "P(|t_4| < 1.96) = 0.8784, so a 5-point standard error paired with "
-                  "1.96 gives an interval labelled 95% that covers 88%.", ""]
-    else:
-        lines += ["No interval: one replicate gives no spread. "
-                  "Re-plan with `--replicates 3` or more.", ""]
     w = res.get("wilson")
+    pct = int(res["level"] * 100)
+
+    # eq. (720) leads, when there is one. The replicate interval is a
+    # statement about R numbers scattering around their own mean; the bound is
+    # a statement about gamma. Measured here (src/study/README.md): a study
+    # whose t interval was [0.50119, 0.50270], excluding the true 1/2, while
+    # the bound that carries the same run's bias covered it. Leading with the
+    # tighter number was leading with the one that can be confidently wrong.
+    lines = [f"# gamma for `{final['model']}`", ""]
     if w is not None:
         wlo, whi = w["interval"]
         lines += [
-            f"Article eq. (720), Theorem thm:wilson -- a **bound**, not an "
-            f"interval with exact coverage, so it overcovers: "
-            f"**[{wlo:.5f}, {whi:.5f}]** (half-width {w['half_width']:.3g}, "
-            f"dominated by `{w['dominant']}`).", "",
+            f"## {_fmt(res['gamma'], w['half_width'])}", "",
+            f"{pct}% **[{wlo:.5f}, {whi:.5f}]** -- article eq. (720), Theorem "
+            f"thm:wilson. A **bound** on |gamma_hat - gamma|, so it overcovers, "
+            f"and unlike the replicate interval below it carries the "
+            f"finite-size bias. Dominated by `{w['dominant']}`.", "",
+        ]
+        if lo is not None:
+            lines += [
+                f"For comparison, the Student-t replicate interval is "
+                f"[{lo:.5f}, {hi:.5f}] ({_fmt(res['gamma'], res['se'])}, "
+                f"t({res['dof']}) on {R} replicates). It is **scatter only**: "
+                f"a finite-size bias shifts every replicate the same way, so no "
+                f"number of them reveals it, and that interval can exclude the "
+                f"truth while looking tight. This repo has measured it doing "
+                f"exactly that.", ""]
+    else:
+        lines += [f"## {_fmt(res['gamma'], res['se'])}", ""]
+        if lo is not None:
+            lines += [f"{pct}% interval **[{lo:.5f}, {hi:.5f}]**, from {R} "
+                      f"replicates using the t({res['dof']}) quantile.", "",
+                      "> The t quantile, not the normal one. At R = 5, "
+                      "P(|t_4| < 1.96) = 0.8784, so a 5-point standard error "
+                      "paired with 1.96 gives an interval labelled 95% that "
+                      "covers 88%.", ""]
+        else:
+            lines += ["No interval: one replicate gives no spread. "
+                      "Re-plan with `--replicates 3` or more.", ""]
+        if res.get("wilson_why"):
+            lines += [f"> **This is the scatter interval, and it has no bias "
+                      f"term.** The eq. (720) bound, which would carry one, "
+                      f"could not be assembled: {', '.join(res['wilson_why'])}.",
+                      ""]
+    if w is not None:
+        lines += [
             "| term | value | what it is |",
             "|---|---|---|",
             f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot's "
@@ -246,10 +278,12 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
             f"| {w['quantile']:.3g}·sigma_se | {w['se_term']:.3g} | the only "
             f"random term; sigma_se is a closed form, so no t widening |",
             "",
-            f"The two intervals answer different questions and are both "
-            f"correct. The replicate interval above measures SCATTER and has "
-            f"no bias term at all; this one BOUNDS scatter and bias together. "
-            f"Disagreement between them is informative, not alarming.", "",
+            f"Both intervals are correct; they answer different questions. "
+            f"This one BOUNDS scatter and bias together and therefore "
+            f"overcovers. The replicate interval measures SCATTER alone and "
+            f"has no bias term, so it is the tighter of the two whenever the "
+            f"bias is real. Disagreement between them is informative, not "
+            f"alarming -- it is the size of the bias.", "",
         ]
         if not w["complete"]:
             lines += [f"> Incomplete bound: {', '.join(w['missing_terms'])}. "
@@ -494,21 +528,27 @@ def _main(argv=None) -> None:
     rp = write_report(sd, res, final, consts, plan)
     dp = write_details(sd, res, final, consts, plan)
 
-    print(f"gamma = {_fmt(res['gamma'], res['se'])}")
-    if res["ci"][0] is not None:
-        print(f"  {int(a.level * 100)}% CI [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
-              f"(Student t({res['dof']}), {res['replicates']} replicates -- scatter only)")
+    pct = int(a.level * 100)
     w = res.get("wilson")
     if w is not None:
-        print(f"  {int(a.level * 100)}% eq. (720) [{w['interval'][0]:.5f}, "
-              f"{w['interval'][1]:.5f}]  (bound, so it overcovers; carries the bias"
-              + ("" if w["complete"] else ", INCOMPLETE") + ")")
+        print(f"gamma = {_fmt(res['gamma'], w['half_width'])}")
+        print(f"  {pct}% [{w['interval'][0]:.5f}, {w['interval'][1]:.5f}]  "
+              f"eq. (720) bound -- scatter AND bias"
+              + ("" if w["complete"] else ", INCOMPLETE"))
+    else:
+        print(f"gamma = {_fmt(res['gamma'], res['se'])}")
+    if res["ci"][0] is not None:
+        print(f"  {pct}% [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
+              f"Student t({res['dof']}), {res['replicates']} replicates "
+              f"-- scatter only, no bias term")
+    if w is not None:
         sp = res.get("wilson_bfs_span")
         if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
             print(f"  !! B_fs spans [{sp[0]:.2g}, {sp[1]:.2g}] over omega1 +/- 1 se "
                   f"-- the bound's bias term is not determined by this pilot")
     elif res.get("wilson_why"):
-        print(f"  no eq. (720) bound: {', '.join(res['wilson_why'])}")
+        print(f"  no eq. (720) bound ({', '.join(res['wilson_why'])}) -- the "
+              f"interval above has no bias term")
     print(f"\n  {rp}\n  {dp}\n  {fig_path}")
     if a.budget_analysis:
         print(f"  {write_budget_analysis(sd, res, final, plan)}")

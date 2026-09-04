@@ -190,7 +190,10 @@ replicates reveals it**. `report.md` says so explicitly whenever the plan's
 predicted bias is comparable to the measured standard error.
 
 Two intervals are reported for that reason, and both are correct — they
-answer different questions:
+answer different questions. **The eq. (720) bound is the headline** whenever it
+can be assembled, because the replicate interval is a statement about $R$
+numbers scattering around their own mean while the bound is a statement about
+$\gamma$:
 
 | | what it is | blind to |
 |---|---|---|
