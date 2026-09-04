@@ -77,13 +77,29 @@ def seed_record(seed) -> int | dict:
     return {"entropy": ss.entropy, "spawn_key": list(ss.spawn_key)}
 
 
-def spawn(seed, n: int) -> list[np.random.SeedSequence]:
+def spawn(seed, n: int, *, skip: int = 0) -> list[np.random.SeedSequence]:
     """`n` independent child streams of `seed` -- ground rule 2's primitive.
 
     Thin wrapper over SeedSequence.spawn; it exists so call sites name this
     module rather than reaching for numpy directly, and so `seed` may be any
     spelling `as_seed_sequence` accepts.
+
+    `skip` discards the first `skip` children and returns the next `n`. It
+    exists because SeedSequence only advances when you keep spawning the SAME
+    object, and this function takes a seed VALUE: spawn(11, 2) called twice
+    returns the same two children both times, not four distinct ones. Any
+    caller that EXTENDS a set of streams it drew earlier -- pilot.py's --more,
+    and any loop that adds replicates to an existing pool -- must pass
+    skip=<how many it already has>, or it will redraw the streams it has and
+    pool duplicates. Measured before this argument existed: `--more 2` on a
+    2-replicate pilot produced 4 replicates of which 2 were bit-identical
+    copies, shrinking se(omega1) by sqrt(3) on no new information.
+
+    Child k is the same stream however the rounds are chunked, so 2 then 2
+    gives exactly the four streams one call for 4 would.
     """
     if n < 0:
         raise ValueError(f"n must be non-negative, got {n}")
-    return as_seed_sequence(seed).spawn(n)
+    if skip < 0:
+        raise ValueError(f"skip must be non-negative, got {skip}")
+    return as_seed_sequence(seed).spawn(skip + n)[skip:]

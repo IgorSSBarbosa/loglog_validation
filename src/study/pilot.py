@@ -311,7 +311,9 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     spec = get_model(model)
     drawn_seconds, drawn_steps = 0.0, 0.0
     counts_now = n if isinstance(n, (list, tuple)) else [n] * len(scales)
-    for k, ss in enumerate(spawn(base, replicates)):
+    # skip=have: these streams EXTEND the pool, they do not restart it. Without
+    # it --more redraws the replicates already on disk (see tools/rng.py:spawn).
+    for k, ss in enumerate(spawn(base, replicates, skip=have)):
         print(f"  replicate {have + k + 1}/{want} ...",
               end="", flush=True, file=sys.stderr)
         t0 = time.perf_counter()
