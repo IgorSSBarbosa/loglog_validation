@@ -156,13 +156,14 @@ unreachable branch). `tools/tests/` still owns the closed-form assertions.
 
 ## Status
 
-Experiments **B** ($\omega_1$) and **C** ($\gamma$ under a budget) pass, along with
-checkpoint 0.4 (error-bar calibration, which found and fixed a real defect: intervals
-labelled 95% were covering 88%). Experiment **A** is partly done — the cost probe
-recovers $d$ and now scores it against each model's declared `cost_hint` (srw: declared
-$1$ vs measured $1.0028\pm0.0020$); its amortized/batched timing cross-check is the one
-ladder piece never run. `TODO.md` tracks the detail; each experiment's own README
-states its numeric acceptance criteria and what was measured against them.
+All three experiments pass, along with checkpoint 0.4 (error-bar calibration, which
+found and fixed a real defect: intervals labelled 95% were covering 88%).
+**A** ($d$): the cost probe recovers it from the wall clock and scores it against each
+model's declared `cost_hint` on every run — closed 2026-09-04 with that cross-check
+standing rather than pending, and its amortized/batched second route dropped as
+redundant to the affine fit. **B** ($\omega_1$) and **C** ($\gamma$ under a budget) pass
+against known truth. `TODO.md` tracks the detail; each experiment's own README states
+its numeric acceptance criteria and what was measured against them.
 
 ## Environment
 

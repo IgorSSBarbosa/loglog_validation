@@ -69,16 +69,18 @@ flowchart TB
 
     classDef done fill:#1baf7a22,stroke:#1baf7a,stroke-width:2px
     classDef todo fill:#eb683422,stroke:#eb6834,stroke-width:2px,stroke-dasharray:4 3
-    class expB,expC,check done
-    class expA todo
+    class expA,expB,expC,check done
 ```
 
 **Reading the diagram.** Solid arrows carry measured constants; dotted arrows are
-"is validated by" / "is an alternative to". Green = complete; **orange dashed =
-Experiment A, the one piece never run** — `measure_cost.py` and `cost_model.py`
-exist and the affine fit already recovers $d = 1.007$ from $n=1$ timings, but the
-planned amortized/batched cross-check (`plans/three_experiment_ladder.md` §2) was
-skipped as probably redundant.
+"is validated by" / "is an alternative to". All four boxes are complete as of
+2026-09-04, when Experiment A was closed: $d$ has two independent determinations
+that agree — the affine wall-clock fit ($0.9969 \pm 0.0586$ on a pilot ladder) and
+each model's declared `cost_hint` (exact for srw) — and `measure_cost.py` and
+`pilot.py` score one against the other on every run, so the cross-check A existed
+to perform is now standing rather than pending. Its second planned route, the
+amortized/batched timing comparison, was dropped: the affine fit already separates
+the per-call overhead by fitting it as a parameter.
 
 The dependency that matters most for reorganization: **B and A feed C, and nothing
 feeds back.** The ladder is a DAG, so the three experiments could be split into
@@ -278,10 +280,12 @@ with their outcome, rather than deleted, so the reasoning stays readable.
    `coverage.py`'s `wilson_score_interval` (binomial). Both docstrings warn, but
    a rename (`score_interval`?) would remove the trap.
 
-6. **Experiment A is the only dashed box.** Either run it as the cross-check
+6. ~~**Experiment A is the only dashed box.** Either run it as the cross-check
    `plans/three_experiment_ladder.md` §2 describes, or close the item explicitly
-   — right now `measure_cost.py` is doing A's job without A's name. *Partly
-   addressed*: `measure_cost.py` now cross-checks the measured $d$ against the
-   model's declared `cost_hint` (srw: declared $1$ vs measured $1.0028\pm0.0020$),
-   which is one of the two cross-checks A was for. The amortized/batched timing
-   comparison is still unrun.
+   — right now `measure_cost.py` is doing A's job without A's name.~~ **Closed
+   explicitly** (user, 2026-09-04), which was the second of the two options.
+   `measure_cost.py` and `src/study/pilot.py` both score the measured $d$ against
+   the model's declared `cost_hint` on every run, so A's cross-check is standing
+   rather than pending; the amortized/batched comparison is dropped because the
+   affine fit already separates the overhead it was meant to expose. See TODO.md
+   for the full statement.

@@ -306,6 +306,39 @@ def snr_allocation(
     have a reason to weight the large scales. The ordering among the top three
     arms is ~1.4 sigma on R = 3 and is NOT settled.
 
+    NOTE THAT omega1 = 0 IS FLAT. With sigma scale-free, n_i ~ s_i**2 * i**0 is
+    the same n at every scale -- the same SHAPE a recipe's `"n": 1000` gives.
+    The two differ only in how the total is chosen: a budget in steps, which is
+    the unit the cost model and every plan use, versus a count of draws, which
+    means wildly different compute on different ladders (on 2..8192 half the
+    cost sits in the single deepest scale). So "snr versus a fixed n" is not a
+    comparison of allocation shapes unless omega1 is actually stated.
+
+    Measured again 2026-09-04 on a DEEPER ladder -- 13 scales, 2..8192, the one
+    experiments/01_srw/recipes/samples_autopilottest*.json use -- at a common
+    budget of 1e8 steps per replicate, R = 8 independent replicates per arm:
+
+        arm                     n at i=2   n at i=8192   se(omega1)   mean
+        neyman                   231,379         3,615       0.0348   0.976
+        snr / flat (omega1 = 0)    6,104         6,104       0.1423   0.935
+        snr, omega1 = 0.25           123         7,891       0.2467   1.048
+        snr, omega1 = 1                2        10,681       unusable   --
+
+    On this ladder NEYMAN WINS, by 4x over flat, and it is the ordering that
+    reverses -- not the mechanism. Both measurements say the same thing: put
+    the draws where the correction is, and the correction lives at SMALL i.
+    On 8..256 the smallest scale still carries signal and flat is enough; on
+    2..8192, i = 2 carries far more of it and costs 4096x less than i = 8192,
+    so Neyman's n_i ~ i**(-d/2) buys the cheap information the other rules
+    spend past. The omega1 = 1 arm did not merely do badly: it starves i = 2
+    to n = 2, two draws of |S_2| are both zero a quarter of the time, and all
+    8 replicates failed to summarize at all.
+
+    So the rule of thumb is about the LADDER, not about the rule: reaching
+    down to where the correction is large is worth more than any reweighting,
+    and once the ladder reaches there, spend proportionally more of the budget
+    on the cheap end (neyman) rather than less (snr with omega1 > 0).
+
     The argument that produced the false claim, kept because it is half right:
     Neyman minimizes the variance of Y_bar_i. But omega_1 is not estimated
     from Y_bar_i -- it is estimated from the small correction a_1 * i^-omega_1

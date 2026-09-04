@@ -310,9 +310,23 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `experiments/01_srw/README.md` instead, so the estimators are never handed the answer
       they are supposed to be measuring; and the article's `appendix-SimpleRandomWalk` is
       left untouched, since the user already has these derivations elsewhere~~
-- [ ] Experiment A — amortized/batched cost measurement (`plans/three_experiment_ladder.md` §2).
-      May now be redundant: the affine fit already recovers $d$ correctly from $n=1$ timings.
-      Worth running as an independent cross-check rather than assuming either way
+- [x] ~~Experiment A — the cost exponent $d$ (`plans/three_experiment_ladder.md` §2).
+      **CLOSED 2026-09-04 (user's decision), with one of its two cross-checks run and
+      the other deliberately dropped.** What A was for is a $d$ that can be trusted by
+      the allocation, and $d$ now has two independent determinations that agree:
+      the wall clock, via `estimate_cost_affine`'s $a + b\,i^d$ fit, and each model's
+      own declared `cost_hint`, which for srw is exact by construction ($i$ steps per
+      sample, no early exit). `src/estimate/measure_cost.py` scores one against the
+      other on every run and `src/study/pilot.py` does the same inside a study
+      (`_resolve_d`, `d_check` in `pilot.json`), so a disagreement is now a standing
+      check rather than an experiment someone has to remember to run — measured
+      2026-09-04 on a pilot ladder: $d = 0.9969 \pm 0.0586$ against a declared $1$.
+      The **amortized/batched timing comparison is not run and will not be**: it was
+      designed to separate per-call overhead from real work, and the affine fit
+      already does that by fitting the overhead as a parameter ($a \approx 22\,\mu s$
+      on this machine, reported as `overhead_share`). Batching would answer the same
+      question by a second route at the cost of a second timing harness, and the two
+      determinations already in place disagree by less than the clock's own noise~~
 - [x] ~~Experiment B — measure $\omega_1$ (`plans/three_experiment_ladder.md` §3, done
       2026-08-20). **PASSED**: $\omega_1 = 1.0155 \pm 0.1050$ against the known $1$, alongside
       $\gamma = 0.5000 \pm 0.0003$, $a_1 = -0.2748 \pm 0.0597$, $a_0 = 0.7979 \pm 0.0017$ --
