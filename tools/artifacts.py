@@ -47,6 +47,8 @@ ARTIFACTS: dict[str, str] = {
     "autopilot":        "autopilot.json",         # src/study/autopilot.py -- the
                                                   # decisions taken between the
                                                   # four steps, and why
+    "no_leakage":       "no_leakage.json",        # calibration/check_no_leakage.py
+                                                  # -- planted truth vs recovered
 }
 
 #: old filename -> the kinds that ever used it, most specific first.

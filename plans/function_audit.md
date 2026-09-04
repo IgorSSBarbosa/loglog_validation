@@ -2,7 +2,8 @@
 
 **Status:** run 2026-09-04 against `e677280`, tests green (420 passed).
 **Resolved 2026-09-04** — every finding below is fixed; the re-run stands at
-599 checks, 0 failures, 1 note. See *What was done* at the end.
+628 checks, 0 failures, 1 note (the 29 added cover models/synthetic.py's work
+burn and calibration/check_no_leakage.py, both new the same day). See *What was done* at the end.
 **How to reproduce:** `python3 calibration/exercise_all.py` (432 s).
 
 The question was blunter than the test suite's: *for every public function and

@@ -115,6 +115,45 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       *bootstrap* (as opposed to replicate-spread) estimator for these constants, and
       $\sigma_\infty^2$~~
 - [ ] 0.5 Error-decay law under optimal allocation + Wilson CI coverage
+- [x] ~~**No-leakage check** (`calibration/check_no_leakage.py`, done 2026-09-04) --
+      the falsification test for the question this repo keeps having to answer: is any
+      constant secretly hardcoded? On srw the estimates are *right*, which is exactly
+      the problem, since $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$, $d=1$ are numbers a
+      default can sit on (`tools/constants.py` documents the version of that bug this
+      project shipped). So it PLANTS truths from a seeded generator that appears in no
+      recipe or default, runs the real pipeline, and regresses recovered on planted.
+      Two criteria: unbiasedness (within a multiplicity-corrected $t$ threshold, **or**
+      to better than 1% of the truth -- `se` is sampling error only and a nonlinear fit
+      has a systematic floor below it), and **responsiveness** (slope $=1\pm0.15$,
+      $R^2\ge0.9$), which is the one that catches a leak: a hardcoded constant gives a
+      flat line, while criterion 1 alone would be *fooled on srw*. Four arms -- `gamma`
+      (the article's own eq. 523-526 estimator), `correction` (the real pilot ->
+      `fit_correction`), `cost` ($d\in\{0.5,0.75,1,1.5,2\}$ against a new tunable spin
+      burn in `models/synthetic.py`, which without it has $d=0$ and cannot exercise the
+      cost machinery at all), and `srw` at $q\ne1/2$, scored against the **exact**
+      $\mathbb E|S_k|$ so the estimator's own bias is subtracted rather than assumed
+      small. **40 cells, all seven parameter checks pass**, slopes $1.000\pm0.015$,
+      every $R^2\ge0.996$. And the negative control that makes that mean something:
+      `--inject-leak omega1=1.0155` puts the literal old `FALLBACK_OMEGA1` back into
+      the real fit and the check catches it -- slope $-0.000$, no se at all, 39-71%
+      relative error -- while $\gamma$, $a_0$, $a_1$ stay green, so it *localizes* the
+      leak. A failure is diagnosed as `flat` (a leak) or `unidentified at this budget`
+      (a budget problem that says nothing either way -- stage 3.0's vacuous-test lesson
+      made printable). Side finding, measured and **not** acted on: on a model whose declared cost
+      is exact by construction, `_resolve_d` called `MISMATCH` on **13 of 40 probes
+      (32%), and 17 of 50 at ten probes per cell** -- every one a false alarm. Cause: the se a single probe states for its
+      own $\hat d$ is 2.4-4.4x smaller than the probe-to-probe spread of $\hat d$
+      (both sources measure *within*-probe jitter), so `D_MISMATCH_Z = 3` really tests
+      at $|z|\approx1.1$. The point estimate is fine -- mean $\hat d$ within 0.004 of
+      truth at every exponent. Fix proposed in `plans/saverepo.md` stage 4: take
+      `se(d)` from a few repeated probes, ~0.2 s each. The arm re-measures
+      `mismatch_rate` on every run, so the fix is checkable.
+      Verified: `tools/tests/test_check_no_leakage.py` (28 cases -- a hardcoded
+      constant must fail, a hardcoded constant near the truth must still fail
+      criterion 2 while passing 1, a constant offset must fail 1 and pass 2, the srw
+      reference against the closed form) and `tools/tests/test_synthetic.py` (15 --
+      the burn consumes no randomness, realizes its declared exponent, and stays under
+      the overhead ceiling)~~
 
 ## Shared tools (built alongside Phase 0, as each is first needed)
 - [ ] `tools/rng.py` — independent-stream seeding (ground rule 2); not yet needed since

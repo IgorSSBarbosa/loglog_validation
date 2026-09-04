@@ -28,6 +28,10 @@ python3 calibration/check_coverage.py --arm wilson --trials 1000     # eq. (720)
 
 # does a predicted runtime predict the real one?
 python3 calibration/verify_prediction.py --m0 3 4 5 6 7 --replicates 3
+
+# is any constant secretly hardcoded?   (~75 s at the defaults)
+python3 calibration/check_no_leakage.py
+python3 calibration/check_no_leakage.py --arms correction --inject-leak omega1=1.0155
 ```
 
 ## `check_coverage.py` — do our intervals cover?
@@ -81,6 +85,70 @@ deliberately *not* registered in `tools/models.py` as a `target_fn` — same rul
 `allocation_experiment.py`'s `true_gamma`: truth may plant data and score a finished
 answer, never reach an estimator (user's decision, 2026-08-20).
 
+## `check_no_leakage.py` — does the answer move when the truth moves?
+
+The falsification test, and the one that answers the question this repo keeps
+having to answer. On srw the estimates are *right*, and that is precisely the
+problem: $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$, $d=1$ are simple numbers a
+hardcoded default can sit on — `tools/constants.py` documents the version of that
+bug this project actually shipped.
+
+So: **plant** a truth the code cannot know, drawn from a seeded generator and
+appearing in no recipe, module constant or default; run the real pipeline; see
+whether what comes out tracks what went in.
+
+| | criterion |
+|---|---|
+| 1. unbiasedness | $\lvert\hat\theta-\theta\rvert/\mathrm{se}$ within threshold at every cell, **or** agreement to better than 1% of the truth |
+| 2. responsiveness | regress $\hat\theta$ on $\theta$: slope $=1\pm0.15$ and $R^2\ge0.9$ |
+
+Criterion 2 is the one that catches a leak. A hardcoded constant gives a **flat
+line** — slope 0 — while criterion 1 alone would be *fooled on srw*, because a
+constant frozen at srw's truth is correct there. That asymmetry is the whole
+point of the file.
+
+Four arms, each aimed at a different estimator and a different leak channel:
+
+| arm | plants | recovered by |
+|---|---|---|
+| `gamma` | $\gamma, a_0$, no correction | the article's own `gamma_closed_form`, eq. (523)–(526) |
+| `correction` | $\gamma, a_0, a_1, \omega_1$ | the real `src/study/pilot.py` → `fit_correction` |
+| `cost` | $d\in\{0.5,0.75,1,1.5,2\}$ via the synthetic spin burn | the pilot's `climb_to_target` → `fit_cost_probe` → `_resolve_d` |
+| `srw` | $q\ne1/2$ — the real lattice walk, truth off its anchor | `gamma_closed_form`, against the **exact** $\mathbb E\lvert S_k\rvert$ |
+
+The `srw` arm's reference is not "1/2": it is what the article's estimator returns
+on the exact binomial mean over the same ladder, computed in the checker and never
+handed to anything that estimates. That removes the estimator's own correction bias
+from the comparison exactly, so what is left in $z$ is sampling error — and the
+target runs 0.52 → 0.98 as $q$ goes 0.5 → 0.8, which is a truth no default is
+sitting on.
+
+**A check that has only ever passed is not evidence.** `--inject-leak
+omega1=1.0155` hardcodes the literal old `FALLBACK_OMEGA1` into the real fit and
+re-runs; the exit code inverts, so 0 means the control worked. Measured: the
+$\omega_1$ row goes to slope $0.000$, no standard error at all (every replicate
+returns the same constant), 39–71% relative error — while $\gamma$, $a_0$ and
+$a_1$ stay green, so the report *localizes* the leak rather than merely failing.
+
+**It also measures a false-alarm rate nothing else could.** The `cost` arm runs
+on a model whose declared cost is exact *by construction*, so every `MISMATCH`
+verdict `src/study/pilot.py:_resolve_d` returns there is a false alarm and can
+simply be counted. Measured: **13 of 40, 32%** at the defaults; 17 of 50 at `--cost-replicates 10`. The cause is in
+the same run — the standard error one probe states for its own $\hat d$ is
+2.4–4.4× smaller than the probe-to-probe spread of $\hat d$, because both `se`
+sources measure *within*-probe jitter while the variation that matters is
+*between* probes. The point estimate is unaffected (mean $\hat d$ within 0.004 of
+truth at every exponent). `plans/saverepo.md` stage 4 has the table and the
+proposed fix; `mismatch_rate` in `no_leakage.json` re-measures it every run.
+
+Criterion 1 has two halves for a reason worth knowing. `se` here is the spread of
+per-replicate estimates: sampling error and nothing else. Any estimator with a
+systematic floor — and a nonlinear least-squares fit has one — therefore fails a
+pure $z$ test as soon as $n$ is large enough, because `se` shrinks with $n$ and the
+floor does not. And the threshold is a Bonferroni-corrected $t$ quantile, not a
+flat 3: at $R=6$ over 40 cells, $\Pr(\text{some }\lvert t_5\rvert>3)$ is well over
+half, and a green run would mean nothing.
+
 ## `exercise_all.py` — does every function still do what it says?
 
 The other two files here measure a *statistical* property of the pipeline. This
@@ -107,7 +175,7 @@ FAILs get fixed and disappear. The first run (2026-09-04, 586 checks in 432 s)
 found one defect — `autopilot.py --force` is accepted, threaded through two
 signatures and never read — and 16 notes. Every one of them was resolved the
 same day, and the harness now *checks* each fix rather than repeating the note
-it replaced, so a regression shows up as a FAIL: the run stands at **599
+it replaced, so a regression shows up as a FAIL: the run stands at **628
 checks, 0 failures, 1 note** (the parity trap in `tools/correction.py`, which
 is a property of the model and cannot be guarded against here).
 `plans/function_audit.md` is the write-up, findings and resolutions both.

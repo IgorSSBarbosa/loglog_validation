@@ -1,0 +1,1288 @@
+{
+  "arms": [
+    {
+      "arm": "gamma",
+      "cells": [
+        {
+          "cell": 0,
+          "gamma": {
+            "planted": 0.7432022040978015,
+            "recovered": 0.7432462999934445,
+            "se": 0.0001586602698666693,
+            "z": 0.277926513550507
+          },
+          "planted": {
+            "a0": 1.3517340516715515,
+            "gamma": 0.7432022040978015
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_00"
+        },
+        {
+          "cell": 1,
+          "gamma": {
+            "planted": 0.20536890640878197,
+            "recovered": 0.20550426163121582,
+            "se": 0.00011789683780355721,
+            "z": 1.148081873573108
+          },
+          "planted": {
+            "a0": 0.9510809117533706,
+            "gamma": 0.20536890640878197
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_01"
+        },
+        {
+          "cell": 2,
+          "gamma": {
+            "planted": 0.44629769696873545,
+            "recovered": 0.4459834570378674,
+            "se": 0.0001882984139125371,
+            "z": -1.6688400307716071
+          },
+          "planted": {
+            "a0": 1.2692091025572385,
+            "gamma": 0.44629769696873545
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_02"
+        },
+        {
+          "cell": 3,
+          "gamma": {
+            "planted": 0.41229298870639075,
+            "recovered": 0.4124521649733758,
+            "se": 9.256956123353647e-05,
+            "z": 1.719531397404542
+          },
+          "planted": {
+            "a0": 0.8506694744058472,
+            "gamma": 0.41229298870639075
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_03"
+        },
+        {
+          "cell": 4,
+          "gamma": {
+            "planted": 0.5757136769695941,
+            "recovered": 0.5758118748180701,
+            "se": 8.639493603252601e-05,
+            "z": 1.1366157900621474
+          },
+          "planted": {
+            "a0": 0.8679384497631805,
+            "gamma": 0.5757136769695941
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_04"
+        },
+        {
+          "cell": 5,
+          "gamma": {
+            "planted": 0.5875640396266395,
+            "recovered": 0.5875652905666026,
+            "se": 0.00012927219675847848,
+            "z": 0.009676790481074444
+          },
+          "planted": {
+            "a0": 0.5411740768772997,
+            "gamma": 0.5875640396266395
+          },
+          "study": "experiments/00_synthetic/data/no_leakage/gamma_05"
+        }
+      ],
+      "estimator": "tools/loglog.py:gamma_closed_form (article eq. 523-526)",
+      "model": "synthetic",
+      "n_per_scale": 200000,
+      "parameters": [
+        "gamma"
+      ],
+      "replicates": 6,
+      "scales": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ],
+      "sigma_inf2": 0.6
+    },
+    {
+      "arm": "correction",
+      "cells": [
+        {
+          "a0": {
+            "planted": 0.534826766722619,
+            "recovered": 0.5350527636961885,
+            "se": 0.00033675933573930334,
+            "z": 0.671093417717336
+          },
+          "a1": {
+            "planted": -0.559560716189852,
+            "recovered": -0.5517903300839745,
+            "se": 0.017086639448112537,
+            "z": 0.45476385976739836
+          },
+          "cell": 0,
+          "converged": true,
+          "gamma": {
+            "planted": 0.5898364291235925,
+            "recovered": 0.5897283785288145,
+            "se": 0.00013286888280021405,
+            "z": -0.8132121870881398
+          },
+          "omega1": {
+            "planted": 2.251193484835632,
+            "recovered": 2.23284462291742,
+            "se": 0.04546363290425837,
+            "z": -0.40359427406192366
+          },
+          "planted": {
+            "a0": 0.534826766722619,
+            "a1": -0.559560716189852,
+            "gamma": 0.5898364291235925,
+            "omega1": 2.251193484835632
+          },
+          "rel_rmse": 0.00020304181833213328,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_00"
+        },
+        {
+          "a0": {
+            "planted": 1.2588542530735993,
+            "recovered": 1.2594571988648393,
+            "se": 0.001272517384235271,
+            "z": 0.47382126068346697
+          },
+          "a1": {
+            "planted": -0.2695630369167101,
+            "recovered": -0.2619065908128609,
+            "se": 0.0024600769790645693,
+            "z": 3.1122790746005484
+          },
+          "cell": 1,
+          "converged": true,
+          "gamma": {
+            "planted": 0.4834893697676717,
+            "recovered": 0.48344980738019067,
+            "se": 0.00024932054536862177,
+            "z": -0.15868081558439975
+          },
+          "omega1": {
+            "planted": 1.5609512996643962,
+            "recovered": 1.5165316679325327,
+            "se": 0.022268082995185273,
+            "z": -1.994766758389922
+          },
+          "planted": {
+            "a0": 1.2588542530735993,
+            "a1": -0.2695630369167101,
+            "gamma": 0.4834893697676717,
+            "omega1": 1.5609512996643962
+          },
+          "rel_rmse": 0.00023823000462463276,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_01"
+        },
+        {
+          "a0": {
+            "planted": 0.6551783222938159,
+            "recovered": 0.6564098731117993,
+            "se": 0.0005383398215409142,
+            "z": 2.2876829257369553
+          },
+          "a1": {
+            "planted": -0.5011832261365858,
+            "recovered": -0.5013312625316051,
+            "se": 0.0011854616157596415,
+            "z": -0.124876582296084
+          },
+          "cell": 2,
+          "converged": true,
+          "gamma": {
+            "planted": 0.2820008099784263,
+            "recovered": 0.2816739970450104,
+            "se": 0.00016118001281987867,
+            "z": -2.0276269228314843
+          },
+          "omega1": {
+            "planted": 1.0671712951430874,
+            "recovered": 1.0571508383140746,
+            "se": 0.004600992796612388,
+            "z": -2.177890136318102
+          },
+          "planted": {
+            "a0": 0.6551783222938159,
+            "a1": -0.5011832261365858,
+            "gamma": 0.2820008099784263,
+            "omega1": 1.0671712951430874
+          },
+          "rel_rmse": 0.00026369960455694015,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_02"
+        },
+        {
+          "a0": {
+            "planted": 1.283830840073815,
+            "recovered": 1.2812005469305099,
+            "se": 0.0030194168664018314,
+            "z": -0.8711262007486746
+          },
+          "a1": {
+            "planted": -0.32326832904040104,
+            "recovered": -0.3229015788200902,
+            "se": 0.001648684969453833,
+            "z": 0.2224501509420243
+          },
+          "cell": 3,
+          "converged": true,
+          "gamma": {
+            "planted": 0.43227634367664325,
+            "recovered": 0.43268228193960573,
+            "se": 0.00044093879560361526,
+            "z": 0.9206226964147661
+          },
+          "omega1": {
+            "planted": 0.9762213109170137,
+            "recovered": 0.9883961300566091,
+            "se": 0.018919297340791,
+            "z": 0.6435132827764085
+          },
+          "planted": {
+            "a0": 1.283830840073815,
+            "a1": -0.32326832904040104,
+            "gamma": 0.43227634367664325,
+            "omega1": 0.9762213109170137
+          },
+          "rel_rmse": 0.00022588872151169313,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_03"
+        },
+        {
+          "a0": {
+            "planted": 1.4668266381179964,
+            "recovered": 1.4675923197272558,
+            "se": 0.00034928969452748557,
+            "z": 2.1921105067104456
+          },
+          "a1": {
+            "planted": -0.13196920287830094,
+            "recovered": -0.12605707016795464,
+            "se": 0.007453959077792064,
+            "z": 0.7931533630175936
+          },
+          "cell": 4,
+          "converged": true,
+          "gamma": {
+            "planted": 0.4905504773918106,
+            "recovered": 0.490470107915762,
+            "se": 4.4117255119040874e-05,
+            "z": -1.8217243079097813
+          },
+          "omega1": {
+            "planted": 2.0627121000773223,
+            "recovered": 1.991359230144497,
+            "se": 0.08236227681849709,
+            "z": -0.866329498030594
+          },
+          "planted": {
+            "a0": 1.4668266381179964,
+            "a1": -0.13196920287830094,
+            "gamma": 0.4905504773918106,
+            "omega1": 2.0627121000773223
+          },
+          "rel_rmse": 0.00030838148703972896,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_04"
+        },
+        {
+          "a0": {
+            "planted": 0.6280012070895116,
+            "recovered": 0.6278065764510538,
+            "se": 0.00046743806845452886,
+            "z": -0.41637738043312306
+          },
+          "a1": {
+            "planted": -0.22379202089757638,
+            "recovered": -0.22662953283339424,
+            "se": 0.007552709518903543,
+            "z": -0.37569456745501684
+          },
+          "cell": 5,
+          "converged": true,
+          "gamma": {
+            "planted": 0.6793645821495706,
+            "recovered": 0.6794570186213006,
+            "se": 0.00018305655362187856,
+            "z": 0.5049612805499367
+          },
+          "omega1": {
+            "planted": 2.1761904106924383,
+            "recovered": 2.1969370085756026,
+            "se": 0.059382287076988755,
+            "z": 0.3493735068887867
+          },
+          "planted": {
+            "a0": 0.6280012070895116,
+            "a1": -0.22379202089757638,
+            "gamma": 0.6793645821495706,
+            "omega1": 2.1761904106924383
+          },
+          "rel_rmse": 0.0003327041627516353,
+          "study": "experiments/00_synthetic/data/no_leakage/correction_05"
+        }
+      ],
+      "estimator": "src/study/pilot.py -> tools/correction.py:fit_correction",
+      "model": "synthetic",
+      "n_per_scale": 1000000,
+      "parameters": [
+        "gamma",
+        "a0",
+        "omega1",
+        "a1"
+      ],
+      "replicates": 6,
+      "scales": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ],
+      "sigma_inf2": 0.6
+    },
+    {
+      "arm": "cost",
+      "burn_seconds_at_start": 0.001,
+      "cells": [
+        {
+          "cell": 0,
+          "d": {
+            "planted": 0.5,
+            "recovered": 0.4973538900076331,
+            "se": 0.0028874980581320916,
+            "z": -0.9164023452464845
+          },
+          "declared_d": 0.5000000000000009,
+          "mismatches": 2,
+          "overhead_share": 0.04173038362949285,
+          "per_replicate_d": [
+            0.48518938131517453,
+            0.4939597158453983,
+            0.5041990257212511,
+            0.5046041909054072,
+            0.4934019654224254,
+            0.5034511890733321,
+            0.4882104889069689,
+            0.5058151628711073
+          ],
+          "probe_scales": [
+            64,
+            128,
+            256,
+            512
+          ],
+          "probes": 8,
+          "resolved": {
+            "d_se": 0.006253284187925378,
+            "is_override": false,
+            "se_source": "affine fit covariance",
+            "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+            "value": 0.5058151628711073,
+            "verdict": "pass",
+            "z": 0.9299374051054703
+          },
+          "resolved_all": [
+            {
+              "d_se": 0.030015117344421017,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.48518938131517453,
+              "verdict": "pass",
+              "z": -0.4934386400984451
+            },
+            {
+              "d_se": 0.009666299593628688,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.4939597158453983,
+              "verdict": "pass",
+              "z": -0.6248807101513723
+            },
+            {
+              "d_se": 6.233692156948017e-05,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.5041990257212511,
+              "verdict": "MISMATCH",
+              "z": 67.3601713964973
+            },
+            {
+              "d_se": 0.000639295992706984,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.5046041909054072,
+              "verdict": "MISMATCH",
+              "z": 7.201970539359545
+            },
+            {
+              "d_se": 0.00567915317060473,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.4934019654224254,
+              "verdict": "pass",
+              "z": -1.1617990181576467
+            },
+            {
+              "d_se": 0.003816876894809068,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.5034511890733321,
+              "verdict": "pass",
+              "z": 0.9041918742584532
+            },
+            {
+              "d_se": 0.007295550929346454,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.4882104889069689,
+              "verdict": "pass",
+              "z": -1.6159864014667529
+            },
+            {
+              "d_se": 0.006253284187925378,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.5058151628711073,
+              "verdict": "pass",
+              "z": 0.9299374051054703
+            }
+          ],
+          "se_across_probes": 0.0028874980581320916,
+          "se_bootstrap_over_repeats": 0.006742186906316066,
+          "se_fit_covariance": 0.006253284187925378
+        },
+        {
+          "cell": 1,
+          "d": {
+            "planted": 0.75,
+            "recovered": 0.7523223188784638,
+            "se": 0.0025174892260680327,
+            "z": 0.9224742074034334
+          },
+          "declared_d": 0.7500000000000007,
+          "mismatches": 2,
+          "overhead_share": 0.058865302631388526,
+          "per_replicate_d": [
+            0.7514900451858265,
+            0.7418211741247032,
+            0.7475071613224729,
+            0.7550389565150123,
+            0.7515265855498587,
+            0.7668600672469286,
+            0.7529901220466921,
+            0.7513444390362157
+          ],
+          "probe_scales": [
+            64,
+            128,
+            256,
+            512
+          ],
+          "probes": 8,
+          "resolved": {
+            "d_se": 0.01223711881620938,
+            "is_override": false,
+            "se_source": "affine fit covariance",
+            "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+            "value": 0.7513444390362157,
+            "verdict": "pass",
+            "z": 0.10986565190771928
+          },
+          "resolved_all": [
+            {
+              "d_se": 0.0004688804929258315,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7514900451858265,
+              "verdict": "MISMATCH",
+              "z": 3.177878389710592
+            },
+            {
+              "d_se": 0.005094035458109183,
+              "is_override": false,
+              "se_source": "bootstrap over probe repeats",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512), se from bootstrap over probe repeats",
+              "value": 0.7418211741247032,
+              "verdict": "pass",
+              "z": -1.6055690900772293
+            },
+            {
+              "d_se": 0.006153451239343549,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7475071613224729,
+              "verdict": "pass",
+              "z": -0.40511228261455196
+            },
+            {
+              "d_se": 0.004270894488875522,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7550389565150123,
+              "verdict": "pass",
+              "z": 1.179836338297912
+            },
+            {
+              "d_se": 0.00024666344616582677,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7515265855498587,
+              "verdict": "MISMATCH",
+              "z": 6.188941140600868
+            },
+            {
+              "d_se": 0.006450222778225847,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7668600672469286,
+              "verdict": "pass",
+              "z": 2.613873632991838
+            },
+            {
+              "d_se": 0.0017663039768523981,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7529901220466921,
+              "verdict": "pass",
+              "z": 1.6928694527540764
+            },
+            {
+              "d_se": 0.01223711881620938,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 0.7513444390362157,
+              "verdict": "pass",
+              "z": 0.10986565190771928
+            }
+          ],
+          "se_across_probes": 0.0025174892260680327,
+          "se_bootstrap_over_repeats": 0.023679491895128156,
+          "se_fit_covariance": 0.01223711881620938
+        },
+        {
+          "cell": 2,
+          "d": {
+            "planted": 1.0,
+            "recovered": 1.0055440465323606,
+            "se": 0.004046832183143531,
+            "z": 1.3699719389040925
+          },
+          "declared_d": 0.9999999999999997,
+          "mismatches": 3,
+          "overhead_share": 0.03729312026126732,
+          "per_replicate_d": [
+            0.9863889631796641,
+            1.0097796425450678,
+            1.0010805702654906,
+            1.018315077896328,
+            1.017029006864542,
+            0.99213445905261,
+            1.010542570227635,
+            1.0090820822275486
+          ],
+          "probe_scales": [
+            64,
+            128,
+            256,
+            512
+          ],
+          "probes": 8,
+          "resolved": {
+            "d_se": 0.0034801785054183157,
+            "is_override": false,
+            "se_source": "affine fit covariance",
+            "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+            "value": 1.0090820822275486,
+            "verdict": "pass",
+            "z": 2.609659881931043
+          },
+          "resolved_all": [
+            {
+              "d_se": 0.004459953949254168,
+              "is_override": false,
+              "se_source": "bootstrap over probe repeats",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512), se from bootstrap over probe repeats",
+              "value": 0.9863889631796641,
+              "verdict": "MISMATCH",
+              "z": -3.0518334886869747
+            },
+            {
+              "d_se": 0.002572898263864435,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.0097796425450678,
+              "verdict": "MISMATCH",
+              "z": 3.8010218602189627
+            },
+            {
+              "d_se": 0.0011317206783786706,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.0010805702654906,
+              "verdict": "pass",
+              "z": 0.9548029704988338
+            },
+            {
+              "d_se": 0.007213719441687795,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.018315077896328,
+              "verdict": "pass",
+              "z": 2.5389229570651373
+            },
+            {
+              "d_se": 0.004786587812808516,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.017029006864542,
+              "verdict": "MISMATCH",
+              "z": 3.5576505708250283
+            },
+            {
+              "d_se": 0.002719310171897279,
+              "is_override": false,
+              "se_source": "bootstrap over probe repeats",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512), se from bootstrap over probe repeats",
+              "value": 0.99213445905261,
+              "verdict": "pass",
+              "z": -2.8924765658129523
+            },
+            {
+              "d_se": 0.0036641572893112043,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.010542570227635,
+              "verdict": "pass",
+              "z": 2.877215521939858
+            },
+            {
+              "d_se": 0.0034801785054183157,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.0090820822275486,
+              "verdict": "pass",
+              "z": 2.609659881931043
+            }
+          ],
+          "se_across_probes": 0.004046832183143531,
+          "se_bootstrap_over_repeats": 0.004528832151935885,
+          "se_fit_covariance": 0.0034801785054183157
+        },
+        {
+          "cell": 3,
+          "d": {
+            "planted": 1.5,
+            "recovered": 1.5005433417605967,
+            "se": 0.002594313580974995,
+            "z": 0.20943565364695543
+          },
+          "declared_d": 1.500000000000001,
+          "mismatches": 3,
+          "overhead_share": 5.622743063342198e-09,
+          "per_replicate_d": [
+            1.5006859989069374,
+            1.505096815878504,
+            1.504859474575545,
+            1.5012256240358122,
+            1.501885874754046,
+            1.494926717126489,
+            1.509854291646529,
+            1.4858119371609109
+          ],
+          "probe_scales": [
+            64,
+            128,
+            256,
+            512
+          ],
+          "probes": 8,
+          "resolved": {
+            "d_se": 0.038625571406196844,
+            "is_override": false,
+            "se_source": "affine fit covariance",
+            "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+            "value": 1.4858119371609109,
+            "verdict": "pass",
+            "z": -0.36732305368080587
+          },
+          "resolved_all": [
+            {
+              "d_se": 0.001525389073814787,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.5006859989069374,
+              "verdict": "pass",
+              "z": 0.44972061142455705
+            },
+            {
+              "d_se": 0.0005163505957353928,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.505096815878504,
+              "verdict": "MISMATCH",
+              "z": 9.870843416465942
+            },
+            {
+              "d_se": 0.0013725433469627846,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.504859474575545,
+              "verdict": "MISMATCH",
+              "z": 3.5404889661934162
+            },
+            {
+              "d_se": 0.0014144488767727926,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.5012256240358122,
+              "verdict": "pass",
+              "z": 0.866502887405476
+            },
+            {
+              "d_se": 0.0011870460451756848,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.501885874754046,
+              "verdict": "pass",
+              "z": 1.5887123854288054
+            },
+            {
+              "d_se": 0.006431496146681037,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.494926717126489,
+              "verdict": "pass",
+              "z": -0.7888184580706173
+            },
+            {
+              "d_se": 0.0020478994270401443,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.509854291646529,
+              "verdict": "MISMATCH",
+              "z": 4.8119021453950905
+            },
+            {
+              "d_se": 0.038625571406196844,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.4858119371609109,
+              "verdict": "pass",
+              "z": -0.36732305368080587
+            }
+          ],
+          "se_across_probes": 0.002594313580974995,
+          "se_bootstrap_over_repeats": 0.0015101460246150667,
+          "se_fit_covariance": 0.038625571406196844
+        },
+        {
+          "cell": 4,
+          "d": {
+            "planted": 2.0,
+            "recovered": 1.9977337972932623,
+            "se": 0.0020199556723496464,
+            "z": -1.1219071476462816
+          },
+          "declared_d": 2.0000000000000018,
+          "mismatches": 3,
+          "overhead_share": 0.019338181372438087,
+          "per_replicate_d": [
+            2.0014030537456216,
+            1.9871445603989801,
+            2.0005263585032753,
+            2.000843711639056,
+            1.9932097730127734,
+            2.002266860656869,
+            2.0029232764193123,
+            1.9935527839702105
+          ],
+          "probe_scales": [
+            64,
+            128,
+            256,
+            512
+          ],
+          "probes": 8,
+          "resolved": {
+            "d_se": 0.006701329796609561,
+            "is_override": false,
+            "se_source": "affine fit covariance",
+            "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+            "value": 1.9935527839702105,
+            "verdict": "pass",
+            "z": -0.9620800983490071
+          },
+          "resolved_all": [
+            {
+              "d_se": 0.001007535163497574,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 2.0014030537456216,
+              "verdict": "pass",
+              "z": 1.3925605740143023
+            },
+            {
+              "d_se": 0.0034160518255339466,
+              "is_override": false,
+              "se_source": "bootstrap over probe repeats",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512), se from bootstrap over probe repeats",
+              "value": 1.9871445603989801,
+              "verdict": "MISMATCH",
+              "z": -3.763244897203008
+            },
+            {
+              "d_se": 0.001202616294333327,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 2.0005263585032753,
+              "verdict": "pass",
+              "z": 0.437677841015223
+            },
+            {
+              "d_se": 0.00026841922036644194,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 2.000843711639056,
+              "verdict": "MISMATCH",
+              "z": 3.143260895781733
+            },
+            {
+              "d_se": 0.007700980593795301,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.9932097730127734,
+              "verdict": "pass",
+              "z": -0.8817353718173662
+            },
+            {
+              "d_se": 0.000590047905176736,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 2.002266860656869,
+              "verdict": "MISMATCH",
+              "z": 3.8418247687672413
+            },
+            {
+              "d_se": 0.0033751179236170777,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 2.0029232764193123,
+              "verdict": "pass",
+              "z": 0.8661257133729173
+            },
+            {
+              "d_se": 0.006701329796609561,
+              "is_override": false,
+              "se_source": "affine fit covariance",
+              "source": "pilot cost probe, affine fit over 4 scales (64..512)",
+              "value": 1.9935527839702105,
+              "verdict": "pass",
+              "z": -0.9620800983490071
+            }
+          ],
+          "se_across_probes": 0.0020199556723496464,
+          "se_bootstrap_over_repeats": 0.008117725382089585,
+          "se_fit_covariance": 0.006701329796609561
+        }
+      ],
+      "estimator": "src/study/pilot.py:measure_cost_exponent (climb_to_target -> fit_cost_probe -> _resolve_d)",
+      "mismatch_rate": 0.325,
+      "mismatches": 13,
+      "model": "synthetic + spin burn",
+      "parameters": [
+        "d"
+      ],
+      "probes": 40,
+      "replicates": 8,
+      "start_scale": 64
+    },
+    {
+      "arm": "srw",
+      "cells": [
+        {
+          "cell": 0,
+          "exact_mean_at_ladder": [
+            1.0,
+            1.5,
+            2.1875,
+            3.142089843749999,
+            4.4783978909254065,
+            6.358192239869881,
+            9.009419797761943,
+            12.75369214365188
+          ],
+          "gamma": {
+            "planted": 0.5210895123300201,
+            "recovered": 0.5201292524275688,
+            "se": 0.00033225640581023834,
+            "z": -2.8901170471329682
+          },
+          "q": 0.5,
+          "study": "experiments/00_synthetic/data/no_leakage/srw_00"
+        },
+        {
+          "cell": 1,
+          "exact_mean_at_ladder": [
+            1.0100000000000002,
+            1.5299500000000004,
+            2.2745642468750003,
+            3.3905592932068638,
+            5.177518112769373,
+            8.293686060970048,
+            14.237617376684115,
+            26.331433893536957
+          ],
+          "gamma": {
+            "planted": 0.6575151907707071,
+            "recovered": 0.6573254778615403,
+            "se": 0.00046349452598672597,
+            "z": -0.40930992391534554
+          },
+          "q": 0.55,
+          "study": "experiments/00_synthetic/data/no_leakage/srw_01"
+        },
+        {
+          "cell": 2,
+          "exact_mean_at_ladder": [
+            1.04,
+            1.6192,
+            2.5306111999999996,
+            4.102810500805426,
+            7.087285245759428,
+            13.14744183166515,
+            25.68418606081745,
+            51.20512824053652
+          ],
+          "gamma": {
+            "planted": 0.8001114283435897,
+            "recovered": 0.8007182513570993,
+            "se": 0.0008323144334675068,
+            "z": 0.7290790464626143
+          },
+          "q": 0.6,
+          "study": "experiments/00_synthetic/data/no_leakage/srw_02"
+        },
+        {
+          "cell": 3,
+          "exact_mean_at_ladder": [
+            1.16,
+            1.9672000000000005,
+            3.482463200000001,
+            6.5386878072733845,
+            12.830928612256569,
+            25.601579862256955,
+            51.200004663236655,
+            102.40000000004991
+          ],
+          "gamma": {
+            "planted": 0.9329045560005861,
+            "recovered": 0.9325309031221422,
+            "se": 0.00040620388161051593,
+            "z": -0.9198653566836265
+          },
+          "q": 0.7,
+          "study": "experiments/00_synthetic/data/no_leakage/srw_03"
+        },
+        {
+          "cell": 4,
+          "exact_mean_at_ladder": [
+            1.36,
+            2.5152000000000005,
+            4.846899200000001,
+            9.607038772130611,
+            19.200163002201165,
+            38.40000009999037,
+            76.80000000000005,
+            153.60000000000014
+          ],
+          "gamma": {
+            "planted": 0.9804127682206485,
+            "recovered": 0.9800651742089536,
+            "se": 0.0003594277042578106,
+            "z": -0.9670762926098955
+          },
+          "q": 0.8,
+          "study": "experiments/00_synthetic/data/no_leakage/srw_04"
+        }
+      ],
+      "estimator": "tools/loglog.py:gamma_closed_form (article eq. 523-526)",
+      "model": "srw",
+      "n_per_scale": 20000,
+      "parameters": [
+        "gamma"
+      ],
+      "qs": [
+        0.5,
+        0.55,
+        0.6,
+        0.7,
+        0.8
+      ],
+      "reference": "gamma_closed_form applied to the exact E|S_k|",
+      "replicates": 6,
+      "scales": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+      ]
+    }
+  ],
+  "artifact": "no_leakage",
+  "created": "2026-09-04T17:47:30",
+  "elapsed_seconds": 90.11445489700418,
+  "injected_leak": null,
+  "ladder": [
+    2,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
+  "m0": 0,
+  "plant_seed": 20260904,
+  "produced_by": "calibration/check_no_leakage.py",
+  "ranges": {
+    "a0": [
+      0.5,
+      1.5
+    ],
+    "a1": [
+      -0.6,
+      -0.1
+    ],
+    "cost_d": [
+      0.5,
+      0.75,
+      1.0,
+      1.5,
+      2.0
+    ],
+    "gamma": [
+      0.2,
+      0.8
+    ],
+    "omega1": [
+      0.4,
+      2.5
+    ],
+    "srw_q": [
+      0.5,
+      0.55,
+      0.6,
+      0.7,
+      0.8
+    ]
+  },
+  "rho": 2.0,
+  "seed": 515,
+  "verdict": {
+    "checks": [
+      {
+        "arm": "gamma",
+        "cells": 6,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 1.719531397404542,
+        "max_rel_error": 0.0007041038593798899,
+        "no_se": 0,
+        "parameter": "gamma",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": 7.33774093197924e-05,
+          "n": 6,
+          "r2": 0.9999991192256795,
+          "slope": 0.9998934742781589
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      },
+      {
+        "arm": "correction",
+        "cells": 6,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 2.0276269228314843,
+        "max_rel_error": 0.001158907782714921,
+        "no_se": 0,
+        "parameter": "gamma",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": -0.000284840560020182,
+          "n": 6,
+          "r2": 0.9999970767508631,
+          "slope": 1.0005587870289665
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      },
+      {
+        "arm": "correction",
+        "cells": 6,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 2.2876829257369553,
+        "max_rel_error": 0.0020487848252296733,
+        "no_se": 0,
+        "parameter": "a0",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": 0.000804028076457012,
+          "n": 6,
+          "r2": 0.9999893105410939,
+          "slope": 0.9991723891670863
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      },
+      {
+        "arm": "correction",
+        "cells": 6,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 2.177890136318102,
+        "max_rel_error": 0.03459177358301757,
+        "no_se": 0,
+        "parameter": "omega1",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": 0.007021206066257819,
+          "n": 6,
+          "r2": 0.9963821570315883,
+          "slope": 0.9848087024851668
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      },
+      {
+        "arm": "correction",
+        "cells": 6,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 1,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 3.1122790746005484,
+        "max_rel_error": 0.04479933637091325,
+        "no_se": 0,
+        "parameter": "a1",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": 0.0023021206657414454,
+          "n": 6,
+          "r2": 0.9992402325474304,
+          "slope": 0.9975576799919783
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      },
+      {
+        "arm": "cost",
+        "cells": 5,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 7,
+        "max_abs_z": 1.3699719389040925,
+        "max_rel_error": 0.005544046532360625,
+        "no_se": 0,
+        "parameter": "d",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": 0.002108558603999583,
+          "n": 5,
+          "r2": 0.9999696236773815,
+          "slope": 0.9987747132960558
+        },
+        "unbiased": true,
+        "z_threshold": 6.8140354792811735
+      },
+      {
+        "arm": "srw",
+        "cells": 5,
+        "cells_carried_by_rel_tolerance": 0,
+        "cells_past_plain_3": 0,
+        "diagnosis": "responsive",
+        "dof": 5,
+        "max_abs_z": 2.8901170471329682,
+        "max_rel_error": 0.0018427926099636037,
+        "no_se": 0,
+        "parameter": "gamma",
+        "responsive": true,
+        "responsiveness": {
+          "intercept": -0.0010807624705172028,
+          "n": 5,
+          "r2": 0.9999924674698376,
+          "slope": 1.0010635611721976
+        },
+        "unbiased": true,
+        "z_threshold": 9.235494592417618
+      }
+    ],
+    "family_alpha": 0.01,
+    "passed": true,
+    "plain_z": 3.0,
+    "r2_min": 0.9,
+    "rel_tolerance": 0.01,
+    "slope_tolerance": 0.15,
+    "total_cells": 40
+  }
+}

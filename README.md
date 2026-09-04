@@ -32,6 +32,7 @@ flowchart LR
     subgraph calib["calibration — checks on our own machinery"]
         CC["check_coverage.py<br/><i>are the error bars real?</i>"]
         VP["verify_prediction.py<br/><i>predicted vs real</i>"]
+        NL["check_no_leakage.py<br/><i>is any constant hardcoded?</i>"]
     end
 
     subgraph study["src/study — the four-step workflow"]
@@ -60,14 +61,16 @@ flowchart LR
     AT --> VP
     AE --> PA
     EO -.under test.-> CC
+    PI -.under test.-> NL
 
     classDef lib fill:#3b6ea522,stroke:#3b6ea5
     class RCP lib
 ```
 
 Solid arrows carry data or measured constants. `src/` holds the eight pipeline
-drivers, `calibration/` the three that check the pipeline itself (two statistical,
-one an audit of every function and flag); the functions they all
+drivers, `calibration/` the four that check the pipeline itself (two statistical,
+one that plants a truth and checks the answer follows it, one an audit of every
+function and flag); the functions they all
 call live in `tools/`, and the simulators in `models/`.
 
 There is exactly **one sampler** — `generate.py`. `pilot.py` and `run.py` do not draw
@@ -83,7 +86,7 @@ ordinary recipe, so the planned run is the same kind of thing as any other run.
 | `src/budget` | how long must I run for a given precision? | those constants | `allocation_sweep.json` |
 | `src/report` | what does it look like, and what is $\hat\gamma$? | any of the above | `gamma_estimates.json`, `plot.png` |
 | `src/study` | **start here**: pilot → plan → run → report, carrying constants for you | a recipe | `constants.json`, `report.md`, `details.md` |
-| `calibration/` | are our **own** stated numbers honest — the ± and the ETA? and does every function still behave as documented? | the pipeline itself | `coverage.json`, `prediction_check.json` |
+| `calibration/` | are our **own** stated numbers honest — the ± and the ETA? is any constant secretly hardcoded? and does every function still behave as documented? | the pipeline itself | `coverage.json`, `prediction_check.json`, `no_leakage.json` |
 | `tools/` | *(imported, not run — except `artifacts.py --list/--migrate`)* — estimators, allocation rules, calibration, seeding, I/O | | |
 | `models/` | the simulated object itself: `srw`, `synthetic` | | |
 
@@ -127,6 +130,10 @@ pilot cannot determine $\omega_1$.
 # every public function and every CLI flag, once, in dependency order (~7 min)
 python3 calibration/exercise_all.py
 python3 calibration/exercise_all.py --stage tools      # just the leaf layer
+
+# is any constant secretly hardcoded? plant a truth and see if the answer follows (~75 s)
+python3 calibration/check_no_leakage.py
+python3 calibration/check_no_leakage.py --arms correction --inject-leak omega1=1.0155
 ```
 
 `calibration/exercise_all.py` is the audit: it calls each function on its normal
@@ -134,6 +141,15 @@ inputs *and* on the degenerate ones, runs each driver across its flags, and
 prints `PASS` / `FAIL` / `NOTE` — the last for behaviour that is as written but
 worth a human's eye (a flag that does nothing, a message that misleads, an
 unreachable branch). `tools/tests/` still owns the closed-form assertions.
+
+`calibration/check_no_leakage.py` answers the other question: **is any constant
+secretly hardcoded?** On srw the estimates are right, which is exactly the
+problem — $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$, $d=1$ are numbers a default can
+sit on, and this repo shipped that bug once. So it plants truths a seeded
+generator draws (they appear in no recipe and no default), runs the real
+pipeline, and regresses recovered on planted: a hardcoded constant gives a **flat
+line**. The second command puts the old `FALLBACK_OMEGA1` back and confirms the
+check catches it — because a check that has only ever passed is not evidence.
 
 ## Where things go
 
@@ -164,6 +180,13 @@ standing rather than pending, and its amortized/batched second route dropped as
 redundant to the affine fit. **B** ($\omega_1$) and **C** ($\gamma$ under a budget) pass
 against known truth. `TODO.md` tracks the detail; each experiment's own README states
 its numeric acceptance criteria and what was measured against them.
+
+**No constant is hardcoded.** `calibration/check_no_leakage.py` plants
+$\gamma, a_0, a_1, \omega_1$ and $d$ from a seeded generator and checks that what
+comes out tracks what went in: 40 cells, seven parameter checks, all passing,
+slopes $1.000\pm0.015$ and every $R^2\ge0.996$ — including srw at $q\ne1/2$, where
+the truth moves off the values that were once hardcoded. The negative control
+runs on demand and is what makes that a claim rather than an assertion.
 
 ## Environment
 

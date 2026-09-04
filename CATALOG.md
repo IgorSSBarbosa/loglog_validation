@@ -5,8 +5,10 @@ Written 2026-08-24 as step zero of a reorganization, refreshed 2026-08-25: the p
 current structure legible enough to change safely, **not** to defend it. Where the
 current placement looks wrong, the "Notes" column says so.
 
-Scope: `tools/`, `src/`, `calibration/`, `models/` — 23 modules, ~5,900 lines, 112 module-level
-public functions (§4 indexes the ones worth naming). Not covered: `tools/tests/`
+Scope: `tools/`, `src/`, `calibration/`, `models/` — 32 modules, 11,143 non-blank
+lines, 189 module-level public functions (§4 indexes the ones worth naming; counts
+re-measured 2026-09-04, and the earlier "23 modules, ~5,900 lines" predated
+`exercise_all.py`, which is 2,596 lines on its own). Not covered: `tools/tests/`
 (gitignored, local-only), `experiments/*/` (recipes + data, no code), `derivations/`
 (LaTeX).
 
@@ -46,6 +48,7 @@ flowchart TB
         CC["calibration/check_coverage.py<br/>arms: planted / planting / rate / wilson"]
         COV["coverage.py<br/>coverage_test, t vs normal"]
         WIL["wilson.py<br/>eq. 720 bound, γ only"]
+        NL["calibration/check_no_leakage.py<br/>plant a truth, see if γ̂ follows"]
         CC --> COV
         CC --> WIL
     end
@@ -144,7 +147,8 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 |---|---|---|---|---|
 | `check_coverage.py` | 461 | `experiment`, `statistical tool` | **Checkpoint 0.4**: four arms — `planted`, `planting`, `rate`, `wilson`. Holds srw's exact moments as *scoring* truth. | `coverage`, `wilson`, `correction`, `allocation`, `generate` |
 | `verify_prediction.py` | 190 | `experiment`, `budget tool` | Runs tuned ladders for real; predicted vs measured seconds and RMSE. | `allocation`, `allocation_table`, `generate` |
-| `exercise_all.py` | 2681 | `experiment`, `tool` | The audit: every public function and every CLI flag called once, in dependency order, reporting PASS/FAIL/NOTE. Asks whether each call behaves as *documented* — error branches and flag combinations included — where `tools/tests/` asserts closed forms. Also a static pass: unused imports, uncalled public functions, and the PLAN.md layering rule checked rather than assumed. | everything |
+| `check_no_leakage.py` | 715 | `experiment`, `tool` | The falsification test: plants $\gamma,a_0,a_1,\omega_1,d$ from a seeded generator that appears in no recipe or default, runs the real pipeline, and regresses recovered on planted. A hardcoded constant gives slope 0. Four arms (`gamma`, `correction`, `cost`, `srw`), and `--inject-leak` puts the old `FALLBACK_OMEGA1` back to prove the check can fail. | `pilot`, `correction`, `loglog`, `cost_model`, `synthetic`, `srw` |
+| `exercise_all.py` | 2596 | `experiment`, `tool` | The audit: every public function and every CLI flag called once, in dependency order, reporting PASS/FAIL/NOTE. Asks whether each call behaves as *documented* — error branches and flag combinations included — where `tools/tests/` asserts closed forms. Also a static pass: unused imports, uncalled public functions, and the PLAN.md layering rule checked rather than assumed. | everything |
 
 ### `models/` — the simulated objects
 
@@ -228,6 +232,10 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `sweep` | allocation_experiment | the $m_0\times B$ grid, both arms |
 | `summarize` | allocation_experiment | per-budget arm scoring |
 | `exact_mean`, `exact_sd` | check_coverage | srw truth (scoring only) |
+| `exact_mean_abs_srw` | check_no_leakage | $\mathbb E\lvert S_k\rvert$ at any $q$ (scoring only) |
+| `arm_gamma`, `arm_correction`, `arm_cost`, `arm_srw` | check_no_leakage | one planted grid each |
+| `responsiveness`, `judge` | check_no_leakage | does $\hat\theta$ move with $\theta$? |
+| `inject_leak`, `parse_leaks` | check_no_leakage | the negative control |
 | `make_experiment` | check_coverage | replay Experiment B, both centres |
 | `make_wilson_experiment` | check_coverage | eq. (720) coverage arm |
 | `make_rate_experiment` | check_coverage | analytic-se arm |

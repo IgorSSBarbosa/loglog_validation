@@ -1492,6 +1492,39 @@ def sec_synthetic(a: Audit) -> None:
     a.close("cost_hint is constant in i -- correct, and why d = 0 here",
             lambda: syn.cost_hint(4096), 1.0, 0)
 
+    # --- the work burn: this model's only way to have a d at all ---
+    burn = {"gamma": 0.5, "a0": 1.0, "sigma_inf2": 0.6,
+            "cost_d": 2.0, "cost_scale": 1e-3 / 64 ** 2}
+    a.check("the burn is off by default",
+            lambda: (syn.params_from_dict({"gamma": 0.5}).cost_scale,
+                     syn.params_from_dict({"gamma": 0.5}).cost_d), expect=(0.0, 0.0))
+    a.close("cost_hint becomes cost_scale * i**cost_d once it is on",
+            lambda: syn.cost_hint(128, burn), 4e-3, 1e-12)
+    a.check("...and stays ONE WORK UNIT when it is off, which is a different "
+            "unit from seconds",
+            lambda: syn.cost_hint(128, {"gamma": 0.5, "cost_d": 2.0}), expect=1.0)
+    same = [syn.simulate(8, 40, dict(burn, cost_d=cd, cost_scale=1e-7),
+                         np.random.default_rng(4242)) for cd in (0.0, 1.0, 2.0)]
+    a.check("the burn consumes no randomness: three exponents, one seed, "
+            "bit-identical draws",
+            lambda: all(np.array_equal(same[0], y) for y in same[1:]))
+    t0 = time.perf_counter()
+    syn.simulate(64, 1, burn, np.random.default_rng(0))     # warm
+    syn.simulate(128, 1, burn, np.random.default_rng(0))    # d = 2 -> 4 ms
+    a.check("...and it really spins for the time it declares",
+            lambda: 3.5e-3 < time.perf_counter() - t0 < 4e-2)
+    a.raises("a burn past MAX_BURN_SECONDS is refused, not run", ValueError,
+             lambda: syn.simulate(1000, 1, {"gamma": 0.5, "cost_d": 2.0,
+                                            "cost_scale": 1.0},
+                                  np.random.default_rng(0)),
+             contains="MAX_BURN_SECONDS")
+    a.raises("a negative cost_d is refused", ValueError,
+             lambda: syn.params_from_dict({"gamma": 0.5, "cost_d": -1.0}),
+             contains="cost_d")
+    a.raises("...and a negative cost_scale", ValueError,
+             lambda: syn.params_from_dict({"gamma": 0.5, "cost_scale": -1.0}),
+             contains="cost_scale")
+
 
 # ===========================================================================
 # STAGE 3 -- src/, the drivers a human runs. Exercised through the CLI.
@@ -2501,6 +2534,97 @@ def sec_calibration(a: Audit, sc: Scratch) -> None:
         a.check("...and says what to try instead",
                 lambda: "is runnable at these constants" in p.stdout)
         shutil.rmtree(real / tag, ignore_errors=True)
+
+    # --- check_no_leakage: the falsification test, and its own falsification ---
+    from calibration.check_no_leakage import (
+        R2_MIN, REL_TOLERANCE, SLOPE_TOLERANCE, bonferroni_z,
+        exact_mean_abs_srw, judge, parse_leaks, responsiveness)
+
+    a.close("the srw arm's reference reproduces E|S_k| at q = 1/2",
+            lambda: exact_mean_abs_srw(64, 0.5),
+            64 * math.comb(63, 31) * 2.0 ** -63, 1e-12)
+    a.close("...and moves to (2q-1)k as the walk goes ballistic",
+            lambda: exact_mean_abs_srw(256, 0.8) / 256, 0.6, 0.01)
+    a.close("responsiveness recovers an exact line",
+            lambda: responsiveness([1, 2, 3, 4], [3.0, 5.0, 7.0, 9.0])["slope"],
+            2.0, 1e-12)
+    a.check("...and refuses a grid with no spread in the truth, rather than "
+            "returning a number that cannot mean anything",
+            lambda: responsiveness([1, 1, 1, 1], [1, 2, 3, 4])["slope"] is None)
+    a.check("criterion 2's tolerances are the ones the plan states",
+            lambda: (SLOPE_TOLERANCE, R2_MIN), expect=(0.15, 0.9))
+    a.check("criterion 1's threshold widens with the number of cells and "
+            "narrows with the degrees of freedom",
+            lambda: bonferroni_z(40, 5) > bonferroni_z(1, 5) > 0
+            and bonferroni_z(40, 5) > bonferroni_z(40, 50))
+    a.check("one replicate leaves no dof, and no threshold at all",
+            lambda: bonferroni_z(40, 0) is None)
+
+    flat = {"arm": "fake", "replicates": 6, "parameters": ["omega1"],
+            "cells": [{"omega1": {"planted": t, "recovered": 1.0155,
+                                  "se": 0.01, "z": (1.0155 - t) / 0.01}}
+                      for t in (0.4, 0.8, 1.2, 1.7, 2.2, 2.5)]}
+    v = judge([flat])
+    a.check("a hardcoded constant produces a FLAT line -- slope 0 -- and fails",
+            lambda: abs(v["checks"][0]["responsiveness"]["slope"]) < 1e-12
+            and not v["passed"])
+    near = {"arm": "fake", "replicates": 6, "parameters": ["omega1"],
+            "cells": [{"omega1": {"planted": t, "recovered": 1.0,
+                                  "se": 0.05, "z": (1.0 - t) / 0.05}}
+                      for t in (0.99, 1.0, 1.01, 0.995, 1.005, 1.002)]}
+    c = judge([near])["checks"][0]
+    a.check("criterion 1 alone would MISS that leak on srw, which is why 2 exists",
+            lambda: c["unbiased"] and not c["responsive"])
+    a.check("REL_TOLERANCE rescues a tiny bias with a tiny se, and records that "
+            "it did",
+            lambda: REL_TOLERANCE == 0.01)
+    a.raises("--inject-leak refuses a constant it cannot inject", SystemExit,
+             lambda: parse_leaks(["sigma=1.0"]), contains="unknown constant")
+    a.raises("...and a value with no name", SystemExit,
+             lambda: parse_leaks(["omega1"]), contains="NAME=VALUE")
+
+    # Sized down hard, so this is a check on the machinery, not on the physics.
+    # gamma / srw / cost survive that; `correction` deliberately does not, and
+    # the next case is about how it says so.
+    nl_json = sc.data / "no_leakage.json"
+    p = cli_ok(a, "check_no_leakage.py plants a grid and reports both criteria",
+               ["calibration/check_no_leakage.py", "--arms", "gamma", "srw",
+                "cost", "--draws", "3", "--replicates", "3",
+                "--cost-replicates", "2", "--n-gamma", "20000",
+                "--n-srw", "2000", "--json", str(nl_json)],
+               stdout_has="verdict", creates=nl_json, timeout=1800)
+    if p:
+        a.check("...naming the planted value, the recovered one and its se, "
+                "cell by cell",
+                lambda: "planted" in p.stdout and "recovered" in p.stdout)
+        a.check("...and the seed that planted them (ground rule 5)",
+                lambda: "plant seed" in p.stdout)
+        a.check("...passing all three of those arms even at 1/50th the samples",
+                lambda: "FAIL" not in p.stdout, detail=p.stdout[-200:])
+    p = cli_ok(a, "a budget too small to identify omega_1 fails, and says it is "
+                  "a BUDGET failure rather than a leak",
+               ["calibration/check_no_leakage.py", "--arms", "correction",
+                "--draws", "3", "--replicates", "3", "--n-correction", "50000"],
+               expect_code=1, stdout_has="FAIL", timeout=1800)
+    if p:
+        a.check("...distinguishing `unidentified at this budget` from `flat`, "
+                "which is stage 3.0's vacuous-test lesson made printable",
+                lambda: "unidentified at this budget" in p.stdout,
+                detail=[ln for ln in p.stdout.splitlines()
+                        if "FAIL" in ln][-1][:110])
+    cli_ok(a, "--arms runs one arm alone, on the same planted grid",
+           ["calibration/check_no_leakage.py", "--arms", "cost",
+            "--cost-replicates", "2"], stdout_has="arm cost", timeout=900)
+    p = cli_ok(a, "--inject-leak hardcodes a constant and the check CATCHES it "
+                  "(exit 0 means the control worked)",
+               ["calibration/check_no_leakage.py", "--arms", "correction",
+                "--draws", "3", "--replicates", "3", "--n-correction", "50000",
+                "--inject-leak", "omega1=1.0155"],
+               stdout_has="NEGATIVE CONTROL worked", timeout=1800)
+    if p:
+        a.check("...localizing it: the leaked parameter fails, its neighbours "
+                "do not",
+                lambda: "omega1" in p.stdout and "FAIL" in p.stdout)
 
 
 # ===========================================================================

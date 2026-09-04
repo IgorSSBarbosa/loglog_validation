@@ -62,10 +62,40 @@ unblocked path, and a large-$(n,k)$ case that would be gigabytes unblocked).
 `synthetic.py` — the closed-form model (`SyntheticParams`, `NOISE_FAMILIES`, `mean_Y`,
 article eq. 232: $\mathbb{E} Y_i = a_0 i^\gamma \exp(\sum_j a_j i^{-\omega_j})$). Ground
 truth is planted and known, so this is currently the only model with a `target_fn` /
-usable `true_gamma_key`. `cost_hint(i) = 1` — drawing a sample is a closed-form
-evaluation plus one noise draw, constant in $i$, so $d=0$ and this model is
-deliberately useless for testing the budget machinery. Verified indirectly via `tools/tests/test_loglog.py`
+usable `true_gamma_key`. Verified indirectly via `tools/tests/test_loglog.py`
 (checkpoint 0.2's noiseless-recovery checks) and `tools/tests/test_models.py`.
+
+With no burn configured, `cost_hint(i) = 1` — drawing a sample is a closed-form
+evaluation plus one noise draw, constant in $i$, so $d=0$: not merely degenerate but
+*outside* the allocation formulas (`allocation_constants` raises for $d\le0$, and
+`total_cost`'s $G$ divides by $\rho^d-1$).
+
+**The work burn** (`cost_scale`, `cost_d`, added 2026-09-04) gives it any cost exponent
+you like: `simulate` spins for `cost_scale * i**cost_d` seconds per sample and
+`cost_hint` declares exactly that, so the exponent is *known* and the clock has to find
+it. Off by default. Three properties make it usable, each pinned by a test in
+`tools/tests/test_synthetic.py`:
+
+- it consumes **no randomness** (`perf_counter` only), so the same seed gives
+  bit-identical draws with the burn on and off — the same invariance `srw` guarantees
+  over `block_n`, and for the same reason;
+- it **spins rather than sleeps**. `time.sleep` would void the budget model's meaning
+  (`throughput` converts work to seconds and only means something while elapsed time is
+  proportional to work done), permanently trip `compare_cost_models`' "no longer
+  compute-bound" diagnostic, add ~1 ms of *additive* jitter into exactly the overhead
+  term $a$ of $a+b\,i^d$, and give free speedup under any future parallel run. An
+  array burn was rejected too: past L2/L3 it falls out of cache and the cost per
+  element rises, biasing the realized exponent *above* the declared one;
+- the burn **dominates dispatch** at the scales timed: sized at 1 ms against ~33 µs of
+  per-call overhead, the fitted $a$ is ~2% of the cheapest probe rung.
+
+One trap, recorded because it cost a wrong measurement: `cost_hint`'s no-burn return of
+`1.0` is one *work unit*, not one second. Feeding it to the burn (written that way
+first) made every unburnt call spin for a full second per sample. `simulate` does its
+own arithmetic from `cost_scale`/`cost_d` for that reason.
+
+This is what `calibration/check_no_leakage.py`'s `cost` arm runs on: recovering $d$ from
+$\{0.5, 0.75, 1, 1.5, 2\}$ when the only $d$ anywhere in the repo's constants is 1.
 
 Neither file imports the other, or anything from `tools/`/`src/`/`experiments/` --
 `tools/models.py` is the only thing that imports these, as `from models import srw`.
