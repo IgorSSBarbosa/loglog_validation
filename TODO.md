@@ -485,12 +485,26 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $i=8..512$, so Assumption 6 looks satisfied. P2~~
   - [x] ~~Side-vs-origin head to head at equal budget
         (`src/estimate/compare_observables.py`, P3)~~
-  - [ ] $\omega_1$ for $d=2$ is **unsettled**: the two estimators give $0.33$ and
-        $0.38$ over $8\le i\le512$, against a literature $\Omega=72/91\approx0.79$.
-        Almost certainly an effective exponent contaminated by the analytic $i^{-1}$
-        boundary term over so short a window. Needs a wider ladder (to $i\sim4096$),
-        replicates with error bars, and probably a two-correction fit before anything
-        is claimed either way
+  - [x] ~~Cylinder geometry (periodic in $x$), P4. Removes the two side walls, which
+        are pure contamination for a south-anchored count: RMSE $3.7\times$ better at
+        all points and $2.2\times$ at $m_0=2$, at $1.04\times$ the cost, and the
+        $m_0=2$ cell becomes the **first in this project that is variance-dominated
+        rather than bias-dominated**. Cost exponent unchanged ($\hat d = 1.978\pm0.039$
+        against the declared 2), so the wrap-merge lands in the affine overhead~~
+  - [ ] The cylinder's residual $+0.004$ bias in $\hat\gamma$ ($\approx7\sigma$) is now
+        the leading error. It does **not** decay with $m_0$ over $8\le i\le512$ — the
+        drop-leading ladder is flat at $\approx1.900$ — so a wider ladder is needed to
+        tell a very slowly decaying correction from an amplitude effect the
+        one-correction model cannot express
+  - [ ] $\omega_1$ for $d=2$ is **unsettled**: on the box the two estimators give $0.33$
+        and $0.38$ over $8\le i\le512$, against a literature $\Omega=72/91\approx0.79$;
+        on the cylinder the bias-decay estimator does not converge at all, correctly,
+        because the $\hat\gamma(m_0)$ sequence it fits is flat. Needs a wider ladder
+        (to $i\sim4096$) and probably a two-correction fit before anything is claimed
+  - [ ] Parallel generation: `generate.py` is single-threaded and this machine has 12
+        threads; ground rule 2's spawned streams already make replicate-level fan-out
+        safe and reproducible. Prerequisite for the wider ladder above ($31.7$ ms per
+        sample at $i=1024$)
   - [ ] Wilson interval (eq. 720) on $\hat d_f$: needs $\omega_1$ first
   - [ ] $d\ge3$: a general-$d$ simulator (`percolation_zd`), where $\mathrm{cost}(i)=i^d$
         starts to bite and the allocation theory should earn its keep

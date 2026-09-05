@@ -1,7 +1,7 @@
 # 03_percolation_zd — Site percolation on $\mathbb Z^d$
 
-**Status: $d=2$ in progress — P1 (cost model) and P3 (side vs origin) pass; P2's
-$\hat d_f$ is measured but its $\omega_1$ is open. $d\ge3$ not started.**
+**Status: $d=2$ in progress — P1 (cost model), P3 (side vs origin) and P4 (cylinder vs
+box) pass; P2's $\hat d_f$ is measured but its $\omega_1$ is open. $d\ge3$ not started.**
 
 Simulator: `models/percolation2d.py`, registered as `MODELS["percolation2d"]`.
 Driven by the shared scripts (`src/generate/generate.py`,
@@ -93,8 +93,9 @@ declared-vs-measured gap under the driver's 20% tolerance.
 | fit | $\hat d$ | note |
 |---|---|---|
 | pure power $c\,i^d$ | $1.574$ | biased low — overhead is 89% of the measurement at $i=16$ |
-| **affine $a+b\,i^d$** | $\mathbf{2.0285 \pm 0.0175}$ | $a = 57.0\,\mu s$, rel_rmse $2.3\times10^{-3}$ |
-| declared `cost_hint` | $2.0000$ | gap $+1.63\sigma$, $1.4\%$ relative |
+| **affine $a+b\,i^d$**, box | $\mathbf{2.0285 \pm 0.0175}$ | $a = 57.0\,\mu s$, rel_rmse $2.3\times10^{-3}$ |
+| **affine $a+b\,i^d$**, cylinder | $\mathbf{1.9780 \pm 0.0388}$ | $a = 103.7\,\mu s$ — the wrap-merge is in the *overhead*, not the exponent |
+| declared `cost_hint` | $2.0000$ | gap $+1.63\sigma$ (box), $-0.57\sigma$ (cylinder) |
 
 The drop-leading ladder agrees and converges from below, exactly as on `srw`:
 $m_0=0\!:\!1.574 \to m_0=2\!:\!1.907 \to m_0=3\!:\!1.993 \to m_0=4\!:\!2.035$.
@@ -254,12 +255,138 @@ The bias channel is the larger of the two, and the one that no budget can buy ba
 $4\times10^{8}$ work units the side anchor already puts $\hat d_f$ within $0.33\%$ of
 $91/48$; the origin anchor is $6\%$ off and stuck there.
 
+
+---
+
+## Experiment P4 — cylinder vs box at equal budget
+
+Every cell of P3 was bias-dominated, so at that point *no* amount of extra budget could
+improve $\hat d_f$: only reducing the correction-to-scaling term could. The box has four
+walls; for a **south**-anchored count the east and west walls are pure finite-size
+contamination, and making $x$ periodic (a cylinder of circumference $i$ and height $i$)
+removes them. The derivation of $\gamma = 91/48$ above never used the side walls, so the
+exponent is unchanged and this is again a pure bias/noise question — exactly the shape
+P3 already knows how to settle.
+
+`ndimage.label` cannot wrap, so the cylinder is labelled as a box and the labels joined
+across the $x$-boundary are merged afterwards, by a vectorized pointer-jumping union-find
+over *labels* (a few percent as many as there are sites). Measured overhead
+**1.01×–1.07×**, falling with $i$; the cost probe above confirms it lands in the affine
+model's constant $a$ and not in $d$.
+
+```bash
+python3 src/estimate/compare_observables.py \
+  --arm box=experiments/03_percolation_zd/recipes/samples_geom_box.json \
+  --arm cylinder=experiments/03_percolation_zd/recipes/samples_geom_cylinder.json \
+  --replicates 12 --truth 1.8958333333333333 --seed 20260905 --tag compare_geometry
+```
+
+**Acceptance criteria.** (a) the cylinder's RMSE is smaller; (b) the reduction is in the
+*bias*, not only the variance; (c) the cost overhead stays under 1.15× and the measured
+$d$ is unchanged.
+
+**Result (2026-09-05, PASS on all three).** $R=12$, $4\times10^{8}$ work units per
+replicate, scales $8..512$, seed `20260905`.
+
+| | box | cylinder |
+|---|---|---|
+| $\mathrm{cv}(Y_i)$, $i=8\to512$ | $0.476\to0.426$ | $0.435\to0.372$ |
+| $\hat\gamma$ (all points) | $1.8810$, sd $0.0028$ | $\mathbf{1.8995}$, sd $0.0018$ |
+| bias, RMSE | $-0.0149$, $0.0151$ | $+0.0036$, $\mathbf{0.0040}$ |
+| $\hat\gamma$ ($m_0=2$) | $1.8898$, sd $0.0043$ | $\mathbf{1.8975}$, sd $0.0030$ |
+| bias, RMSE ($m_0=2$) | $-0.0060$, $0.0073$ | $+0.0017$, $\mathbf{0.0033}$ |
+
+**$3.7\times$ better in RMSE at all points, $2.2\times$ at $m_0=2$**, at $1.04\times$ the
+cost — and the sign of the bias flips, which is the tell that a boundary term rather
+than the estimator is responsible.
+
+The result that matters most is not in the RMSE column. **The cylinder's $m_0=2$ cell is
+the first in this project whose bias ($+0.0017$) is smaller than its spread ($0.0030$)** —
+the driver stops printing `BIAS-DOMINATED` for it. Every box and origin cell so far has
+been bias-limited, meaning extra budget bought nothing. On a cylinder at $m_0=2$, extra
+budget starts working again.
+
+### It is not unbiased, and the residual does not decay
+
+Two matched deep runs at the full $4\times10^{9}$ budget (`data/df_south`,
+`data/df_cylinder`), $\overline Y_i/i^{91/48}$:
+
+| $i$ | 8 | 16 | 32 | 64 | 128 | 256 | 512 | drift |
+|---|---|---|---|---|---|---|---|---|
+| box | 0.4989 | 0.4842 | 0.4742 | 0.4695 | 0.4651 | 0.4660 | 0.4661 | $-6.6\%$ |
+| cylinder | 0.5578 | 0.5611 | 0.5633 | 0.5640 | 0.5671 | 0.5682 | 0.5698 | $+2.1\%$ |
+
+Relative standard errors are $0.06\%$–$0.49\%$, so the cylinder's $+2.1\%$ rise is real
+($\approx5\sigma$), not noise — an earlier, cheaper probe that suggested the amplitude was
+flat past $i\approx32$ simply lacked the samples to see it. The correction is about
+$3\times$ smaller than the box's and of opposite sign; it is not gone.
+
+Its signature in the estimator is a $\hat\gamma$ that is *flat and slightly high* rather
+than converging. The cylinder's drop-leading ladder:
+
+| $m_0$ | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| box | 1.8804 | 1.8855 | 1.8898 | 1.8930 | 1.8974 | 1.8962 |
+| cylinder | 1.9008 | 1.9003 | 1.9002 | 1.9005 | 1.8992 | 1.8999 |
+
+The box climbs toward $91/48$ from below; the cylinder sits at $\approx1.900$ and does
+not move. That residual $+0.004$ ($\approx7\sigma$ against the replicate spread) is
+**not** explained away by this experiment.
+
+One consequence, worth recording because it looks like a failure and is not:
+`estimate_omega1.py`'s bias-decay estimator **does not converge** on the cylinder run
+($\hat\omega_1 = 10.6$, $\hat a = 1.6\times10^6$, `converged=False`), and the driver
+correctly reports the two $\omega_1$ estimates as disagreeing by $7.8$. That is the
+expected behaviour when there is no decay left to fit: the estimator's input is the
+$\hat\gamma(m_0)$ sequence above, which is flat. The direct fit of eq. (232) still works
+and gives $\hat\gamma = 1.9002$, $\hat\omega_1 = 2.80$, $\hat a_1 = -1.13$,
+rel_rmse $6.7\times10^{-4}$ — but a fitted $\omega_1$ of $2.8$ on a window of six
+doublings is a shape parameter, not a measurement.
+
+**Verdict: use the cylinder.** It is $1.04\times$ the cost, $2.2$–$3.7\times$ better in
+RMSE, and it moves the $m_0=2$ estimate out of the bias-limited regime. Its residual
+$+0.004$ offset is now the leading error and is the thing to chase next — with a wider
+ladder, which is the same prerequisite $\omega_1$ has needed since P2.
+
 ## Open
 
-- $\omega_1$ (see the P2 note and `TODO.md`) — the single thing blocking a Wilson
-  interval (eq. 720) on $\hat d_f$, since $\mathcal B_{\rm fs}$ needs $\omega_1,a_1$.
-- Replicated $\hat\gamma$ at the **full** $4\times10^{9}$ budget, with a wider ladder
-  (to $i\sim4096$), to see whether the south arm's remaining $-0.006$ bias at $m_0=2$
-  keeps shrinking at the predicted $\rho^{-\omega_1 m_0}/m^2$ rate (Prop. 820).
-- $d\ge3$: a general-$d$ simulator. $\mathrm{cost}(i)=i^d$ starts to bite there, which
-  is where the allocation theory should earn its keep.
+- **The cylinder's residual $+0.004$.** Now the leading error, $\approx7\sigma$, and it
+  does not decay with $m_0$ over $8\le i\le512$. Needs a wider ladder to separate "a very
+  slowly decaying correction" from "an amplitude effect the one-correction model cannot
+  express".
+- **$\omega_1$** — still unsettled on the box ($0.33$ vs $0.38$ against a literature
+  $\Omega=72/91\approx0.79$) and now *un-fittable* on the cylinder, for the good reason
+  above. It is what blocks a Wilson interval (eq. 720) on $\hat d_f$, since
+  $\mathcal B_{\rm fs}$ needs $\omega_1,a_1$ — and $\mathcal B_{\rm fs}$ is already the
+  dominant term of the interval in the autopilot run recorded in
+  `data/fractaldimautopilottest/`.
+- **A wider ladder** ($128\dots4096$ rather than $8\dots512$) is the prerequisite for
+  both of the above. At $31.7$ ms/sample at $i=1024$ and single-threaded generation,
+  that needs the fan-out below first.
+- **Parallel generation.** `generate.py` is single-threaded; this machine has 12 threads
+  and ground rule 2's spawned streams already make replicate-level fan-out safe and
+  reproducible. This is what makes $i\ge1024$ affordable.
+- **$d\ge3$**: a general-$d$ simulator, where $\mathrm{cost}(i)=i^d$ starts to bite and
+  the allocation theory should earn its keep.
+
+### Measured and rejected
+
+- **Bit-sampling the lattice instead of uniform coupling.** The draw is only 16% of the
+  runtime (labelling is 66%, the gather 17%). `rng.bytes`/`integers` at 8 or 16 bits are
+  1.9–3.5× faster on the draw but **break block invariance** — numpy packs several
+  sub-64-bit values per draw and discards the remainder per call, so splitting $n$ into
+  blocks changes the output (the trap documented in `models/srw.py`, verified again
+  here). 8-bit also cannot hold $p_c$: the threshold rounds to $152/256 = 0.59375$, a
+  systematically supercritical lattice. The one block-invariant alternative, `uint32`, is
+  1.33× on a 16% stage — 4% overall, not worth invalidating every recorded run.
+- **BFS from the south row instead of labelling the whole lattice.** The site-count
+  argument is right (the south set is only $\approx24\%$ of sites at $i=512$), but the
+  only C implementation available, `ndimage.binary_propagation`, is **2.1–2.4× slower**:
+  it iterates dilation to a fixed point, and at $p_c$ the chemical distance grows like
+  $i^{1.13}$, so it needs hundreds of passes where union-find needs one. A real
+  frontier-queue BFS would win, but it means Cython/numba and the ceiling is ~2×.
+- **All four sides from one labelling.** The labelling is 66% of the cost and is shared,
+  so south/north/east/west look nearly free. Variance ratio $0.68$ — but the cost is
+  $1.6\times$ (four gathers), and spending that same $1.6\times$ on more independent
+  lattices gives $0.625$. Strictly worse; the sides correlate at $0.55$.
+- **`bincount` instead of the fancy-index gather.** $1.01$–$1.04\times$. Noise.

@@ -72,6 +72,35 @@ Omega = 72/91 ~ 0.791 (Ziff 2011; Aharony & Asikainen 2003), with an analytic
 correction of exponent 1 also expected from the box boundary -- so omega_1 is
 something this rung MEASURES, not something it checks against a certainty.
 
+Box or cylinder
+---------------
+`params["geometry"]` chooses the boundary condition in x: "box" (the default,
+four walls) or "cylinder" (periodic in x, so only the south and north faces
+are boundaries). The observable and the exponent are the same either way --
+the argument above never used the side walls -- but the east/west walls are
+pure finite-size contamination for a SOUTH-anchored count, and removing them
+removes most of the correction-to-scaling term. Measured on two matched
+4e9-work-unit runs (experiments/03_percolation_zd/, P4):
+
+    Ybar_i / i**(91/48),  i = 8 .. 512
+      box       0.4989 0.4842 0.4742 0.4695 0.4651 0.4660 0.4661   -6.6%
+      cylinder  0.5578 0.5611 0.5633 0.5640 0.5671 0.5682 0.5698   +2.1%
+
+The cylinder does NOT remove the correction -- the amplitude still moves, by
+2.1% over six doublings against the box's 6.6%, and with the opposite sign.
+What it does is make it about 3x smaller, which is enough to change the
+character of the estimate: over R = 12 replicates at a common budget the
+cylinder's m0 = 2 gamma-hat is the first cell in this project whose bias is
+SMALLER than its spread, i.e. variance-limited rather than bias-limited, so
+more budget starts helping again. It is also quieter (cv ~ 0.37 against
+~ 0.43). A residual +0.004 bias in gamma-hat remains and does not decay with
+m0 over 8 <= i <= 512; see the experiment README.
+
+The wrap costs one merge of the labels joined across the x-boundary. That is
+done with a vectorized pointer-jumping union-find over LABELS (a few percent
+of the number of sites), not over sites, so the extra work is a few passes
+over something small -- see `_wrap_roots`.
+
 cost(i) = i**d with d = 2, and it is a fact rather than an assumption
 ---------------------------------------------------------------------
 This is the first model in the repo where article Assumption 7's cost(i)=i**d
@@ -104,6 +133,16 @@ _FOUR_CONNECTED = np.array([[0, 1, 0],
                             [0, 1, 0]], dtype=bool)
 
 ANCHORS = ("south", "origin")
+GEOMETRIES = ("box", "cylinder")
+
+#: Safety cap on `_wrap_roots`' pointer-jumping loop. The loop provably
+#: terminates (every entry of `root` is non-increasing and bounded below by 0,
+#: so it reaches a fixed point in finite steps) and doubles its reach each
+#: pass, so 64 is astronomically more than any real block needs. It raises
+#: rather than breaking out: a merge that has not converged returns silently
+#: wrong cluster sizes, which is exactly the class of bug this repo exists to
+#: not have.
+_MAX_MERGE_PASSES = 64
 
 #: Working-set budget for one (block_n, i) draw, in bytes, so block_n =
 #: budget // (bytes_per_site * i**2) bounds the transient arrays regardless of
@@ -158,23 +197,80 @@ def _label_block(open_grid: np.ndarray) -> np.ndarray:
     return labels.reshape(rows, i + 1, i)
 
 
-def _south_counts(lab: np.ndarray) -> np.ndarray:
-    """Open sites connected to row 0, per sample. `lab` is (rows, i+1, i)."""
-    keep = np.zeros(int(lab.max()) + 1, dtype=bool)
-    keep[lab[:, 0, :]] = True         # every label touching a sample's south row
+def _wrap_roots(lab: np.ndarray, i: int) -> np.ndarray:
+    """label -> canonical label, after joining what the periodic x-boundary joins.
+
+    `ndimage.label` cannot wrap, so a cylinder is labelled as a box and the
+    labels of column 0 and column i-1 are merged afterwards wherever both
+    sites are open. The merge is a union-find run over LABELS, of which there
+    are a few percent as many as there are sites, so it costs a few passes
+    over something small rather than another pass over the lattice.
+
+    Vectorized by pointer jumping rather than a Python `find` loop: each pass
+    pushes every pair's minimum across the edge in both directions and then
+    squares the pointer array (`root[root]`), so a chain of length L resolves
+    in O(log L) passes. `root[x] <= x` is an invariant (both operations only
+    ever assign a smaller value), which is what makes the loop terminate and
+    makes the fixed point the component's smallest label.
+
+    Merges never cross samples: the wrap joins column 0 to column i-1 of the
+    SAME sample, so the block-contiguity of labels is preserved.
+    """
+    nlab = int(lab.max()) + 1
+    root = np.arange(nlab, dtype=lab.dtype)
+    left, right = lab[:, :i, 0], lab[:, :i, i - 1]
+    both = (left > 0) & (right > 0)
+    if not both.any():
+        return root
+    a, b = left[both], right[both]
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    for _ in range(_MAX_MERGE_PASSES):
+        np.minimum.at(root, hi, root[lo])
+        np.minimum.at(root, lo, root[hi])
+        squared = root[root]
+        if np.array_equal(squared, root):
+            return root
+        root = squared
+    raise RuntimeError(
+        f"the periodic-boundary label merge did not converge in "
+        f"{_MAX_MERGE_PASSES} passes ({nlab} labels, {a.size} wrap edges). "
+        f"This should be unreachable -- see _MAX_MERGE_PASSES.")
+
+
+def _roots(lab: np.ndarray, i: int, geometry: str) -> np.ndarray:
+    """label -> canonical label for this geometry (identity for a box)."""
+    if geometry == "box":
+        return np.arange(int(lab.max()) + 1, dtype=lab.dtype)
+    return _wrap_roots(lab, i)
+
+
+def _south_counts(lab: np.ndarray, roots: np.ndarray) -> np.ndarray:
+    """Open sites connected to row 0, per sample. `lab` is (rows, i+1, i).
+
+    The keep-mask is built per ROOT and then mapped back to per LABEL, so the
+    only full-size operation is the single `keep[lab]` gather a box already
+    paid -- the cylinder adds no second pass over the lattice.
+    """
+    keep_root = np.zeros(roots.size, dtype=bool)
+    keep_root[roots[lab[:, 0, :]]] = True   # every root touching a south row
+    keep = keep_root[roots]
     keep[0] = False                   # label 0 is "closed", and the separators
     return keep[lab].sum(axis=(1, 2), dtype=np.int64)
 
 
-def _origin_counts(lab: np.ndarray, i: int) -> np.ndarray:
+def _origin_counts(lab: np.ndarray, i: int, roots: np.ndarray) -> np.ndarray:
     """Size of the cluster containing the box's centre site, per sample.
 
     0 when the centre is closed -- which is most of the time, and is the whole
     point of the comparison this anchor exists for (see the module docstring).
+
+    Sizes are accumulated per label and then re-accumulated per root, both
+    cheap array operations, rather than by relabelling the lattice.
     """
-    centre = lab[:, i // 2, i // 2]
-    sizes = np.bincount(lab.ravel())
-    return np.where(centre > 0, sizes[centre], 0).astype(np.int64)
+    by_label = np.bincount(lab.ravel(), minlength=roots.size)
+    by_root = np.bincount(roots, weights=by_label, minlength=roots.size)
+    centre = roots[lab[:, i // 2, i // 2]]
+    return np.where(centre > 0, by_root[centre], 0).astype(np.int64)
 
 
 def percolation2d(
@@ -182,23 +278,32 @@ def percolation2d(
     n: int = 1,
     p: float = P_C_SQUARE_SITE,
     anchor: str = "south",
+    geometry: str = "box",
     rng: np.random.Generator | None = None,
     block_n: int | None = None,
 ) -> np.ndarray:
-    """n i.i.d. samples of Y_i on an i x i critical site-percolation box.
+    """n i.i.d. samples of Y_i on an i x i critical site-percolation lattice.
 
     anchor="south" (the default, PLAN.md ground rule 7): open sites connected
     to the south side. anchor="origin": open sites in the cluster of the
     centre site -- for the head-to-head comparison only.
 
+    geometry="box" (the default): four walls. geometry="cylinder": periodic in
+    x, so only the south and north faces are boundaries. Same observable and
+    same exponent; the cylinder simply removes two walls' worth of
+    finite-size contamination (see the module docstring).
+
     `rng` defaults to a fresh unseeded Generator; pass a seeded one for
     reproducible runs. `block_n` defaults to a size derived from a fixed byte
     budget (_DEFAULT_WORKING_SET_BYTES); results are bit-identical for any
     block size at the same seed, because the blocking is over the leading
-    (sample) axis (see `_draw_open`).
+    (sample) axis (see `_draw_open`) -- and the geometry does not touch the
+    RNG at all, so box and cylinder see the same lattices at the same seed.
     """
     if anchor not in ANCHORS:
         raise ValueError(f"unknown anchor {anchor!r}; known: {list(ANCHORS)}")
+    if geometry not in GEOMETRIES:
+        raise ValueError(f"unknown geometry {geometry!r}; known: {list(GEOMETRIES)}")
     if i < 1:
         raise ValueError(f"box side must be >= 1; got {i}")
     if not 0.0 <= p <= 1.0:
@@ -214,18 +319,21 @@ def percolation2d(
     while offset < n:
         rows = min(block_n, n - offset)
         lab = _label_block(_draw_open(rng, rows, i, p))
+        roots = _roots(lab, i, geometry)
         out[offset:offset + rows] = (
-            _south_counts(lab) if anchor == "south" else _origin_counts(lab, i)
+            _south_counts(lab, roots) if anchor == "south"
+            else _origin_counts(lab, i, roots)
         )
         offset += rows
-        del lab
+        del lab, roots
     return out
 
 
 def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarray:
     """MODELS["percolation2d"].simulate.
 
-    params: {"p": float (default p_c), "anchor": "south"|"origin"}.
+    params: {"p": float (default p_c), "anchor": "south"|"origin",
+             "geometry": "box"|"cylinder"}.
 
     Deliberately does NOT assert Y_i > 0 the way models/synthetic.py asserts
     Assumption 2. For "south" the violation is real but exponentially rare
@@ -239,6 +347,7 @@ def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
         n=n,
         p=float(params.get("p", P_C_SQUARE_SITE)),
         anchor=params.get("anchor", "south"),
+        geometry=params.get("geometry", "box"),
         rng=rng,
     )
 
@@ -249,18 +358,29 @@ def cost_hint(i: int, params: dict | None = None) -> float:
     Both halves of the pipeline are linear in the number of sites: i**2
     uniforms are drawn, and one union-find pass visits each site O(1) times
     (ndimage.label, near-linear with path compression). Nothing here depends
-    on p or on the anchor -- the full lattice is labelled either way.
+    on p, on the anchor, or on the geometry -- the full lattice is labelled
+    either way.
 
     Exact by construction, like models/srw.py's `cost_hint`, which is what
     makes a MEASURED d scoreable against it rather than merely plausible.
     This is the first rung where article Assumption 7's cost(i) = i**d is a
     geometric fact about a real simulator (PLAN.md, ladder step 4).
+
+    The cylinder's wrap-merge is deliberately NOT added here. It is O(number
+    of labels) = O(i**2) with a small constant, so it changes cost(i) by a
+    factor that is very nearly constant in i (measured 1.14x at i = 32 falling
+    to 1.08x at i = 512) -- and only RATIOS across scales reach an allocation,
+    so a constant factor cancels exactly. Folding it in would make the
+    declared d depend on the geometry while the true d does not.
     """
     return float(i) ** 2
 
 
 def zero_rate(i: int, p: float = P_C_SQUARE_SITE) -> float:
     """P(Y_i = 0) for anchor="south": exactly (1-p)**i, row 0 entirely closed.
+
+    Independent of the geometry: wrapping x joins clusters but opens no site,
+    and an open site of row 0 is connected to the south face either way.
 
     Exact, not asymptotic: Y_i = 0 iff no site of row 0 is open, since any
     open site of row 0 is itself connected to the south side. Used in

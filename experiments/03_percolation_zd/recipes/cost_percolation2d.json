@@ -2,8 +2,9 @@
   "kind": "cost_probe",
   "model": "percolation2d",
   "params": {
-    "p": 0.59274605079210,
-    "anchor": "south"
+    "p": 0.5927460507921,
+    "anchor": "south",
+    "geometry": "box"
   },
   "scales": [
     16,

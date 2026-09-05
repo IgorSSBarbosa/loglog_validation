@@ -204,7 +204,8 @@ per-model logic lives in
 
 - `percolation2d.py` — critical site percolation on the square lattice; $Y_i$ is the
   number of open sites of an $i\times i$ box connected to the **south side**
-  (`PLAN.md` ground rule 7), with `anchor="origin"` kept only as the comparison arm.
+  (`PLAN.md` ground rule 7), with `anchor="origin"` kept only as the comparison arm and
+  `geometry="cylinder"` (periodic in $x$) as the low-bias alternative to the box.
   `cost_hint(i) = i**2` exactly, which makes it the first model whose $d$ is a
   geometric fact rather than a stated formula. Labels a whole block of samples with one
   `ndimage.label` call over a vertically stacked image with blank separator rows, and
@@ -215,8 +216,9 @@ per-model logic lives in
 
 Verified: `tools/tests/test_models.py` (registry shape, unknown-name error),
 `tools/tests/test_percolation2d.py` (exact enumeration of $\mathbb E Y_i$ over all
-$2^{i^2}$ configurations at $i=2,3$, an independent flood fill on random critical
-lattices, the exact zero rate $(1-p)^i$, and `block_n` invariance),
+$2^{i^2}$ configurations at $i=2,3$ for both geometries, an independent flood fill --
+wrapping or not -- on random critical lattices, the exact zero rate $(1-p)^i$,
+`block_n` invariance, and a three-label chain that a single-pass wrap merge gets wrong),
 `tools/tests/test_srw.py` (shape/bounds/parity, classical $\mathbb E|S_k|
 \sim\sqrt{2k/\pi}$ asymptotic, `block_n` exact-equivalence with the unblocked
 path, and a large-$(n,k)$ case that would be gigabytes unblocked). The four

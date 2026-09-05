@@ -127,11 +127,45 @@ Two implementation choices carry the whole cost story:
   ($\xi\sim|p-p_c|^{-4/3}\approx4\times10^9$ sites) is seven orders beyond any box this
   will run at.
 
+**Box or cylinder** (`params["geometry"]`, added 2026-09-05). `"box"` is four walls;
+`"cylinder"` is periodic in $x$, so only the south and north faces are boundaries. Same
+observable, same exponent — the derivation of $\gamma=91/48$ never used the side walls —
+but for a *south*-anchored count the east/west walls are pure finite-size contamination,
+and removing them shrinks the correction-to-scaling term about threefold. Measured on
+two matched $4\times10^9$-work-unit runs, $\overline Y_i/i^{91/48}$:
+
+| $i$ | 8 | 16 | 32 | 64 | 128 | 256 | 512 | drift |
+|---|---|---|---|---|---|---|---|---|
+| box | 0.4989 | 0.4842 | 0.4742 | 0.4695 | 0.4651 | 0.4660 | 0.4661 | $-6.6\%$ |
+| cylinder | 0.5578 | 0.5611 | 0.5633 | 0.5640 | 0.5671 | 0.5682 | 0.5698 | $+2.1\%$ |
+
+It does *not* remove the correction — the amplitude still moves, by a third as much and
+with the opposite sign — but it shrinks it enough to change the character of the
+estimate, and it is quieter too (cv $\approx0.37$ against $\approx0.43$). See
+`experiments/03_percolation_zd/README.md`, Experiment P4.
+
+`ndimage.label` cannot wrap, so a cylinder is labelled as a box and the labels joined
+across the $x$-boundary are merged afterwards — `_wrap_roots`, a **vectorized
+pointer-jumping union-find over labels**, of which there are a few percent as many as
+there are sites. Two details make it cheap and correct:
+
+- the keep-mask is built per *root* and mapped back to per *label*, so the cylinder pays
+  no second full-size pass over the lattice — measured overhead **1.01×–1.07×**, falling
+  with $i$ (it was 1.08–1.14× before that change);
+- `root[root]` squaring each pass is what resolves a *chain* of merges. A single pass
+  that pushed each edge's minimum once and stopped undercounts — on the three-label
+  chain in `test_wrap_merge_resolves_a_chain_of_labels_not_just_a_pair` it returns 9
+  instead of 12. The loop provably terminates (`root[x] <= x` is an invariant, so every
+  entry is non-increasing and bounded below), and raises rather than breaking out if it
+  somehow does not.
+
 `cost_hint(i) = i**2`, exact: $i^2$ uniforms drawn, one near-linear union-find pass,
-nothing depending on $p$ or the anchor. **This is the first model where article
+nothing depending on $p$, the anchor, or the geometry. **This is the first model where article
 Assumption 7's $\mathrm{cost}(i)=i^d$ is a geometric fact about a real simulation
 rather than a stated formula** — measured against the clock, declared $d=2$ vs affine
-$\hat d = 2.0285\pm0.0175$, a $+1.63\sigma$ gap (`experiments/03_percolation_zd/`, P1).
+$\hat d = 2.0285\pm0.0175$ on the box ($+1.63\sigma$) and $1.9780\pm0.0388$ on the
+cylinder ($-0.57\sigma$): the wrap-merge changes the constant, not the exponent, which
+is why `cost_hint` deliberately ignores the geometry (`experiments/03_percolation_zd/`, P1).
 
 No `target_fn`/`true_gamma_key`, the same deliberate absence as `srw`: $\gamma = d_f =
 91/48$ is known from the literature but stays out of the code path and lives as a
@@ -150,7 +184,9 @@ Verified: `tools/tests/test_percolation2d.py` — **exact enumeration** of
 $\mathbb{E}Y_i$ over all $2^{i^2}$ configurations at $i=2,3$ (a closed form, not
 another Monte Carlo), an independent pure-Python flood fill matching site-for-site on
 random critical lattices, $p\in\{0,1\}$, $i=1$ (Bernoulli), `block_n` invariance, the
-exact zero rate, and the origin arm's failure of Assumption 2.
+exact zero rate, and the origin arm's failure of Assumption 2. The cylinder is checked
+the same way — its own exact enumeration at $i=2,3$, its own wrapping flood fill, the
+multi-hop merge chain, and that $i=1,2$ wrap onto an edge that already exists.
 
 Neither file imports the other, or anything from `tools/`/`src/`/`experiments/` --
 `tools/models.py` is the only thing that imports these, as `from models import srw`.

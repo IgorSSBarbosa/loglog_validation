@@ -3,7 +3,8 @@
   "model": "percolation2d",
   "params": {
     "p": 0.5927460507921,
-    "anchor": "origin"
+    "anchor": "origin",
+    "geometry": "box"
   },
   "scales": [
     8,

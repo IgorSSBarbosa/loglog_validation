@@ -1472,22 +1472,26 @@ def sec_percolation2d(a: Audit) -> None:
     # The strongest check available here: E[Y_i] by exhaustive enumeration of
     # all 2**(i*i) lattices, against Monte Carlo. A closed form, not a second
     # simulation.
-    def brute_mean(i, p):
+    def brute_mean(i, p, geometry="box"):
         total = 0.0
         for bits in itertools.product((False, True), repeat=i * i):
             grid = np.array(bits, dtype=bool).reshape(i, i)
             k = int(grid.sum())
             lab = perc._label_block(grid[None])
-            total += p ** k * (1 - p) ** (i * i - k) * int(perc._south_counts(lab)[0])
+            count = int(perc._south_counts(lab, perc._roots(lab, i, geometry))[0])
+            total += p ** k * (1 - p) ** (i * i - k) * count
         return total
 
-    for i in (2, 3):
-        n = 200_000
-        draws = perc.percolation2d(i, n=n, rng=np.random.default_rng(100 + i))
-        a.close(f"E[Y_{i}] matches exhaustive enumeration over all 2**{i * i} lattices",
-                lambda draws=draws: float(draws.mean()),
-                brute_mean(i, perc.P_C_SQUARE_SITE),
-                4 * float(draws.std(ddof=1)) / math.sqrt(n))
+    for geometry in ("box", "cylinder"):
+        for i in (2, 3):
+            n = 200_000
+            draws = perc.percolation2d(i, n=n, geometry=geometry,
+                                       rng=np.random.default_rng(100 + i))
+            a.close(f"{geometry}: E[Y_{i}] matches exhaustive enumeration over all "
+                    f"2**{i * i} lattices",
+                    lambda draws=draws: float(draws.mean()),
+                    brute_mean(i, perc.P_C_SQUARE_SITE, geometry),
+                    4 * float(draws.std(ddof=1)) / math.sqrt(n))
 
     a.close("P(Y_i = 0) = (1-p)**i exactly -- row 0 entirely closed, nothing else",
             lambda: float((perc.percolation2d(4, n=200_000, p=0.5,
@@ -1503,10 +1507,12 @@ def sec_percolation2d(a: Audit) -> None:
             lambda: np.array_equal(
                 one, perc.percolation2d(9, n=300, rng=np.random.default_rng(3),
                                         block_n=1)))
+    stacked = perc._label_block(np.stack([
+        np.ones((6, 6), dtype=bool), np.zeros((6, 6), dtype=bool),
+        np.ones((6, 6), dtype=bool)]))
     a.check("the blank separator row keeps one sample's cluster out of the next",
-            lambda: list(perc._south_counts(perc._label_block(np.stack([
-                np.ones((6, 6), dtype=bool), np.zeros((6, 6), dtype=bool),
-                np.ones((6, 6), dtype=bool)])))), expect=[36, 0, 36])
+            lambda: list(perc._south_counts(stacked, perc._roots(stacked, 6, "box"))),
+            expect=[36, 0, 36])
 
     a.raises("an unknown anchor is refused", ValueError,
              lambda: perc.percolation2d(8, n=1, anchor="north"),
@@ -1527,6 +1533,50 @@ def sec_percolation2d(a: Audit) -> None:
             lambda: perc.percolation2d(8, n=3).shape, expect=(3,))
     a.close("cost_hint is exactly i**2 -- declared, not fitted",
             lambda: perc.cost_hint(1024, {}), 1024.0 ** 2, 0)
+    a.close("...and does not change with the geometry: the wrap-merge is a nearly "
+            "constant factor, and only ratios across scales reach an allocation",
+            lambda: perc.cost_hint(1024, {"geometry": "cylinder"}), 1024.0 ** 2, 0)
+
+    # --- the cylinder: periodic in x ---
+    a.raises("an unknown geometry is refused", ValueError,
+             lambda: perc.percolation2d(8, n=1, geometry="torus"),
+             contains="unknown geometry")
+    box = perc.percolation2d(24, n=400, rng=np.random.default_rng(31))
+    cyl = perc.percolation2d(24, n=400, geometry="cylinder",
+                             rng=np.random.default_rng(31))
+    a.check("the geometry does not touch the RNG, so box and cylinder see the same "
+            "lattices at one seed -- and wrapping only ever adds sites",
+            lambda: bool(np.all(cyl >= box) and np.any(cyl > box)))
+    a.check("i = 1 and i = 2 wrap onto an edge that is already there -- a no-op",
+            lambda: all(np.array_equal(
+                perc.percolation2d(i, n=200, rng=np.random.default_rng(32)),
+                perc.percolation2d(i, n=200, geometry="cylinder",
+                                   rng=np.random.default_rng(32)))
+                for i in (1, 2)))
+
+    # Three labels chained by two wrap edges: resolving them takes two hops, so
+    # a merge without the pointer-jumping step would undercount (it returns 9).
+    chain = np.zeros((7, 7), dtype=bool)
+    chain[0, 0] = True
+    chain[1, 0:3] = True
+    chain[1, 4:7] = True
+    chain[2, 6] = True
+    chain[3, 6] = True
+    chain[3, 0:3] = True
+    lab_chain = perc._label_block(chain[None])
+
+    def chain_count(geometry):
+        return int(perc._south_counts(
+            lab_chain, perc._roots(lab_chain, 7, geometry))[0])
+
+    a.check("the wrap-merge resolves a CHAIN of labels, not just a pair",
+            lambda: (chain_count("box"), chain_count("cylinder")), expect=(4, 12))
+    a.close("a cylinder is quieter than a box at the same scale (cv, i = 64)",
+            lambda: float(np.std(perc.percolation2d(
+                64, n=4000, geometry="cylinder", rng=np.random.default_rng(33)),
+                ddof=1) / np.mean(perc.percolation2d(
+                    64, n=4000, geometry="cylinder",
+                    rng=np.random.default_rng(33)))), 0.376, 0.03)
 
 
 def sec_synthetic(a: Audit) -> None:

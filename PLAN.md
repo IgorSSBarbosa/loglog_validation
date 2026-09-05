@@ -209,7 +209,11 @@ loglog_validation/
                                   p_c = 0.59274605079210, 4-connected. Y_i = open
                                   sites of an i x i box connected to the SOUTH SIDE
                                   (ground rule 7); anchor="origin" exists only as
-                                  the comparison arm. cost_hint(i) = i**2, so this is
+                                  the comparison arm, and geometry="cylinder"
+                                  (periodic in x) drops the two side walls, which
+                                  are pure finite-size contamination for a
+                                  south-anchored count -- 3x less correction, 1.04x
+                                  the cost. cost_hint(i) = i**2, so this is
                                   the first model where Assumption 7's d is a
                                   geometric fact and not a stated formula. No
                                   target_fn: gamma = d_f = 91/48 is an acceptance
@@ -304,8 +308,10 @@ expansion, are the moment assumptions plausible) and **computational** (is $cost
    more expensive and are where the budget-allocation theory should matter most in
    practice. Side-connected cluster (ground rule 7), not origin cluster. **$d=2$ is
    under way** (`models/percolation2d.py`): $\hat d = 2.03\pm0.02$ measured against the
-   declared $2$, and a first $\hat d_f$ within $1.1\%$ of $91/48$ — see
-   `experiments/03_percolation_zd/README.md`. $\omega_1$ there is still open.
+   declared $2$, and on a cylinder $\hat d_f = 1.8995\pm0.0018$, within $0.2\%$ of
+   $91/48$ and the first estimate in this project that is variance- rather than
+   bias-limited — see `experiments/03_percolation_zd/README.md`. $\omega_1$ there is
+   still open, and so is the residual $+0.004$.
 5. **Hierarchical / Bethe lattice** — exactly solvable via branching-process recursion
    (also currently an empty article appendix), so simulation can be checked against an
    exact generating-function computation rather than only Monte Carlo — the strongest

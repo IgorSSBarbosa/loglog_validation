@@ -46,7 +46,7 @@ flowchart TB
 
     subgraph expP["Experiment P — which observable? (percolation)"]
         CO["estimate/compare_observables.py<br/>R full experiments per arm"]
-        P2D["models/percolation2d.py<br/>south side vs origin, p_c, d=2"]
+        P2D["models/percolation2d.py<br/>south vs origin, box vs cylinder<br/>p_c, d=2"]
         P2D --> CO
     end
 
