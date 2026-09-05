@@ -204,18 +204,25 @@ def bfs_span(consts: dict, m0: int, m: int, rho: float) -> dict | None:
             "at_m0": m0, "centre": finite_size_bias(m, m0, rho, a1.value, w.value)}
 
 
-def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput):
+def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput,
+                    cost_ratio=1.0):
     """The m0 the plan would choose right now, for evaluating the gate at.
 
     The gate has to be checked at the m0 the answer will be computed at, and
     that depends on the budget still unspent -- which shrinks as the pilot
     loop runs. So it is recomputed each round rather than fixed up front.
+
+    Asks for the m0 that FITS the remaining seconds, rather than converting
+    seconds to a budget by multiplying by the throughput: that multiplication
+    is only valid when the allocation's cost unit is the unit the throughput
+    was measured in (tools/cost_model.cost_unit_ratio).
     """
     try:
-        pl = plan_mod.plan_for_budget(
-            seconds_left * throughput / max(1, replicates),
+        pl = plan_mod.budget_for_seconds(
+            seconds_left / max(1, replicates),
             d=consts["d"].value, omega1=consts["omega1"].value, rho=rho, m=m,
-            a1=consts["a1"].value, cv=consts["cv"].value, throughput=throughput)
+            a1=consts["a1"].value, cv=consts["cv"].value, throughput=throughput,
+            cost_ratio=cost_ratio)
     except (KeyError, ValueError, ZeroDivisionError):
         return None
     return pl["m0"] if pl.get("feasible") else None
@@ -301,8 +308,15 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
         tp = out.get("throughput") or throughput_guess
         # The gate must be judged at the m0 the ANSWER will be computed at, so
         # this is the whole remaining budget -- not the pilot's slice of it.
+        # From the RECIPE in hand, not from `out`: pilot() does not return the
+        # recipe, so reading the model off `out` silently fell back to a ratio
+        # of 1 -- the very assumption this is here to stop making.
+        ratio_fn, _ = plan_mod._cost_ratio(
+            {"recipe": this, "scales": this["scales"]},
+            consts["d"].value if consts.get("d") else 1.0)
         m0 = _provisional_m0(consts, max(1e-9, total_seconds - spent),
-                             rho=rho, m=m, replicates=replicates, throughput=tp)
+                             rho=rho, m=m, replicates=replicates, throughput=tp,
+                             cost_ratio=ratio_fn)
         span = bfs_span(consts, m0, m, rho) if m0 is not None else None
         rounds.append({"round": k + 1, "factor": factor,
                        "replicates": len(reps),

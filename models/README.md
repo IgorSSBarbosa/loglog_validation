@@ -446,6 +446,16 @@ coincide, and here they do not: one budget unit is `box_factor`$^2 = 256$ lattic
 Ask for $S/256$ to spend $S$ sites. The first run of this model asked for $4\times10^9$
 meaning sites, and was on course to spend $10^{12}$ of them.
 
+The same gap broke the **planner**, which is worse because it was silent:
+`src/study/plan.py` divided a cost in allocation units by a throughput measured in
+`cost_hint` units, and so predicted **740 s for a run that would have taken 42 hours**
+($m_0=10$, $n=12\,086$, scales up to $s=65\,536$). Both directions of that conversion now
+go through `tools/cost_model.cost_unit_ratio` — exactly $1.0$ for every model whose
+`cost_hint` *is* $i^d$, so no `srw` or `percolation2d` plan changes — and the planner
+bisects on predicted seconds rather than multiplying by throughput
+(`plan.py: budget_for_seconds`). Verified after the fix: predicted 90.0 s, measured
+89.9 s; a full autopilot predicted 412.8 s and drew in 404.6 s.
+
 #### The cheap version: `shared_sampler`, one box for the whole ladder
 
 `simulate` pays for a fresh box **per rung**. But one critical lattice already holds

@@ -192,6 +192,56 @@ def declared_exponent(scales: Sequence, cost_hint, params: dict | None = None
         return 0.0                      # constant cost, e.g. the synthetic model
     return float(np.polyfit(np.log(i), np.log(c), 1)[0])
 
+def work_units(scales, counts, cost_hint, params: dict | None = None) -> float:
+    """Actual work of drawing `counts[i]` samples at each scale, in cost_hint units.
+
+    The unit is whatever the model's `cost_hint` counts -- lattice sites, walk
+    steps, seconds of burn. `counts` may be a scalar (the same n at every
+    scale) or one entry per scale.
+    """
+    import numpy as np
+
+    i = np.atleast_1d(np.asarray(scales))
+    n = np.broadcast_to(np.atleast_1d(np.asarray(counts, dtype=float)), i.shape)
+    return float(sum(float(c) * float(cost_hint(int(k), params or {}))
+                     for k, c in zip(i, n)))
+
+
+def cost_unit_ratio(scales, counts, d: float, cost_hint,
+                    params: dict | None = None) -> float:
+    """The constant between the ALLOCATION's cost unit and the model's own.
+
+    tools/allocation.py charges Assumption 7's cost(i) = i**d -- the SCALE
+    raised to d -- while a model's `cost_hint` reports the work it actually
+    does. For srw (cost_hint(i) = i, d = 1) and percolation2d (i**2, d = 2)
+    those coincide and this returns 1.0. They are NOT the same thing in
+    general: percolation_tau's cost_hint is L(s)**2 = box_factor**2 * s, so
+    the ratio is box_factor**2 = 256, and synthetic's burn carries
+    `cost_scale`.
+
+    Dividing a budget in allocation units by a throughput measured in
+    cost_hint units -- which is exactly what src/study/plan.py did until
+    2026-09-06 -- is therefore wrong by this factor, and silently right for
+    every model that had been tried. It predicted 740 s for a run that was
+    going to take 42 hours.
+
+        seconds = cost_in_allocation_units * cost_unit_ratio / throughput
+        budget  = seconds * throughput / cost_unit_ratio
+
+    Returns Sum(n_i cost_hint(i)) / Sum(n_i i**d) over the ladder given, so it
+    is exact for the ladder it is asked about (including the `ceil` wobble in
+    a box rule), not merely asymptotic.
+    """
+    import numpy as np
+
+    i = np.atleast_1d(np.asarray(scales, dtype=float))
+    n = np.broadcast_to(np.atleast_1d(np.asarray(counts, dtype=float)), i.shape)
+    declared = float((n * i ** float(d)).sum())
+    if declared <= 0:
+        raise ValueError(f"allocation cost must be positive; got {declared}")
+    return work_units(scales, counts, cost_hint, params) / declared
+
+
 def compare_cost_models(scales: Sequence, elapsed: Sequence, cost_hint,
                         params: dict | None = None,
                         tolerance_sigma: float = 3.0,

@@ -351,7 +351,10 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
 
     cost = measure_cost_exponent(model, params, scales)
 
-    cv_per_scale = np.array([r["cv"] for r in reps], float).mean(axis=0)
+    cv_by_rep = np.array([r["cv"] for r in reps], float)     # (R, len(scales))
+    cv_per_scale = cv_by_rep.mean(axis=0)
+    cv_se = (float(np.std(cv_by_rep.mean(axis=1), ddof=1) / np.sqrt(R))
+             if R > 1 else None)
     throughput = (drawn_steps / drawn_seconds) if drawn_seconds > 0 else None
     prov = (f"pilot, {R} replicate{'s' if R > 1 else ''}, pooled then refitted once"
             if R > 1 else "pilot, 1 replicate (no stderr available)")
@@ -359,7 +362,13 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     consts = {
         "omega1": measured(fit["omega1"], spread("omega1"), prov),
         "a1":     measured(fit["a1"], spread("a1"), prov),
-        "cv":     measured(float(cv_per_scale.mean()), None,
+        # cv's se is the spread of the per-REPLICATE mean cv, the same
+        # construction as omega1's and a1's above -- not the spread ACROSS
+        # SCALES, which is a property of the observable rather than an
+        # uncertainty about it. Without it cv was the one constant in the
+        # error budget with no error bar, so its influence on m0 could not be
+        # weighed with the others (user, 2026-09-06).
+        "cv":     measured(float(cv_per_scale.mean()), cv_se,
                            f"pilot, mean over {len(scales)} scales, spread "
                            f"{cv_per_scale.min():.4f}-{cv_per_scale.max():.4f}"),
     }

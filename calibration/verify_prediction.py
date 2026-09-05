@@ -36,12 +36,19 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
 from tools.artifacts import artifact_path, write_artifact  # noqa: E402
-from tools.allocation import allocation_constants, predict_error, total_cost  # noqa: E402
+from tools.allocation import (  # noqa: E402
+    allocation_constants,
+    ladder,
+    predict_error,
+    total_cost,
+)  # noqa: E402
 from tools.loglog import gamma_closed_form  # noqa: E402
 from tools.persistence import run_dir as _run_dir  # noqa: E402
 
 from src.generate.generate import generate  # noqa: E402
 
+from tools.cost_model import cost_unit_ratio  # noqa: E402
+from tools.models import get_model  # noqa: E402
 from tools.constants import format_table, measured, require  # noqa: E402
 
 from src.budget.allocation_table import (  # noqa: E402
@@ -96,6 +103,13 @@ def verify(model, params, m0_values, *, m, rho, d, omega1, a1, cv, throughput,
             continue
         n = int(n_exact)
         cost = total_cost(n, m0, m, rho, d)
+        # cost is in ALLOCATION units (i**d); throughput is in the model's own
+        # cost_hint units. Equal for srw and percolation2d, 256x apart for
+        # percolation_tau -- see tools/cost_model.cost_unit_ratio, and the
+        # 740-s prediction of a 42-hour run that came of assuming otherwise.
+        spec = get_model(model)
+        ratio = (cost_unit_ratio(ladder(m0, m, rho), 1.0, d, spec.cost_hint, params)
+                 if spec.cost_hint is not None else 1.0)
         pred = predict_error(n, m0, d, omega1, rho, m, a1, cv)
         hats, secs = [], []
         for _ in range(replicates):
@@ -105,7 +119,8 @@ def verify(model, params, m0_values, *, m, rho, d, omega1, a1, cv, throughput,
         v = np.array(hats)
         cells.append({
             "m0": m0, "n": n, "cost_steps": cost,
-            "predicted_seconds": cost / throughput,
+            "predicted_seconds": cost * ratio / throughput,
+            "cost_unit_ratio": ratio,
             "measured_seconds_median": float(np.median(secs)),
             "measured_seconds_all": [float(x) for x in secs],
             "predicted_rmse": pred["rmse"],

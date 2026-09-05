@@ -526,8 +526,15 @@ def cost_hint(s: int, params: dict | None = None) -> float:
     SCALE itself, which for srw and percolation2d coincides with the site
     count and here does not: one budget unit is s**d = s, i.e.
     box_factor**2 = 256 lattice sites at the defaults. To spend S sites, ask
-    for a budget of S / box_factor**2. Getting this wrong costs a factor of
-    256 in wall clock, in the expensive direction.
+    for a budget of S / box_factor**2.
+
+    This model is where that gap was first load-bearing, and it broke the
+    planner: src/study/plan.py divided a cost in allocation units by a
+    throughput measured in cost_hint units, so it predicted 740 s for a run
+    that would have taken 42 hours. The conversion is now explicit and
+    measured -- tools/cost_model.cost_unit_ratio, applied in plan.py's
+    budget_for_seconds -- and is exactly 1.0 for every model whose cost_hint
+    IS i**d. A recipe's hand-written `budget` is still in allocation units.
     """
     params = params or {}
     L = box_side(int(s), float(params.get("box_factor", DEFAULT_BOX_FACTOR)),

@@ -45,6 +45,8 @@ from tools.artifacts import (  # noqa: E402
     write_artifact,
 )
 from tools.constants import format_table, load, require  # noqa: E402
+from tools.cost_model import cost_unit_ratio  # noqa: E402
+from tools.models import get_model  # noqa: E402
 
 from src.budget.allocation_table import human_time, input_sensitivity  # noqa: E402
 
@@ -76,26 +78,39 @@ def parse_duration(text: str) -> float:
     return float(m.group(1)) * _TIME.get(m.group(2) or "s", 1)
 
 
-def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput) -> dict:
-    """The tuned allocation at budget B, with the error it should deliver."""
+def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
+                    cost_ratio=1.0) -> dict:
+    """The tuned allocation at budget B, with the error it should deliver.
+
+    `cost_ratio` converts the allocation's cost unit (Assumption 7's i**d)
+    into the unit `throughput` was measured in (the model's own cost_hint --
+    sites, steps, seconds of burn). A float, or a callable(scales) for a model
+    whose ratio depends on the ladder. It is 1.0 exactly for srw and
+    percolation2d, and 256 for percolation_tau: see
+    tools/cost_model.cost_unit_ratio for what leaving it out cost.
+    """
     t = tuned_allocation(B, d, omega1, rho, m, a1=a1, cv=cv)
     if t.get("n") is None:
         return {"feasible": False, "budget": B,
                 "why": "budget too small for even one sample per scale"}
     err = predict_error(t["n"], t["m0"], d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv)
+    scales = ladder(t["m0"], m, rho)
+    ratio = float(cost_ratio(scales) if callable(cost_ratio) else cost_ratio)
     return {"feasible": True, "budget": B, "n": t["n"], "m0": t["m0"],
-            "scales": ladder(t["m0"], m, rho), "cost": t["cost"],
-            "seconds": t["cost"] / throughput, **err}
+            "scales": scales, "cost": t["cost"], "cost_ratio": ratio,
+            "work": t["cost"] * ratio,
+            "seconds": t["cost"] * ratio / throughput, **err}
 
 
 def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput,
-                      lo=1e3, hi=1e18) -> dict:
+                      cost_ratio=1.0, lo=1e3, hi=1e18) -> dict:
     """Smallest budget whose predicted RMSE meets `target_se`, by bisection.
 
     Bisection rather than algebra because the tuned allocation floors m0 and n
     to integers, so predicted RMSE is a staircase in B, not a smooth power law.
     """
-    kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv, throughput=throughput)
+    kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv, throughput=throughput,
+              cost_ratio=cost_ratio)
     top = plan_for_budget(hi, **kw)
     if not top["feasible"] or top["rmse"] > target_se:
         return {"feasible": False, "why": f"target {target_se:g} unreachable below B={hi:g}"}
@@ -109,6 +124,53 @@ def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput
         if hi / lo < 1.001:
             break
     return plan_for_budget(hi, **kw)
+
+
+def budget_for_seconds(target_seconds: float, *, d, omega1, rho, m, a1, cv,
+                       throughput, cost_ratio=1.0, lo=1.0, hi=1e20) -> dict:
+    """The largest plan whose PREDICTED wall clock fits `target_seconds`.
+
+    Why a bisection rather than `B = seconds * throughput`: that identity holds
+    only when the allocation's cost unit and the throughput's unit are the same
+    thing, which is exactly the assumption that broke (see
+    tools/cost_model.cost_unit_ratio -- it predicted 740 s for a 42-hour run).
+    Bisecting on the predicted seconds, the quantity the caller actually
+    constrained, is correct whatever the ratio is, including one that varies
+    along the ladder.
+
+    Below some budget no allocation is feasible at all (fewer than one sample
+    per scale). Those Bs are treated as "fits", so the predicate stays
+    monotone and the bisection converges on the UPPER edge of the feasible
+    window; if the plan there is still infeasible, the time given cannot buy
+    even one sample per scale and that is what comes back.
+    """
+    kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv,
+              throughput=throughput, cost_ratio=cost_ratio)
+
+    def fits(B):
+        p = plan_for_budget(B, **kw)
+        return (not p.get("feasible")) or p["seconds"] <= target_seconds
+
+    if not fits(hi):
+        for _ in range(200):
+            mid = sqrt(lo * hi)
+            if fits(mid):
+                lo = mid
+            else:
+                hi = mid
+            # Tight, so that a ratio-1 model (srw, percolation2d) lands on
+            # exactly the allocation the old `B = seconds * throughput` gave:
+            # the fix must be a no-op wherever the old formula was right.
+            if hi / lo < 1 + 1e-12:
+                break
+    else:
+        lo = hi
+    out = plan_for_budget(lo, **kw)
+    if not out.get("feasible"):
+        return {"feasible": False, "budget": lo,
+                "why": f"budget too small for even one sample per scale "
+                       f"({target_seconds:g} s at {throughput:.3g} units/s)"}
+    return out
 
 
 def budget_ladder(B: float, *, replicates: int,
@@ -141,7 +203,7 @@ def budget_ladder(B: float, *, replicates: int,
 def error_budget(consts, *, d, omega1, rho, m, a1, cv) -> list[dict]:
     """Per-constant: its se, how far that moves m0, and the RMSE cost."""
     out = []
-    for name in ("omega1", "a1", "d"):
+    for name in ("omega1", "a1", "d", "cv"):
         k = consts.get(name)
         if k is None:
             continue
@@ -243,12 +305,16 @@ def _main(argv=None) -> None:
             "no throughput measured. The pilot records one from its own draw;\n"
             "  re-run the pilot, or pass --throughput <steps/second>.")
 
+    ratio_fn, ratio_note = _cost_ratio(pilot, d)
+
     print(f"study     = {sd}")
     print(f"constants ({require(consts, 'omega1').source})")
     print(format_table(consts))
     print(f"  {'rho':<11}{a.rho:>10.4f}              (design choice)")
     print(f"  {'m':<11}{a.m:>10d}              (design choice)")
-    print(f"  {'throughput':<11}{tp:>10.3g}              steps/s")
+    if ratio_note:
+        print(ratio_note)
+    print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s")
 
     print("\nerror budget -- how far each constant's own uncertainty moves the plan")
     print(f"  {'constant':<11}{'+/- 1 se':>12}{'moves m0 by':>14}{'worst-case RMSE':>18}")
@@ -272,7 +338,8 @@ def _main(argv=None) -> None:
     if advice:
         print(advice)
 
-    kw = dict(d=d, omega1=omega1, rho=a.rho, m=a.m, a1=a1, cv=cv, throughput=tp)
+    kw = dict(d=d, omega1=omega1, rho=a.rho, m=a.m, a1=a1, cv=cv, throughput=tp,
+              cost_ratio=ratio_fn)
     R = max(1, a.replicates)
     # Resolved once, so the accept hint below quotes the duration actually
     # planned on. It used to interpolate `a.time` itself, which is None
@@ -287,7 +354,10 @@ def _main(argv=None) -> None:
         # wall clock. Asking for 2h and being handed a 6h run would be the
         # kind of silent surprise this whole workflow exists to remove.
         seconds = parse_duration(time_text)
-        pl = plan_for_budget(seconds * tp / R, **kw)
+        # NOT `plan_for_budget(seconds * tp / R)`: that multiplication assumes
+        # the allocation's cost unit IS the unit the throughput was measured
+        # in. See budget_for_seconds and tools/cost_model.cost_unit_ratio.
+        pl = budget_for_seconds(seconds / R, **kw)
         head = f"in {human_time(seconds)} total"
     if not pl.get("feasible"):
         raise SystemExit(f"\nno feasible plan {head}: {pl.get('why')}")
@@ -341,6 +411,41 @@ def _main(argv=None) -> None:
               + " --accept")
 
 
+#: What `throughput` counts. The pilot measures it with the model's own
+#: cost_hint, so it is that model's unit -- sites for a lattice, steps for a
+#: walk -- not the allocation's i**d.
+_TP_UNIT = "cost_hint units"
+
+
+def _cost_ratio(pilot: dict, d: float):
+    """(callable(scales) -> ratio, note) for the pilot's model, else (1.0, "").
+
+    The allocation charges i**d; `throughput` is measured in the model's own
+    cost_hint units. `tools/cost_model.cost_unit_ratio` is the factor between
+    them -- 1.0 for srw and percolation2d, 256 for percolation_tau. Computed
+    per candidate ladder, so a `ceil` in a box rule is handled exactly.
+    """
+    recipe = pilot.get("recipe") or {}
+    name, params = recipe.get("model"), recipe.get("params", {})
+    if not name:
+        return 1.0, ""
+    try:
+        spec = get_model(name)
+    except ValueError:
+        return 1.0, ""
+    if spec.cost_hint is None:
+        return 1.0, ""
+
+    def ratio(scales):
+        return cost_unit_ratio(scales, 1.0, d, spec.cost_hint, params)
+
+    probe = ratio(pilot.get("scales") or [1])
+    note = ("" if abs(probe - 1.0) < 1e-9 else
+            f"  {'cost unit':<11}{probe:>10.4g}              "
+            f"{name}'s cost_hint per allocation unit i**d")
+    return ratio, note
+
+
 def _judge(consts, eb, study, root) -> tuple[str, str]:
     """Is the pilot good enough to plan on? Says so; never decides for you.
 
@@ -370,16 +475,30 @@ def _judge(consts, eb, study, root) -> tuple[str, str]:
 
     worst = max((r for r in eb if r["se"] is not None),
                 key=lambda r: r["penalty"], default=None)
-    if om.se > NOISY_OMEGA1_SE:
-        return (f"VERDICT: omega1 is loosely determined (se {om.se:.3f} > "
-                f"{NOISY_OMEGA1_SE}); the plan is usable but soft.",
-                f"  Worst input is {worst['name']}: it moves the optimal m0 by "
-                f"{worst['delta_m0']:+.2f} steps,\n  costing up to "
-                f"{worst['penalty']:.3f}x in RMSE. The optimum is quadratic in m0, so "
-                f"this is\n  survivable -- but tighten it if the run is long:\n{more}")
+    # The constants only ever reach the plan through m0, so the honest joint
+    # test is how far they move m0 TOGETHER (user, 2026-09-06). Summed in
+    # absolute value -- the pessimistic combination, since the constants are
+    # fitted from one pilot and their errors are not independent -- a total
+    # under one step means the plan lands on the same rung whatever the errors
+    # do, which is the whole question. Individually flat inputs can still add
+    # up to a step, which is why this is checked as well as `worst`.
+    total_dm0 = sum(abs(r["delta_m0"]) for r in eb if r["se"] is not None)
+    joint = (f"  Together the constants move m0 by {total_dm0:.2f} steps "
+             f"(sum of |dm0|; " + ", ".join(
+                 f"{r['name']} {r['delta_m0']:+.2f}"
+                 for r in eb if r["se"] is not None) + ").")
+    if om.se > NOISY_OMEGA1_SE or total_dm0 >= 1.0:
+        why = ("omega1 is loosely determined "
+               f"(se {om.se:.3f} > {NOISY_OMEGA1_SE})" if om.se > NOISY_OMEGA1_SE
+               else f"the constants jointly move m0 by {total_dm0:.2f} steps")
+        return (f"VERDICT: {why}; the plan is usable but soft.",
+                f"{joint}\n  Worst single input is {worst['name']}: "
+                f"{worst['delta_m0']:+.2f} steps, costing up to "
+                f"{worst['penalty']:.3f}x in RMSE.\n  The optimum is quadratic in m0, "
+                f"so this is survivable -- but tighten it if the\n  run is long:\n{more}")
     return (f"VERDICT: the pilot is good enough to plan on. Worst input is "
             f"{worst['name']}, costing\n  up to {worst['penalty']:.3f}x in RMSE -- the "
-            f"optimum is quadratic in m0, so it is flat.", "")
+            f"optimum is quadratic in m0, so it is flat.", joint)
 
 
 if __name__ == "__main__":
