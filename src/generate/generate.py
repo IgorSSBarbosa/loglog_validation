@@ -362,6 +362,19 @@ def resolve_n(cfg: dict):
             f"unknown allocation rule {rule!r} in the recipe's \"n\"; "
             f"known: 'neyman', 'snr'"
         )
+    if "budget" not in n:
+        # Checked here rather than left to `n["budget"]` below, which raised a
+        # bare KeyError from inside the allocation with nothing to say which
+        # file was wrong. A rule with no budget is also what src/study/
+        # autopilot.py refuses to grow, and it used to hit THIS KeyError first,
+        # so its own careful message was unreachable.
+        raise SystemExit(
+            f"the {rule!r} allocation rule in the recipe's \"n\" states no "
+            f"\"budget\", so there is nothing to spend.\n"
+            f'  got: "n": {n}\n'
+            f'  wanted: "n": {{"rule": "{rule}", "budget": <work units>}}'
+            + ('' if rule != 'snr' else ', plus "omega1"')
+        )
     d, d_from = resolve_d(cfg, n, rule)
     common = dict(
         budget=float(n["budget"]),
