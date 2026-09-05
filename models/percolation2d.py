@@ -213,6 +213,18 @@ def _wrap_roots(lab: np.ndarray, i: int) -> np.ndarray:
     ever assign a smaller value), which is what makes the loop terminate and
     makes the fixed point the component's smallest label.
 
+    The termination test is on the WHOLE pass -- `root` unchanged after the
+    unions AND the squaring. Testing only the squaring (`root[root] == root`,
+    which is what this function did until 2026-09-05) exits as soon as the
+    pointer array is flat, which can happen on a pass where the union step
+    still moved something and a further pass would move more: the merge then
+    returns a PIECE of a cluster as if it were the cluster, silently. With one
+    wrap direction the chains are too short for that to be reachable -- the
+    old and new merges were checked to agree on all 2976 cylinder samples at
+    i <= 256, so no cylinder result in experiments/03_percolation_zd changes
+    -- but the two-direction wrap in models/percolation_tau.py reaches it
+    easily (4 samples in 300 on a 32x32 torus), which is where it was found.
+
     Merges never cross samples: the wrap joins column 0 to column i-1 of the
     SAME sample, so the block-contiguity of labels is preserved.
     """
@@ -225,12 +237,12 @@ def _wrap_roots(lab: np.ndarray, i: int) -> np.ndarray:
     a, b = left[both], right[both]
     lo, hi = np.minimum(a, b), np.maximum(a, b)
     for _ in range(_MAX_MERGE_PASSES):
+        before = root.copy()
         np.minimum.at(root, hi, root[lo])
         np.minimum.at(root, lo, root[hi])
-        squared = root[root]
-        if np.array_equal(squared, root):
+        root = root[root]
+        if np.array_equal(before, root):
             return root
-        root = squared
     raise RuntimeError(
         f"the periodic-boundary label merge did not converge in "
         f"{_MAX_MERGE_PASSES} passes ({nlab} labels, {a.size} wrap edges). "

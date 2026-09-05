@@ -1183,8 +1183,9 @@ def sec_artifacts(a: Audit) -> None:
                  lambda: load_recipe(cost, "samples"), contains="measure_cost.py")
         a.raises("load_recipe refuses an unknown expected kind", ValueError,
                  lambda: load_recipe(good, "nope"), contains="unknown recipe kind")
-        a.check("RECIPES lists the three kinds and their consumers",
-                lambda: sorted(RECIPES), expect=["cost_probe", "samples", "sweep"])
+        a.check("RECIPES lists the four kinds and their consumers",
+                lambda: sorted(RECIPES),
+                expect=["cost_probe", "samples", "samples_shared", "sweep"])
 
         exp = tmp / "experiments" / "99_x"
         (exp / "recipes").mkdir(parents=True)
@@ -1314,8 +1315,8 @@ def sec_models_registry(a: Audit) -> None:
 
     a.begin("tools/models", "the registry -- a pure importer, no simulation of its own")
 
-    a.check("all three models are registered", lambda: sorted(MODELS),
-            expect=["percolation2d", "srw", "synthetic"])
+    a.check("all four models are registered", lambda: sorted(MODELS),
+            expect=["percolation2d", "percolation_tau", "srw", "synthetic"])
     a.raises("an unknown model is refused with the list of known ones", ValueError,
              lambda: get_model("nope"), contains="unknown model")
     srw, syn = get_model("srw"), get_model("synthetic")
@@ -1334,6 +1335,13 @@ def sec_models_registry(a: Audit) -> None:
             lambda: perc.target_fn is None and perc.true_gamma_key is None)
     a.close("...and its cost_hint is exactly i**2, the lattice's own site count",
             lambda: perc.cost_hint(512, {}), 512.0 ** 2, 0)
+    tau = get_model("percolation_tau")
+    a.check("percolation_tau declares no target_fn either -- tau = 187/91 and the "
+            "hyperscaling relation it comes from stay out of the code",
+            lambda: tau.target_fn is None and tau.true_gamma_key is None)
+    a.close("...and its cost_hint is the area of the box its rung is drawn on, "
+            "L(s)**2 with L(1024) = ceil(16*32) = 512",
+            lambda: tau.cost_hint(1024, {}), 512.0 ** 2, 0)
 
 
 def sec_loglog_plot(a: Audit) -> None:
@@ -1577,6 +1585,182 @@ def sec_percolation2d(a: Audit) -> None:
                 ddof=1) / np.mean(perc.percolation2d(
                     64, n=4000, geometry="cylinder",
                     rng=np.random.default_rng(33)))), 0.376, 0.03)
+
+
+def sec_percolation_tau(a: Audit) -> None:
+    """models/percolation_tau -- the cluster-number density at p_c, scale = cluster size"""
+    from models import percolation_tau as ptau
+
+    a.begin("models/percolation_tau",
+            "the cluster-number density at p_c; the ladder variable is a CLUSTER SIZE")
+
+    rng = np.random.default_rng(0)
+    L16 = ptau.box_side(16)
+    y = ptau.percolation_tau(16, n=5_000, rng=rng)
+    a.check("returns n per-site densities, each an integer count over L(s)**2",
+            lambda: y.shape == (5_000,) and y.min() >= 0.0
+            and np.allclose(y * L16 ** 2, np.round(y * L16 ** 2)))
+    a.check("p = 1 is one cluster filling the torus",
+            lambda: set(np.unique(ptau.percolation_tau(
+                4, n=20, p=1.0, observable="tail", rng=rng))),
+            expect={1.0 / ptau.box_side(4) ** 2})
+    a.check("p = 0 has no clusters at all",
+            lambda: set(np.unique(ptau.percolation_tau(4, n=20, p=0.0, rng=rng))),
+            expect={0.0})
+
+    # The box rule, which is the whole reason no rung has to be discarded.
+    a.check("L(s) = ceil(box_factor * s**box_exponent), and the ceil tolerance "
+            "does not add a row at an exact hit (16*sqrt(16) = 64)",
+            lambda: [ptau.box_side(s) for s in (1, 8, 16, 64, 1024)],
+            expect=[16, 46, 64, 128, 512])
+    a.check("box_exponent = 0 is the fixed-box arm: every rung on one L x L box",
+            lambda: [ptau.box_side(s, 40.0, 0.0) for s in (2, 200, 20_000)],
+            expect=[40, 40, 40])
+    a.close("cost_hint is that box's area -- so d = 2*box_exponent, exactly 1 by "
+            "default, and it is a geometric fact rather than a stated formula",
+            lambda: ptau.cost_hint(1024, {}), 512.0 ** 2, 0)
+
+    # Against an independent flood fill -- the check that found the merge bug.
+    def flood_sizes(grid, wrap):
+        L, M = grid.shape
+        seen = np.zeros_like(grid, dtype=bool)
+        out = []
+        for r0 in range(L):
+            for c0 in range(M):
+                if not grid[r0, c0] or seen[r0, c0]:
+                    continue
+                seen[r0, c0] = True
+                stack, size = [(r0, c0)], 0
+                while stack:
+                    r, c = stack.pop()
+                    size += 1
+                    for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        rr, cc = (r + dr, c + dc)
+                        if wrap:
+                            rr, cc = rr % L, cc % M
+                        if 0 <= rr < L and 0 <= cc < M and grid[rr, cc] and not seen[rr, cc]:
+                            seen[rr, cc] = True
+                            stack.append((rr, cc))
+                out.append(size)
+        return out
+
+    grids = (np.random.default_rng(2).random((30, 32, 32))
+             < ptau.P_C_SQUARE_SITE)
+    for geometry, wrap in (("box", False), ("torus", True)):
+        lab = ptau._label_block(grids)
+        got = ptau._counts_in_range(lab, 32, ptau._roots(lab, 32, geometry), 16, 32)
+        want = [sum(1 for z in flood_sizes(g, wrap) if 16 <= z < 32) for g in grids]
+        a.check(f"{geometry}: the block-labelled count matches a plain flood fill "
+                f"on 30 critical 32x32 lattices", lambda got=got: list(got),
+                expect=want)
+
+    one = ptau.percolation_tau(16, n=300, rng=np.random.default_rng(3))
+    a.check("blocking over the sample axis is bit-identical to one unblocked call",
+            lambda: np.array_equal(
+                one, ptau.percolation_tau(16, n=300, rng=np.random.default_rng(3),
+                                          block_n=7)))
+    a.check("...at block_n = 1 as well -- the case that exposed the early-exit "
+            "bug in the label merge",
+            lambda: np.array_equal(
+                one, ptau.percolation_tau(16, n=300, rng=np.random.default_rng(3),
+                                          block_n=1)))
+
+    def next_draw(observable, geometry):
+        r = np.random.default_rng(11)
+        ptau.percolation_tau(16, n=40, observable=observable, geometry=geometry, rng=r)
+        return float(r.random())
+    a.check("neither switch touches the RNG: all four combinations see the same "
+            "lattices at one seed",
+            lambda: len({next_draw(o, g) for o in ptau.OBSERVABLES
+                         for g in ptau.GEOMETRIES}), expect=1)
+
+    kw = dict(n=200, box_factor=24.0, box_exponent=0.0, geometry="torus")
+    a.check("#[s, 2s) = #>=s - #>=2s exactly, sample by sample, on the same box",
+            lambda: np.allclose(
+                ptau.percolation_tau(9, observable="bin", bin_ratio=2.0,
+                                     rng=np.random.default_rng(4), **kw),
+                ptau.percolation_tau(9, observable="tail",
+                                     rng=np.random.default_rng(4), **kw)
+                - ptau.percolation_tau(18, observable="tail",
+                                       rng=np.random.default_rng(4), **kw)))
+
+    a.raises("an unknown observable is refused", ValueError,
+             lambda: ptau.percolation_tau(8, observable="histogram"),
+             contains="unknown observable")
+    a.raises("an unknown geometry is refused", ValueError,
+             lambda: ptau.percolation_tau(8, geometry="cylinder"),
+             contains="unknown geometry")
+    a.raises("a cluster size below 1 is refused", ValueError,
+             lambda: ptau.percolation_tau(0), contains="cluster size")
+    a.raises("a p outside [0, 1] is refused", ValueError,
+             lambda: ptau.percolation_tau(4, p=1.5), contains="p must be in")
+    a.raises("a bin with no room in it is refused", ValueError,
+             lambda: ptau.percolation_tau(8, bin_ratio=1.0), contains="bin_ratio")
+    a.raises("a box too small to hold the cluster it is looking for is refused, "
+             "rather than returning an all-zero rung",
+             ValueError,
+             lambda: ptau.percolation_tau(100, box_factor=2.0, box_exponent=0.0),
+             contains="does not fit in the box")
+
+    a.check("simulate() is the registry's entry point and honours params",
+            lambda: ptau.simulate(16, 5, {"observable": "tail",
+                                          "geometry": "box"}, rng).shape,
+            expect=(5,))
+    a.check("an unseeded call still works (fresh entropy)",
+            lambda: ptau.percolation_tau(8, n=3).shape, expect=(3,))
+    # --- the shared-lattice sampler: one box, every rung ---
+    windows = ptau.bin_edges([8, 16, 32])
+    a.check("bin_edges gives the same windows simulate uses",
+            lambda: windows, expect=[(8, 16), (16, 32), (32, 64)])
+    a.check("shared_box_side inverts s_top <= cut_fraction * L**df_lower, tightly",
+            lambda: (lambda L: (windows[-1][1] <= 0.05 * L ** 1.85
+                                and windows[-1][1] > 0.05 * (L - 1) ** 1.85))(
+                ptau.shared_box_side(windows[-1][1], 1.85, 0.05)))
+    a.raises("a cut_fraction outside (0, 1] is refused", ValueError,
+             lambda: ptau.shared_box_side(64, 1.85, 0.0), contains="cut_fraction")
+
+    L_shared = ptau.shared_box_side(windows[-1][1], 1.85, 0.05)
+    c = ptau.binned_counts(L_shared, 60, windows, rng=np.random.default_rng(3))
+    a.check("binned_counts returns one column per window, off the same lattices",
+            lambda: c.shape, expect=(60, 3))
+    a.check("...and every window equals the per-rung path on those lattices -- the "
+            "cheap sampler changes the BUDGET, not the observable",
+            lambda: all(np.array_equal(
+                c[:, j],
+                np.round(ptau.percolation_tau(
+                    lo, n=60, observable="bin", bin_ratio=hi / lo,
+                    box_factor=float(L_shared), box_exponent=0.0,
+                    rng=np.random.default_rng(3)) * L_shared ** 2).astype(np.int64))
+                for j, (lo, hi) in enumerate(windows)))
+    a.check("disjoint windows add up WITHIN each lattice -- the correlation, exactly",
+            lambda: np.array_equal(
+                *(lambda d: (d[:, 0] + d[:, 1], d[:, 2]))(
+                    ptau.binned_counts(48, 100, [(8, 16), (16, 32), (8, 32)],
+                                       rng=np.random.default_rng(5)))))
+    samples, info = ptau.shared_sampler([8, 16, 32], 40, {}, np.random.default_rng(2))
+    a.check("shared_sampler returns one array per scale plus an info dict that "
+            "stamps the run as shared",
+            lambda: (sorted(samples) == [8, 16, 32]
+                     and all(v.shape == (40,) for v in samples.values())
+                     and info["shared_lattice"] is True
+                     and info["sites"] == 40 * info["L"] ** 2))
+    a.raises("an unordered ladder is refused", ValueError,
+             lambda: ptau.shared_sampler([16, 8], 5, {}, np.random.default_rng(0)),
+             contains="strictly increasing")
+    a.note("shared_sampler BREAKS ground rule 2 across scales, deliberately",
+           f"its rungs come from the same lattices, so Cov(Ybar_s, Ybar_s') != 0 "
+           f"(measured: a flat +0.11 pedestal, not decaying in lag). Because the "
+           f"eq. (526) weights sum to zero that costs the slope's error bar 1-6%, "
+           f"but every run drawn this way is stamped shared_lattice=true so it "
+           f"cannot be mistaken for an independent one.")
+
+    a.note("Y_s = 0 is ORDINARY here, unlike percolation2d's south anchor",
+           f"the count of clusters at one size scale in one box is a small "
+           f"near-Poisson number -- zero fraction {ptau.zero_fraction(y):.2f} at "
+           f"the default box_factor = {ptau.DEFAULT_BOX_FACTOR}, i.e. a mean of "
+           f"~{-np.log(max(ptau.zero_fraction(y), 1e-12)):.2f} clusters per box. "
+           f"Assumption 2 is REPORTED by zero_fraction, never asserted; "
+           f"box_factor is the knob that controls it.")
 
 
 def sec_synthetic(a: Audit) -> None:
@@ -2994,7 +3178,7 @@ STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
-    "models": [sec_srw, sec_percolation2d, sec_synthetic],
+    "models": [sec_srw, sec_percolation2d, sec_percolation_tau, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
     "calibration": [sec_calibration],
     "static": [sec_static],

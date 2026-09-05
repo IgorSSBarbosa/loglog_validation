@@ -200,6 +200,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `synthetic` | planted eq. (232) | `cost_scale·i**cost_d`, else 1 | any, else 0 | recovers the planted $d$ | **yes** |
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
+| `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
 
 ### `synthetic.py` — the planted generator
 
@@ -317,6 +318,204 @@ is what this rung *measures*. Verified: `tools/tests/test_percolation2d.py` — 
 enumeration of $\mathbb{E}Y_i$ over all $2^{i^2}$ configurations at $i=2,3$ for **both**
 geometries, an independent flood fill (wrapping or not) on random critical lattices, the
 exact zero rate, `block_n` invariance, and the merge chain above.
+
+
+### `percolation_tau.py` — the cluster-number density, and a ladder in cluster size
+
+`percolation_tau(s, n=1, p=P_C_SQUARE_SITE, observable="bin", bin_ratio=2.0,
+box_factor=16.0, box_exponent=0.5, geometry="torus", rng=None, block_n=None)`.
+
+**The scale is not a box side.** At $p_c$ the number of clusters of size $s$ per site
+decays as $n_s \asymp C s^{-\tau}$ with the Fisher exponent $\tau = 187/91$ in $d=2$
+(Stauffer & Aharony; Malthe-Sørenssen, *Percolation Theory Using Python*, eq. 4.4 and
+Fig. 4.2). The article's estimator fits $\log \mathbb E Y_i$ against $\log i$ on the
+ladder $i=\rho^k$, so the only way to put $\tau$ in front of it is to make the ladder
+variable the one the power law is *in*: here `simulate`'s first argument is a **cluster
+size** $s$, and
+
+$$Y_s = \frac{\#\{\text{clusters of size } \in [s,\,b\,s)\}}{L(s)^2}\ \ (\texttt{"bin"}),
+\qquad
+Y_s = \frac{\#\{\text{clusters of size} \ge s\}}{L(s)^2}\ \ (\texttt{"tail"}),$$
+
+both with $\mathbb E Y_s \asymp a_0 s^{1-\tau}$, so $\gamma = 1-\tau$ and the conversion
+at reporting time is $\boxed{\hat\tau = 1 - \hat\gamma}$, with acceptance value
+$\gamma = -96/91 = -1.0549\ldots$ — **the first negative $\gamma$ in the repo**
+($Y_s$ decays along the ladder; eq. (523)–(531) is an OLS slope and does not care, but a
+plot reader does). Dividing by the box area is what makes that conversion carry no
+design constant: it holds for *any* box rule. The bin width $\Delta s=(b-1)s$ is
+deliberately **not** divided out, though the book's eq. (4.4) does divide by it — it is a
+power of the scale, so dividing would move exactly one unit of the exponent inside the
+simulator.
+
+**The geometric ladder *is* Fig. 4.2's logarithmic binning.** Bin edges $a^i$ with $a=2$
+are exactly a powers-of-two ladder with `bin_ratio` $=2$: one rung per bin, tiling $s$
+with no gap and no overlap. The one difference from the book is ground rule 2 — each rung
+is drawn on its **own independent boxes**. One lattice does supply every bin at once, and
+that is what makes Fig. 4.2 cheap, but it correlates the rungs, and the CLT (eq. 583) the
+error bars come from no longer applies to them.
+
+**Why the box grows with the rung.** In a fixed $L\times L$ box, $n_s(L)$ is cut off
+around $s\sim L^{d_f}$, so the top of the $s$-range bends down and has to be discarded —
+and that is the wrong end for this estimator, which drops the $m_0$ *smallest* rungs and
+keeps the largest. Tying the box to the rung,
+
+$$L(s) = \lceil \texttt{box\_factor}\cdot s^{\texttt{box\_exponent}}\rceil,
+\qquad \mathrm{cost}(s) = L(s)^2,$$
+
+puts every rung at the same relative distance from its own cutoff, so **no rung is
+thrown away** and $d = 2\,$`box_exponent` $= 1$ exactly at the default. Two knobs, both
+measurable rather than argued:
+
+- `box_exponent` — $1/2$ (default) needs no knowledge of $d_f$ and gives an exact
+  $d=1$; the cutoff ratio $s/L^{d_f}$ then drifts as $s^{5/96}$ (13% per decade) and
+  $\mathrm{Var}(\xi_s)\asymp1/\lambda$ drifts as $s^{5/91}$ — the same slow Assumption-6
+  divergence, and nearly the same exponent, as `percolation2d`'s origin anchor.
+  $48/91 = 1/d_f$ freezes both, at the price of importing $d_f$ as a **design** constant
+  (the category `omega1` is in for an allocation: it fixes the geometry, never reaches an
+  estimator, and getting it wrong changes the noise, not the fitted $\tau$).
+- `box_factor` — nearly free precision-wise, since cost and count both scale as
+  `box_factor`$^2$. Measured at $s=64$ (bin, torus): $\mathrm{cv}\cdot L$, the precision
+  a unit of budget buys, is $73.5 / 73.6 / 76.3$ at `box_factor` $=8/16/32$, while the
+  zero fraction falls $0.45 \to 0.04 \to 0.00$. Hence the default 16, not the 8 that
+  first looked cheap.
+
+The **fixed-box design is still reachable** and is the honest comparison arm:
+`box_exponent = 0` with `box_factor = L` draws every rung on one $L\times L$ box (then
+$d=0$, outside the allocation formulas, so such a recipe must state its own `n` list) and
+the ladder has to stop well below $L^{d_f}$ by hand.
+
+**`geometry = "torus"` is the default here**, unlike `percolation2d`, whose south-anchored
+count *needs* a south wall. A cluster touching a wall is truncated, i.e. recorded at a
+size below its own — which does not just lose clusters from a bin, it *feeds* the bin
+from above, and since $n_s$ falls steeply the influx wins. Measured paired on the same
+lattices, box/torus $= 1.571,\ 1.561,\ 1.565,\ 1.588$ at $s = 16, 64, 256, 1024$: an open
+box reports **57% more clusters in every bin**. Because $L(s)$ grows with $s$ that is
+almost purely an amplitude — it lands in $a_0$ — and the residual drift is $+0.0027$ in
+$\gamma$, about half the pilot's statistical error. So `"box"` is usable and is kept for
+the head-to-head, but it buys 57% of $a_0$ and a correction term for nothing.
+
+**Assumption 2 is reported, never asserted** — and unlike `percolation2d`'s south anchor,
+where a zero is exponentially rare, a zero here is *ordinary*: the count in one box is a
+small near-Poisson number, so a fraction $\approx e^{-\lambda}$ of draws are $0$ by
+design (4% at the default `box_factor`). `zero_fraction(draws)` reports it; there is no
+closed form to check it against.
+
+Implementation notes, each pinned by a test:
+
+- **One `ndimage.label` per block**, stacked with a blank separator row, exactly as
+  `percolation2d` does it and for the same reason. The code is duplicated rather than
+  imported: no model file imports another.
+- **The torus merge joins column $0$ to $L-1$ *and* row $0$ to $L-1$ of the same
+  sample**, by the same vectorized pointer-jumping union-find over labels — but its
+  termination test is on the **whole pass** (`root` unchanged after the unions *and* the
+  squaring), not on the squaring alone. Testing only the squaring, which is what
+  `percolation2d`'s `_wrap_roots` does, exits as soon as the pointer array is flat even
+  when a further pass would still merge: on the $32\times32$ torus at `default_rng(3)` it
+  reported 2 clusters where the flood fill finds 1, in 4 of 300 samples. It surfaced as a
+  `block_n` invariance failure, since the label numbering a block produces decides
+  whether the early exit is reachable. (Checked separately: with only `percolation2d`'s
+  single wrap direction the chains are too short to reach it — current and strict merges
+  agree on all 2976 cylinder samples tried, $i \le 256$.)
+- **label → sample by one scatter over the sites** (`owner[flat] = sample index`), which
+  is well defined because a cluster never spans two samples, and which assumes nothing
+  about the order `ndimage.label` hands out labels.
+
+**Measured, on the pilot pair of runs it was written for** (`samples_tau_torus.json` /
+`samples_tau_tail.json`, $s = 8\ldots2048$, $4\times10^9$ sites each, 161 s):
+
+| | cv over the ladder | zero fraction | $\hat\gamma\pm$ se at $m_0=3$ | $\hat\tau$ |
+|---|---|---|---|---|
+| `bin` | $0.578$–$0.617$ | $0.042$–$0.061$ | $-1.0394 \pm 0.0032$ | $2.0394$ |
+| `tail` | $0.420$–$0.446$ | $0.000$ | $-1.0391 \pm 0.0023$ | $2.0391$ |
+
+against $\tau = 187/91 = 2.05495$, i.e. both arms land 0.5% low and are **bias-limited,
+not variance-limited** — $\hat\gamma$ climbs monotonically toward the truth as $m_0$
+grows ($2.027 \to 2.041$ over $m_0 = 0\ldots5$ on the bin arm) and the direct fit of
+eq. (232), which models the correction instead of dropping it, gives
+$\hat\tau = 2.044$ with $\hat\omega_1 = 0.98$, $\hat a_1 = -0.89$. A correction with
+$\omega_1 \approx 1$ is what the discreteness of $\sum_{u=s}^{2s-1}u^{-\tau}$ alone
+would produce, so this rung has an $\omega_1$ worth measuring rather than a mystery.
+The cost probe passes too: affine $\hat d = 1.049 \pm 0.019$ over $s = 16\ldots4096$
+against the declared $0.9993$ ($+2.6\sigma$, 5.0% — inside the driver's 20% tolerance),
+with the usual small-scale story (pure-power $\hat d = 0.88$, overhead 66% of the
+measurement at $s=16$).
+
+**The one unit trap.** A recipe's `budget` is charged at $i^d$ *with the scale itself*
+(`tools/allocation.py`), not at `cost_hint`'s value — for `srw` and `percolation2d` those
+coincide, and here they do not: one budget unit is `box_factor`$^2 = 256$ lattice sites.
+Ask for $S/256$ to spend $S$ sites. The first run of this model asked for $4\times10^9$
+meaning sites, and was on course to spend $10^{12}$ of them.
+
+#### The cheap version: `shared_sampler`, one box for the whole ladder
+
+`simulate` pays for a fresh box **per rung**. But one critical lattice already holds
+clusters of every size below its own cutoff, so a box sized for the *top* rung can serve
+the entire ladder — Fig. 4.2's own procedure. `shared_sampler(scales, n, params, rng)`
+does that, driven by `src/generate/generate_shared.py` and a `samples_shared` recipe
+(`n_lattices` replaces `n`: there is nothing to allocate when every rung reads the same
+lattices). The box comes from the top rung,
+
+$$L=\left\lceil\left(s_{\text{top edge}}/\kappa\right)^{1/d_f^{-}}\right\rceil,$$
+
+with two **design** constants (neither reaches an estimator): $d_f^{-}$, a *lower* bound
+on $d_f$ so the trusted region is conservative (default $1.85$ — below this repo's own
+$1.9002/1.9059/1.9161$ and below $91/48$), and $\kappa$, the margin that keeps the top bin
+out of the cutoff.
+
+**$\kappa$ is measured, not guessed.** Hold one bin fixed, grow $L$, and watch
+$\overline Y_s$ — a per-site density, so it must converge ($1.2\times10^9$ sites per point):
+
+| $s_{\text{hi}}/L^{1.85}$ | 0.43 | 0.39 | 0.23 | 0.21 | 0.12 | $\le 0.10$ |
+|---|---|---|---|---|---|---|
+| bin $[64,128)$ | — | $+13.9\%$ | — | $-0.00\%$ | — | $<0.15\%$ |
+| bin $[256,512)$ | $+20.4\%$ | — | $+0.39\%$ | — | $-0.23\%$ | $<0.6\%$ |
+
+The two bins agree **in the scaled variable**, which is what had to be true for one
+$\kappa$ to serve every rung. Bias is under the noise floor for $s\lesssim0.23\,L^{d_f}$
+and explodes past $\approx0.4$; the default $\kappa = 0.05$ keeps a $4.6\times$ margin.
+Note $\kappa$ costs nothing: at fixed top-rung precision the total is $n L^2 = C/c_{\rm top}$,
+independent of $L$ — $\kappa$ only trades box size against lattice count.
+
+**What it buys, measured on the same ladder ($s=8\ldots2048$) and the same estimator:**
+
+| | sites | wall clock | $\hat\tau$, $m_0=3$ | $m_0=4$ | $m_0=5$ |
+|---|---|---|---|---|---|
+| independent rungs (`generate.py`) | $4.0\times10^9$ | 161 s | 2.0394 | 2.0391 | 2.0411 |
+| shared lattice (`generate_shared.py`), mean of 4 | $1.25\times10^9$ | 49 s | 2.0441 | 2.0468 | **2.0491** |
+
+against $\tau = 2.05495$. **3.2× cheaper and closer at every $m_0$** — and it keeps
+converging as $m_0$ grows where the independent run flattens near 2.039. The likely
+mechanism, stated as a hypothesis on one independent run against four shared ones: with
+one box, any box-size effect is *common to every rung* and cancels from a slope whose
+weights sum to zero (eq. 542), whereas the per-rung sampler changes the box with the
+rung, so its finite-size effect does not cancel.
+
+**What it costs: the rungs are correlated**, which is outside the article's independence
+assumption and is the point of the experiment (user, 2026-09-05). Measured on the
+$n=6100$ run, correlation of $Y_s$ across rungs:
+
+| lag (doublings) | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| mean corr | $+0.124$ | $+0.119$ | $+0.110$ | $+0.105$ |
+
+i.e. **a flat $\approx+0.11$ pedestal that does not decay in lag** — a common mode (a
+lattice that happens to be busy is busy at every size), not a neighbour effect. That is
+the benign case for this estimator: $\sum_k w_{k,m}=0$, so a common mode cancels, and the
+covariance-corrected error bar
+$\mathrm{se}^2 = w^\top\mathrm{Cov}(\log\overline Y)\,w$ differs from the naive
+independent-rung one by $+6\%$ at $m_0=0$ and $\le1\%$ from $m_0=3$ on. Replicating the
+whole experiment (16 replicates, $s\le512$) the empirical spread of $\hat\gamma$ is
+$0.0033$ against a predicted $0.0041$ — the stated bar is if anything **conservative**
+($\mathrm{sd}/\mathrm{se}=0.78\pm0.14$; a proper coverage study at $R\ge50$ is the
+follow-up, `calibration/check_coverage.py` is the machinery for it).
+
+No `target_fn`: $\tau = 187/91$, and the hyperscaling relation $\tau = 1 + d/d_f$ it
+comes from, are acceptance criteria and `--expect-gamma` arguments, never inputs.
+Verified: `tools/tests/test_percolation_tau.py` — exhaustive enumeration of
+$\mathbb E Y_s$ over all $2^{L^2}$ configurations at $L=2,3$ for both geometries and both
+observables, an independent flood fill (wrapping or not) on random critical lattices up
+to $L=32$, the exact identity $\#[s,2s) = \#{\ge}s - \#{\ge}2s$ sample by sample,
+`block_n` invariance, and the RNG-consumption invariance of both switches.
 
 ---
 

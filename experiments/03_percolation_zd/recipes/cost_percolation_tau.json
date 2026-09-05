@@ -1,0 +1,25 @@
+{
+  "kind": "cost_probe",
+  "model": "percolation_tau",
+  "params": {
+    "p": 0.5927460507921,
+    "observable": "bin",
+    "bin_ratio": 2.0,
+    "box_factor": 16.0,
+    "box_exponent": 0.5,
+    "geometry": "torus"
+  },
+  "scales": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "repeats": 20,
+  "seed": 20260905
+}

@@ -47,7 +47,9 @@ flowchart TB
     subgraph expP["Experiment P — which observable? (percolation)"]
         CO["estimate/compare_observables.py<br/>R full experiments per arm"]
         P2D["models/percolation2d.py<br/>south vs origin, box vs cylinder<br/>p_c, d=2"]
+        PTAU["models/percolation_tau.py<br/>ladder in CLUSTER SIZE s<br/>γ = 1-τ, d = 2·box_exponent"]
         P2D --> CO
+        PTAU --> CO
     end
 
     subgraph check["calibration/ — are the error bars real?"]
@@ -128,7 +130,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
-| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d` |
+| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d`, `percolation_tau` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
 
 ### `src/` — the scripts a human runs
@@ -139,6 +141,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | module | L | tags | purpose | depends on |
 |---|---|---|---|---|
 | `generate/generate.py` | 357 | `experiment`, `tool` | Draw samples per a recipe. Allocation rules (`snr`/`neyman`), chunked output for large $n$. | `allocation`, `models`, `persistence` |
+| `generate/generate_shared.py` | 172 | `experiment`, `tool` | The cheap counterpart: draws the WHOLE ladder from one set of realizations, for models declaring a `shared_sampler`. Rungs are correlated by construction — every run is stamped `shared_lattice` so it cannot be mistaken for an independent one. | `models`, `persistence`, `artifacts` |
 | `estimate/measure_cost.py` | 214 | `experiment`, `budget tool` | **Experiment A**: time `simulate()` per scale, fit $d$, and score it against the model's declared `cost_hint`. | `cost_model`, `loglog`, `models`, `persistence` |
 | `estimate/estimate_omega1.py` | 198 | `experiment`, `statistical tool` | **Experiment B**: $\omega_1$, $a_1$, $\gamma$, $a_0$ from one run. | `correction`, `loglog`, `persistence` |
 | `estimate/compare_observables.py` | 265 | `experiment`, `statistical tool` | Two observables of the same $\gamma$, one budget: $R$ independent full experiments per arm, scored by bias/sd/RMSE against a reporting-only `--truth`. Written for percolation's side-vs-origin question. | `generate`, `loglog`, `models`, `rng`, `artifacts` |
@@ -163,6 +166,8 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 |---|---|---|---|
 | `srw.py` | 143 | `model` | $\lvert S_k\rvert$ for a $\pm1$ random walk. Deliberately $\Theta(k)$: integer-style stepping, **not** `binomial`, so it stays a percolation stand-in with real cost. |
 | `synthetic.py` | 136 | `model` | Planted eq. (232) generator with arbitrary $(a_j,\omega_j)$ and pluggable noise. The only model with a `target_fn`. |
+| `percolation2d.py` | 390 | `model` | Critical site percolation, $Y_i$ = sites connected to the south side of an $i\times i$ box. Switches: `anchor` (south/origin), `geometry` (box/cylinder). $\gamma=d_f$, $d=2$. |
+| `percolation_tau.py` | 497 | `model` | The cluster-number density at $p_c$ — **the ladder variable is a cluster size $s$, not a box side**, and $\gamma = 1-\tau$. Each rung gets its own $L(s)=\lceil f s^{b}\rceil$ torus, which is what replaces "discard the top of the $s$-range". Switches: `observable` (bin/tail), `geometry` (torus/box). |
 
 ---
 

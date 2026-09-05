@@ -260,6 +260,8 @@ if __name__ == "__main__":
 RECIPES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "samples":    ("samples", "src/generate/generate.py",
                    ("model", "scales", "n")),
+    "samples_shared": ("samples", "src/generate/generate_shared.py",
+                       ("model", "scales", "n_lattices")),
     "cost_probe": ("cost", "src/estimate/measure_cost.py",
                    ("model", "scales", "repeats")),
     "sweep":      ("sweep", "src/budget/allocation_experiment.py",

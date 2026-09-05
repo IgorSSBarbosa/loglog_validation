@@ -24,6 +24,7 @@ from typing import Callable
 import numpy as np
 
 from models import percolation2d as model_percolation2d
+from models import percolation_tau as model_percolation_tau
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -59,6 +60,23 @@ class ModelSpec:
     #: cross-check (tools/cost_model.py's `compare_cost_models`); a declared
     #: hint that disagrees with the clock is a warning, not a silent choice.
     cost_hint: Callable[[int, dict], float] | None = None
+    #: shared_sampler(scales, n, params, rng) -> ({scale: n samples}, info)
+    #:
+    #: The whole ladder drawn from ONE set of n underlying realizations,
+    #: instead of `simulate` being called once per scale with an independent
+    #: stream. Declared only by models where one realization contains every
+    #: rung at once -- percolation_tau, where a single lattice holds clusters
+    #: of every size below its cutoff -- and it exists to make the cheap
+    #: version of that measurement runnable (user, 2026-09-05).
+    #:
+    #: It deliberately BREAKS PLAN.md ground rule 2 across scales: the rungs
+    #: share randomness, so Cov(Ybar_s, Ybar_s') != 0 and the CLT of eq. (583)
+    #: does not apply to them as written. That is the experiment. The rule
+    #: still holds where it is load-bearing -- rows are i.i.d., and replicates
+    #: draw independent streams -- and every run drawn this way is stamped
+    #: `shared_lattice` in its metadata (src/generate/generate_shared.py) so
+    #: no reader can mistake one for the other.
+    shared_sampler: Callable[..., tuple[dict, dict]] | None = None
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -87,6 +105,17 @@ MODELS: dict[str, ModelSpec] = {
         # the code path so no estimator is handed the answer it is measuring.
         # It lives as a written acceptance criterion in
         # experiments/03_percolation_zd/README.md. See models/percolation2d.py.
+    ),
+    "percolation_tau": ModelSpec(
+        simulate=model_percolation_tau.simulate,
+        cost_hint=model_percolation_tau.cost_hint,
+        # No target_fn/true_gamma_key, for the same reason as the two above.
+        # The scale handed to simulate() here is a CLUSTER SIZE s, not a box
+        # side, and gamma = 1 - tau: the Fisher exponent tau = 187/91 and the
+        # hyperscaling relation tau = 1 + d/d_f stay OUT of the code and enter
+        # only as --expect-gamma / --truth at reporting time. See
+        # models/percolation_tau.py.
+        shared_sampler=model_percolation_tau.shared_sampler,
     ),
 }
 
