@@ -86,15 +86,73 @@ the event that no cluster crosses half the box, whose probability at p_c is a
 CONSTANT bounded away from 0 and 1 rather than one tending to 1 (the origin
 anchor's failure mode, Var(xi_i) ~ 1/pi_1(i) -> infinity).
 
-So there are three anchors here and they answer different questions:
+`anchor = "slab"`: the seed set as one continuous knob
+------------------------------------------------------
+The face has i**(dim-1) seeds and the origin has one, and the argument above
+says the exponent depends on WHICH -- so the natural parameter is the seed
+set's own dimension. `anchor = "slab"` with `params["anchor_dim"] = k` seeds
+on the CENTRAL k-dimensional slab (every axis from k on pinned at the box
+centre): k = 0 is the centre site, k = 1 a central axis, k = 2 a central
+plane, k = dim every site. Igor's proposal, 2026-09-06: an axis has i seeds,
+so it avoids both the face's i**(dim-1) and the origin's lone seed, which "has
+a decent probability of being isolated in a small cluster even if the box is
+huge".
+
+Repeating the depth sum for a k-slab -- i**k * h**(dim-k-1) sites at distance
+h, each connected with probability pi_1(h) * q_k(h), where q_k(h) =
+min(1, h**(k - beta/nu)) is the chance a cluster with h**d_f sites in the ball
+of radius h meets the h**k sites of the slab inside it -- gives three regimes:
+
+    gamma(k) = k + gamma/nu     for k < beta/nu     (seeds too sparse:
+                                                     the two-point function,
+                                                     not the cluster, decides)
+             = d_f              for beta/nu <= k <= d_f
+             = k                for k > d_f         (saturated: the O(1)-deep
+                                                     layer around the slab is
+                                                     the whole count)
+
+with gamma/nu = dim - 2 beta/nu the susceptibility exponent. The middle
+regime is a PLATEAU IN k, and finding it is what makes this a measurement
+rather than a fit: gamma-hat(k) flat over a range of k IS d_f, and the two
+places it starts to move give beta/nu and d_f without either being assumed.
+
+Both familiar anchors are its endpoints: k = 0 is "origin" (identically -- a
+test), and k = dim-1 is a central hyperplane, the bulk twin of "face". The
+face itself stays a separate anchor because it is a BOUNDARY object: the
+cylinder geometry exists to give it its two walls, and surface and bulk need
+not share an exponent.
+
+Measured, dim = 3 (3e8 sites, local slopes over i = 8..64, d_f = 2.5226,
+gamma/nu = 2.0452):
+
+    k = 0  origin   predicted 2.045   1.995  2.120  1.865
+    k = 1  axis     predicted 2.523   2.575  2.540  2.576
+    k = 2  face     predicted 2.523   2.698  2.650  2.631
+
+-- and the noise falls monotonically in k while the bias rises, so the best
+choice is the SMALLEST k still inside the window (dim = 3, i = 32; dim = 5,
+i = 16):
+
+    k                 0      1      2      3      4
+    zero fraction  0.698  0.000  0.000    --     --      (dim = 3)
+    cv              3.08   0.66   0.16     --     --
+    zero fraction  0.873  0.107  0.000  0.000  0.000     (dim = 5)
+    cv             11.48   3.19   0.89   0.22   0.05
+
+The single-seed pathology Igor named is the first column, measured: the origin
+is zero on 70% of draws at dim = 3 and 87% at dim = 5. One extra seed
+dimension removes it outright at dim = 3.
+
+So there are four anchors and they answer different questions:
 
     "face"      ground rule 7's observable, verbatim. gamma = max(d_f, dim-1).
     "face_far"  the same, restricted to the far half. gamma = d_f in every dim.
     "origin"    the cluster of the centre site. NOT d_f -- see below.
+    "slab"      the central k-slab, k = params["anchor_dim"]. The knob.
 
-None of the three is preferred in the code: `simulate` defaults to "face"
-because that is what ground rule 7 says and what dim = 2 must reproduce, and
-the choice between them is something the experiments MEASURE.
+None is preferred in the code: `simulate` defaults to "face" because that is
+what ground rule 7 says and what dim = 2 must reproduce, and the choice is
+something the experiments MEASURE.
 
 Geometry
 --------
@@ -238,7 +296,7 @@ P_C_SOURCE: dict[int, str] = {
     13: "Mertens & Moore (2018), 0.0427150211(1)",
 }
 
-ANCHORS = ("face", "face_far", "origin")
+ANCHORS = ("face", "face_far", "origin", "slab")
 GEOMETRIES = ("box", "cylinder", "torus")
 
 #: "south" is models/percolation2d.py's name for the x_0 = 0 face. Accepted
@@ -447,15 +505,39 @@ def _roots(lab: np.ndarray, i: int, dim: int, geometry: str) -> np.ndarray:
     return _wrap_roots(lab, i, axes)
 
 
-def _anchor_keep(lab: np.ndarray, roots: np.ndarray) -> np.ndarray:
-    """Per-LABEL mask: does this label's cluster touch the slab x_0 = 0?
+def _seed_slab(lab: np.ndarray, i: int, dim: int, k: int) -> np.ndarray:
+    """The central k-dimensional seed slab, spanning spatial axes 0..k-1.
 
-    Built per ROOT and mapped back per label, so the only full-size operation
-    left to the caller is the single `keep[lab]` gather a box already pays --
-    a periodic geometry adds no second pass over the lattice.
+    Every axis from k on is pinned at the box centre, so the slab is a BULK
+    object: k = 0 is the centre site (the "origin" anchor), k = 1 a central
+    axis, k = 2 a central plane, k = dim the whole box. It is deliberately not
+    the box FACE, which is a boundary object and stays its own anchor -- the
+    cylinder geometry exists to give that face its two walls, and the
+    surface-vs-bulk distinction matters for the exponent.
+
+    Spatial axis a is array axis a+1; axis 0 carries the separator at index i,
+    which the `slice(0, i)` excludes (it is label 0 anyway).
     """
+    idx: list = [slice(None), slice(0, i)] + [slice(None)] * (dim - 1)
+    for a in range(k, dim):
+        idx[a + 1] = i // 2
+    return lab[tuple(idx)]
+
+
+def _anchor_keep(lab: np.ndarray, roots: np.ndarray,
+                 seeds: np.ndarray | None = None) -> np.ndarray:
+    """Per-LABEL mask: does this label's cluster touch the seed set?
+
+    `seeds` defaults to the slab x_0 = 0, i.e. ground rule 7's face. Built per
+    ROOT and mapped back per label, so the only full-size operation left to the
+    caller is the single `keep[lab]` gather a box already pays -- a periodic
+    geometry adds no second pass over the lattice, and neither does a smaller
+    seed set.
+    """
+    if seeds is None:
+        seeds = lab[:, 0]
     keep_root = np.zeros(roots.size, dtype=bool)
-    keep_root[roots[lab[:, 0]]] = True     # every root touching the anchor slab
+    keep_root[roots[seeds]] = True         # every root touching the seed set
     keep = keep_root[roots]
     keep[0] = False                   # label 0 is "closed", and the separators
     return keep
@@ -498,6 +580,18 @@ def _resolve_anchor(anchor: str) -> str:
     return anchor
 
 
+def _check_anchor_dim(anchor_dim: int | None, dim: int) -> int:
+    """The seed slab's dimension k, range-checked. 0 <= k <= dim."""
+    if anchor_dim is None:
+        raise ValueError('anchor="slab" needs params["anchor_dim"] (0 = the '
+                         'centre site, 1 = a central axis, 2 = a central '
+                         f'plane, ..., {dim} = every site)')
+    k = int(anchor_dim)
+    if not 0 <= k <= dim:
+        raise ValueError(f"anchor_dim must be in [0, {dim}]; got {k}")
+    return k
+
+
 def critical_p(dim: int) -> float:
     """p_c on Z^dim, from the table -- raising, never guessing, if absent."""
     if dim not in P_C_SITE_HYPERCUBIC:
@@ -527,6 +621,7 @@ def percolation_zd(
     dim: int = 2,
     p: float | None = None,
     anchor: str = "face",
+    anchor_dim: int | None = None,
     geometry: str = "box",
     rng: np.random.Generator | None = None,
     block_n: int | None = None,
@@ -536,8 +631,10 @@ def percolation_zd(
     anchor="face" (the default, PLAN.md ground rule 7, alias "south"): open
     sites connected to the slab x_0 = 0. anchor="face_far": the same count
     restricted to x_0 >= i//2, which is what keeps gamma = d_f above dim = 4.
-    anchor="origin": open sites in the cluster of the centre site -- the
-    comparison arm only. See the module docstring for which measures what.
+    anchor="origin": open sites in the cluster of the centre site.
+    anchor="slab" with `anchor_dim` = k: open sites connected to the central
+    k-dimensional slab (k = 0 is the origin, 1 a central axis, 2 a central
+    plane, dim every site). See the module docstring for which measures what.
 
     geometry="box" (the default): 2*dim walls. "cylinder": periodic in every
     axis but x_0. "torus": periodic in all of them.
@@ -554,6 +651,7 @@ def percolation_zd(
     if geometry not in GEOMETRIES:
         raise ValueError(f"unknown geometry {geometry!r}; known: {list(GEOMETRIES)}")
     dim = _check_dim(dim)
+    k = _check_anchor_dim(anchor_dim, dim) if anchor == "slab" else None
     i = int(i)
     if i < 1:
         raise ValueError(f"box side must be >= 1; got {i}")
@@ -578,6 +676,9 @@ def percolation_zd(
         roots = _roots(lab, i, dim, geometry)
         if anchor == "origin":
             out[offset:offset + rows] = _origin_counts(lab, i, dim, roots)
+        elif anchor == "slab":
+            keep = _anchor_keep(lab, roots, _seed_slab(lab, i, dim, k))
+            out[offset:offset + rows] = _face_counts(lab, i, keep, 0)
         else:
             out[offset:offset + rows] = _face_counts(
                 lab, i, _anchor_keep(lab, roots), depth_from)
@@ -590,8 +691,9 @@ def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
     """MODELS["percolation_zd"].simulate.
 
     params: {"dim": int (default 2), "p": float (default the tabulated p_c for
-             that dim), "anchor": "face"|"face_far"|"origin" ("south" aliases
-             "face"), "geometry": "box"|"cylinder"|"torus"}.
+             that dim), "anchor": "face"|"face_far"|"origin"|"slab" ("south"
+             aliases "face"), "anchor_dim": int (required by "slab"),
+             "geometry": "box"|"cylinder"|"torus"}.
 
     Deliberately does NOT assert Y_i > 0 the way models/synthetic.py asserts
     Assumption 2, for models/percolation2d.py's reasons carried over: for
@@ -607,6 +709,7 @@ def simulate(i: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
         dim=int(params.get("dim", 2)),
         p=params.get("p"),
         anchor=params.get("anchor", "face"),
+        anchor_dim=params.get("anchor_dim"),
         geometry=params.get("geometry", "box"),
         rng=rng,
     )

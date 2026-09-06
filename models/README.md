@@ -596,34 +596,21 @@ where `face` is still correct in principle. `anchor="origin"` remains as the com
 arm, and `"south"` is accepted as an alias for `"face"` so a 2-D recipe reads the same
 against either model.
 
-**Geometry** picks which axes are periodic: `"box"` none, `"cylinder"` every axis but
-$x_0$ (so the anchor face and its opposite are the only walls — the direct
-generalization of the 2-D cylinder), `"torus"` all of them. A `dim`-torus joins up to
-`dim` pairs of faces at once, so the label chains are long and `_wrap_roots` uses the
-**strict whole-pass termination test** `percolation_tau.py` had to introduce, not
-`percolation2d.py`'s squaring-only one.
+**`anchor="slab"` makes the seed set's dimension a parameter** (`anchor_dim` $=k$: $0$
+the centre site, $1$ a central axis, $2$ a central plane, `dim` every site — Igor's
+proposal, 2026-09-06). The same depth sum for a $k$-slab gives
 
-**`p_c` is a literature input, and the one real new risk.** In 2-D it is known to 14
-digits and nothing reachable resolves it; above 2-D it is a *different number per
-dimension* (`P_C_SITE_HYPERCUBIC`, with `P_C_SOURCE` recording the reference for each),
-and a wrong entry simulates an off-critical system — a bias no estimator here can see,
-because a slightly supercritical lattice still gives a clean power law with the wrong
-exponent. `crossing_fraction` is the diagnostic that checks a threshold instead of
-trusting it, and `src/estimate/check_criticality.py` is its driver.
+$$\gamma(k)=\begin{cases}k+\gamma/\nu, & k<\beta/\nu\\ d_f, & \beta/\nu\le k\le d_f\\ k, & k>d_f\end{cases}$$
 
-Two guards that only exist because high `dim` reaches them: `_MAX_DIM = 13` (`_structure`
-materializes a dense $3^{\texttt{dim}}$ array — 3.5 G entries at `dim` $=20$, from a
-typo) and `_MAX_SITES_PER_SAMPLE = 2^{31}-1` (`ndimage.label` returns int32, so a larger
-lattice cannot be labelled at all). Both raise naming `i` and `dim`.
-
-No `target_fn`: $d_f(\texttt{dim})$, and the exact mean-field $d_f = 4$ for
-`dim` $\ge 6$, are acceptance criteria in
-`experiments/05_percolation_highd/README.md`. Verified:
-`tools/tests/test_percolation_zd.py` — the bit-for-bit 2-D identity, exact enumeration of
-$\mathbb EY_i$ at (`dim`,$i$) $=(2,3),(3,2),(4,2)$ for both anchors, an independent
-$d$-dimensional flood fill on critical lattices for all three anchors and all three
-geometries, the closed form $\mathbb EY_i = \sum_{k\le i}p^k$ at `dim` $=1$,
-`block_n` invariance, and the exact zero rate $(1-p)^{i^{\texttt{dim}-1}}$.
+so there is a **plateau in $k$** whose value is $d_f$ and whose two edges give
+$\beta/\nu$ and $d_f$ — a measurement, not a fit. $k$ is deliberately *not* a design
+constant: it changes the exponent being measured, so picking it from a literature
+$\beta/\nu$ would assume the answer. $k=0$ reproduces `"origin"` identically (a test) and
+$k=\texttt{dim}$ gives $\gamma=\texttt{dim}$ exactly with no percolation in it (a free
+calibration point). Measured at `dim` $=3$: the axis lands at $2.540\pm0.026$ against
+$d_f = 2.523$ where the $k=2$ slab is at $2.650$, and it takes the zero fraction from the
+origin's $0.698$ to $0.000$ and the cv from $3.08$ to $0.66$. See
+`experiments/05_percolation_highd/README.md`, H7.
 
 **`anchor="origin"` does not measure $d_f$.** $\mathbb E|C(0)\cap B_i|$ is the
 box-restricted susceptibility, $i^{\gamma/\nu} = i^{d-2\beta/\nu}$ — $43/24$ in two

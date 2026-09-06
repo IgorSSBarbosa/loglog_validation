@@ -593,6 +593,119 @@ cross-rung correlation is reported as a function of lag.
 
 ---
 
+---
+
+## Experiment H7 — the seed set's dimension, and the plateau that measures $d_f$
+
+H2 found that the face measures $\max(d_f, \mathrm{dim}-1)$: too many seeds. The origin
+anchor has the opposite problem, and a sharper one than this repo believed — it measures
+$\gamma/\nu = \mathrm{dim}-2\beta/\nu$, not $d_f$ (the correction is recorded in
+`experiments/03_percolation_zd/README.md` and `models/percolation2d.py`). Igor,
+2026-09-06: *"What about using an axis as anchor? This avoids the problem of starting
+with $i^d$ seeds (you start with $i$) and also avoids the problem of starting with a
+single seed, which has a decent probability of being isolated in a small cluster even if
+the box is huge."*
+
+That makes the **seed set's own dimension** the natural parameter.
+`anchor="slab"` with `params["anchor_dim"] = k` seeds on the central $k$-slab: $k=0$ the
+centre site, $1$ a central axis, $2$ a central plane, $\mathrm{dim}$ every site. Repeating
+H2's depth sum for a $k$-slab — $i^k h^{\mathrm{dim}-k-1}$ sites at distance $h$, each
+connected with probability $\pi_1(h)\,q_k(h)$ where
+$q_k(h)=\min(1,h^{k-\beta/\nu})$ is the chance a cluster with $h^{d_f}$ sites in the ball
+of radius $h$ meets the $h^k$ slab sites inside it — gives
+
+$$\gamma(k)=\begin{cases}k+\gamma/\nu, & k<\beta/\nu\quad\text{(seeds too sparse)}\\
+d_f, & \beta/\nu\le k\le d_f\\ k, & k>d_f\quad\text{(saturated)}\end{cases}$$
+
+**The middle regime is a plateau in $k$, and that is what makes this a measurement rather
+than a fit.** $\hat\gamma(k)$ flat across a range of $k$ *is* $d_f$; the two places it
+starts to move give $\beta/\nu$ and $d_f$ as by-products. Nothing needs to be assumed to
+pick $k$ — which matters, because unlike `box_exponent` or `DF_LOWER`, $k$ **is not a
+design constant**: it changes the exponent being measured, so choosing it from a
+literature $\beta/\nu$ would be assuming the answer. The sweep is the point.
+
+Both familiar anchors are endpoints: $k=0$ is `"origin"` *identically* (a test —
+computed by a different route), and $k=\mathrm{dim}-1$ is the bulk twin of the face.
+`"face"` stays separate because it is a **boundary** object; the cylinder geometry exists
+to give it its two walls, and surface and bulk need not share an exponent. $k=\mathrm{dim}$
+is a free calibration point: every open site is its own seed, so $\gamma=\mathrm{dim}$
+*exactly*, with no percolation in it — pinned by a test.
+
+```bash
+for k in 0 1 2; do
+  python3 src/generate/generate.py -meta experiments/05_percolation_highd/recipes/samples_slab_d3_k$k.json --tag slab_d3_k$k
+done
+```
+
+**Acceptance criteria.** (a) $\hat\gamma(k)$ is flat to within its error bars over
+$k\in\{1,2\}$ at $\mathrm{dim}=3$ and $k\in\{2,3\}$ at $\mathrm{dim}=5$, and that plateau
+value is $d_f$ to $2\%$; (b) $\hat\gamma(0)$ sits at $\gamma/\nu$, not at $d_f$;
+(c) $\hat\gamma(\mathrm{dim})=\mathrm{dim}$ to float precision (the free calibration
+point); (d) the cv falls monotonically in $k$, so the recommendation is the **smallest**
+$k$ inside the plateau.
+
+**Prototype result, $\mathrm{dim}=3$ (2026-09-06, $3\times10^8$ sites, local slopes over
+$i=8\ldots64$).** $d_f=2.5226$, $\gamma/\nu=2.0452$:
+
+| $k$ | | predicted | $8\to16$ | $16\to32$ | $32\to64$ |
+|---|---|---|---|---|---|
+| 0 | origin | 2.045 | 1.995±0.054 | 2.120±0.107 | 1.865±0.218 |
+| 1 | **axis** | 2.523 | 2.575±0.016 | **2.540±0.026** | 2.576±0.040 |
+| 2 | face-dim | 2.523 | 2.698±0.005 | 2.650±0.007 | 2.631±0.009 |
+
+**The axis is the better observable at $\mathrm{dim}=3$**: bias $0.017$ against the
+$k=2$ slab's $0.127$, at $\approx3.5\times$ the noise — a decisive RMSE win. And $k=0$
+lands on $\gamma/\nu$, which is criterion (b) met at the first attempt and the
+independent confirmation of the 2-D correction.
+
+**Prototype result, $\mathrm{dim}=5$ ($6\times10^8$ sites, $i=4\ldots32$).**
+$d_f=3.54$, $\gamma/\nu=2.08$, $\beta/\nu=1.46$:
+
+| $k$ | predicted | $4\to8$ | $8\to16$ | $16\to32$ |
+|---|---|---|---|---|
+| 0 | 2.08 | 2.378±0.469 | −0.936±1.160 | 4.347±1.759 |
+| 1 | 3.08 | 3.122±0.199 | 2.414±0.651 | 2.064±1.076 |
+| 2 | 3.54 | 3.774±0.073 | **3.537±0.162** | 3.873±0.242 |
+| 3 | 3.54 | 4.161±0.028 | 3.937±0.045 | 4.027±0.050 |
+| 4 | 4.00 | 4.477±0.010 | 4.348±0.010 | **4.271±0.010** |
+
+**This run does not settle $\mathrm{dim}=5$, and it is recorded because it does not.**
+$k=2$ lands on $d_f$ and $k=4$ converges to $\mathrm{dim}-1$, so the two ends behave as
+predicted. But $k=3$ should also give $3.54$ and reads $\approx4.0$ with $\pm0.05$ error
+bars — a real disagreement, not noise. Either the interior of the window is wrong, or
+$i\le32$ in five dimensions is nowhere near asymptotic: the sum's exponent at $k=3$ is
+$-0.46$, so its crossover is very slow, the same marginality that makes $\mathrm{dim}=4$
+hard for the face. And $k\in\{0,1\}$ carry errors of $\pm0.2$ to $\pm1.8$: **the
+prediction that the axis fails above $\mathrm{dim}=4$ is not tested by this run.** The
+full-budget recipes above are what would test it.
+
+### Why low $k$ cannot be measured cheaply — which is itself the argument
+
+| | $\mathrm{dim}=3$, $i=32$ | | $\mathrm{dim}=5$, $i=16$ | |
+|---|---|---|---|---|
+| $k$ | zero fraction | cv | zero fraction | cv |
+| 0 origin | 0.698 | 3.08 | 0.873 | 11.48 |
+| 1 **axis** | **0.000** | **0.66** | 0.107 | 3.19 |
+| 2 plane | 0.000 | 0.16 | 0.000 | 0.89 |
+| 3 | — | — | 0.000 | 0.22 |
+| 4 | — | — | 0.000 | 0.05 |
+
+Igor's premise is confirmed and is larger than it looked: **the origin is zero on 70% of
+draws at $\mathrm{dim}=3$ and 87% at $\mathrm{dim}=5$**, with cv $3$–$11$. One extra seed
+dimension removes it outright at $\mathrm{dim}=3$ ($0.698\to0.000$, cv $3.08\to0.66$).
+That is the Assumption-2 and Assumption-6 repair, measured — and the reason $k=0,1$ are
+expensive to measure is the same reason they are poor observables.
+
+Since cv falls monotonically in $k$ while bias rises, the optimum is the smallest $k$
+inside the plateau, $k^\star=\lceil\beta/\nu\rceil$ — which is $k=1$, **the axis**, for
+$\mathrm{dim}=2,3,4$, and $k=2$ from $\mathrm{dim}=5$ where $\beta/\nu$ crosses $1$. But
+that formula is a *conclusion* to be checked against the plateau, never an input to it.
+
+**Status: prototype measured at $\mathrm{dim}=3$ and $5$; the full-budget sweep
+(`samples_slab_d3_k*.json`, `samples_slab_d5_k*.json`) is not yet run.**
+
+---
+
 ## Reachable ladders — the constraint that shapes every experiment here
 
 One sample at side $i$ in $\mathrm{dim}$ dimensions costs $i^{\mathrm{dim}}$ sites and
@@ -626,6 +739,10 @@ route in high $d$ that has nothing to do with $\tau$ being more interesting than
 
 ## Open
 
+- **H7's full-budget sweep is the most interesting thing left.** The prototype settles
+  $\mathrm{dim}=3$ (the axis wins) and leaves $\mathrm{dim}=5$ open in two specific
+  places: whether $k=1$ really falls out of the plateau, and why $k=3$ reads $4.0$ where
+  the derivation says $3.54$.
 - **H3, H4, H6 are designed and recipe'd but not run.** H3's $\mathrm{dim}=5$ arm is the
   one that matters: it is where `face` and `face_far` predict exponents $0.46$ apart.
 - **$\omega_1$ needs a wider ladder** before the bias-decay estimator is available at

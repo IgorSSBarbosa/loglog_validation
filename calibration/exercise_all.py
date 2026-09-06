@@ -3242,6 +3242,51 @@ def sec_percolation_zd(a: Audit) -> None:
                                        rng=np.random.default_rng(9))
                  for p in (0.25, 0.3116077, 0.38)]))
 
+    # anchor="slab": the seed set's dimension as one knob.
+    a.check("slab k = 0 reproduces the origin anchor sample for sample",
+            lambda: np.array_equal(
+                pzd.percolation_zd(9, n=150, dim=3, anchor="origin",
+                                   rng=np.random.default_rng(50)),
+                pzd.percolation_zd(9, n=150, dim=3, anchor="slab", anchor_dim=0,
+                                   rng=np.random.default_rng(50))))
+    a.close("slab k = dim counts every open site, so gamma = dim exactly",
+            lambda: float(pzd.percolation_zd(5, n=400, dim=3, p=0.4,
+                                             anchor="slab", anchor_dim=3,
+                                             rng=np.random.default_rng(51)).mean())
+            / 125.0, 0.4, 0.01)
+    a.check("slab is monotone in k (a bigger seed set contains a smaller one)",
+            lambda: (lambda ms: bool(all(a_ < b_ for a_, b_ in zip(ms, ms[1:]))))(
+                [pzd.percolation_zd(8, n=200, dim=3, anchor="slab", anchor_dim=k,
+                                    rng=np.random.default_rng(52)).mean()
+                 for k in range(4)]))
+    a.raises("slab without an anchor_dim is refused, naming the field", ValueError,
+             lambda: pzd.percolation_zd(4, n=1, dim=3, anchor="slab"),
+             "anchor_dim")
+    a.raises("an out-of-range anchor_dim is refused", ValueError,
+             lambda: pzd.percolation_zd(4, n=1, dim=3, anchor="slab",
+                                        anchor_dim=4), "anchor_dim must be in")
+
+    a.note("anchor='origin' measures gamma/nu, NOT d_f -- a correction",
+           "E|C(0) cap B_i| is the box-restricted SUSCEPTIBILITY, "
+           "i**(dim - 2 beta/nu) = i**(gamma/nu), which is 43/24 = 1.7917 in two "
+           "dimensions and not d_f = 91/48: E|C cap B_i| = P(reach i) * "
+           "E[|C| | reach i] ~ i**(-beta/nu) * i**d_f. models/percolation2d.py "
+           "and experiments/03_percolation_zd/README.md asserted the two anchors "
+           "shared an exponent; both now carry the correction. That experiment's "
+           "own origin arm measured 1.7593..1.7955, converging on 43/24, and it "
+           "was recorded as an observable failing to converge. Confirmed at "
+           "dim = 3: 1.995, 2.120, 1.865 against gamma/nu(3) = 2.045.")
+    a.note("anchor='slab' makes the seed set's dimension a knob, and k is NOT a "
+           "design constant",
+           "gamma(k) = k + gamma/nu below beta/nu, d_f on the plateau "
+           "beta/nu <= k <= d_f, and k above it -- so k CHANGES THE EXPONENT "
+           "BEING MEASURED, unlike box_exponent or DF_LOWER. Choosing it from a "
+           "literature beta/nu would assume the answer; the sweep over k, and the "
+           "plateau it exposes, is the measurement. k = 0 is 'origin' identically "
+           "and k = dim gives gamma = dim exactly, so both ends are pinned by a "
+           "known answer. Igor's proposal, 2026-09-06; see "
+           "experiments/05_percolation_highd/README.md H7.")
+
     a.note("PLAN.md ground rule 7's observable is a dim <= 4 statement",
            "generalizing its own 2-D derivation gives gamma_face = "
            "max(d_f, dim-1), because sum_h h**(-beta/nu) stops being dominated "

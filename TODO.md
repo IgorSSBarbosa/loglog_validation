@@ -543,6 +543,19 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $43/24$ — recorded at the time as an observable failing to converge. Confirmed at
         $d=3$: $1.995, 2.120, 1.865$ against $\gamma/\nu(3)=2.045$. No code changes; P3's
         conclusion (use the side anchor) is unchanged and strengthened~~
+  - [x] ~~**`anchor="slab"` with `anchor_dim` $=k$** (Igor's proposal, 2026-09-06):
+        the seed set's dimension as one knob, $k=0$ the centre site through
+        $k=\mathrm{dim}$ every site. $\gamma(k)=k+\gamma/\nu$ below $\beta/\nu$, $d_f$
+        on the plateau $\beta/\nu\le k\le d_f$, $k$ above it — so the plateau *measures*
+        $d_f$ and its edges give $\beta/\nu$ and $d_f$. Verified: $k=0$ reproduces
+        `origin` sample-for-sample by a different code path, $k=\mathrm{dim}$ gives
+        $\gamma=\mathrm{dim}$ exactly, monotone in $k$, flood-fill agreement at
+        $\mathrm{dim}=3$ for all geometries~~
+  - [ ] **H7's full-budget sweep.** The prototype settles $\mathrm{dim}=3$ (the axis
+        wins: bias $0.017$ vs the $k=2$ slab's $0.127$, and the zero fraction goes
+        $0.698\to0.000$) and leaves $\mathrm{dim}=5$ open in two places — whether $k=1$
+        really falls out of the plateau (errors are $\pm0.2$–$1.8$ there), and why $k=3$
+        reads $\approx4.0$ where the derivation says $3.54$
   - [ ] **`SITES_PER_BUDGET_UNIT = 256` does not hold in high $\mathrm{dim}$.** The
         intent was that one allocation budget unit is $256$ lattice sites in every
         dimension (`box_factor` $=256^{1/\mathrm{dim}}$), so the recipe-writing rule needs
