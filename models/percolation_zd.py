@@ -90,8 +90,7 @@ So there are three anchors here and they answer different questions:
 
     "face"      ground rule 7's observable, verbatim. gamma = max(d_f, dim-1).
     "face_far"  the same, restricted to the far half. gamma = d_f in every dim.
-    "origin"    the cluster of the centre site, gamma = d_f, Assumption 6
-                fails; kept only as the comparison arm, as in 2-D.
+    "origin"    the cluster of the centre site. NOT d_f -- see below.
 
 None of the three is preferred in the code: `simulate` defaults to "face"
 because that is what ground rule 7 says and what dim = 2 must reproduce, and
@@ -123,6 +122,42 @@ direction, a dim-dimensional torus joins up to dim faces at once and the
 resulting label chains are long, so the merge here uses the STRICT
 whole-pass termination test that models/percolation_tau.py's had to introduce
 -- see `_wrap_roots`.
+
+`anchor = "origin"` does NOT measure d_f -- a correction, 2026-09-06
+--------------------------------------------------------------------
+models/percolation2d.py's docstring and experiments/03_percolation_zd's
+README said the origin anchor has the SAME leading exponent as the face,
+gamma = d_f = 91/48, and that its worse showing is bias plus a violated
+Assumption 6. The first half of that is wrong, and the repo's own data always
+said so.
+
+E|C(0) cap B_i| is the box-restricted SUSCEPTIBILITY, not the fractal volume:
+
+    E|C(0) cap B_i| = sum_{x in B_i} tau(x) ~ sum_h h**(dim-1) h**(-2 beta/nu)
+                    ~ i**(dim - 2 beta/nu) = i**(gamma/nu),
+
+which is i**(2-eta) = i**(43/24) = i**1.7917 in two dimensions, against
+d_f = 91/48 = 1.8958. The factorization makes it plain:
+E|C cap B_i| = P(reach i) * E[|C| | reach i] ~ i**(-beta/nu) * i**d_f, so the
+unconditioned mean is SMALLER than i**d_f by exactly the one-arm probability.
+d_f is the exponent of the cluster CONDITIONED on reaching the box.
+
+experiments/03_percolation_zd's own P3 run measured a drop-leading ladder of
+1.7593, 1.7716, 1.7828, 1.7889, 1.7955 -- converging on 43/24 = 1.7917, not
+crawling toward 91/48. It was recorded as an observable failing to converge;
+it was an observable converging to a different exponent. Confirmed
+independently at dim = 3 (3e8 sites): local slopes 1.995, 2.120, 1.865 against
+gamma/nu(3) = 2.045 and d_f(3) = 2.523.
+
+In the k-slab language above this is just gamma(0) = 0 + gamma/nu, the
+k < beta/nu branch: one seed is always too sparse, in every dimension, because
+beta/nu > 0 always.
+
+Nothing in the code changes -- no estimator was ever handed 91/48 -- but the
+ACCEPTANCE CRITERION for the origin arm was the wrong number, so P3 scored a
+correct measurement as a large bias. P3's conclusion (use the side anchor) is
+unchanged and stronger: the origin anchor is not a worse estimator of d_f, it
+is not an estimator of d_f at all.
 
 p_c is a literature input, and the one real new risk
 -----------------------------------------------------

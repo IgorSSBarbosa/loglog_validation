@@ -26,7 +26,40 @@ code. The previous attempt (`presentation18-05-2026/coding`) anchored $V(r)$ at 
 **origin** instead; that variant is still reachable here as `params["anchor"] = "origin"`,
 but only so the two can be run head to head (Experiment P3 below). It is not the default.
 
-### Why the exponent is the same for both anchors
+### CORRECTION (2026-09-06): the exponent is **not** the same for both anchors
+
+Everything below this heading was written believing that the origin anchor
+estimates the same $\gamma = d_f = 91/48$ as the side anchor, only worse. **It does
+not.** $\mathbb E|C(0)\cap B_i|$ is the box-restricted *susceptibility*:
+
+$$\mathbb E|C(0)\cap B_i| = \sum_{x\in B_i}\tau(x) \asymp \sum_h h^{d-1}h^{-2\beta/\nu}
+\asymp i^{\,d-2\beta/\nu} = i^{\gamma/\nu} = i^{2-\eta} = i^{43/24} = i^{1.7917},$$
+
+against $d_f = 91/48 = 1.8958$. Equivalently
+$\mathbb E|C\cap B_i| = P(\text{reach } i)\cdot\mathbb E[|C|\mid\text{reach } i]
+\asymp i^{-\beta/\nu}\cdot i^{d_f}$ — smaller than $i^{d_f}$ by exactly the one-arm
+probability. $d_f$ is the *conditional* exponent; the unconditioned mean is not it.
+
+The arithmetic slip is visible in the line below: $i^2\pi_1(i) = i^{2-5/48} = i^{43/24}$,
+**not** $i^{91/48}$.
+
+**P3's own data said so all along.** Its origin arm's drop-leading ladder was
+$1.7593,\ 1.7716,\ 1.7828,\ 1.7889,\ 1.7955$ — converging on $43/24 = 1.7917$, not
+crawling toward $91/48$. It was reported as an observable failing to converge; it was an
+observable converging to a different exponent. Confirmed independently at $d=3$
+($3\times10^8$ sites): local slopes $1.995, 2.120, 1.865$ against
+$\gamma/\nu(3) = 2.045$ and $d_f(3) = 2.523$.
+
+**What changes.** The *acceptance criterion* for the origin arm was the wrong number, so
+P3's "bias $-0.1360$, RMSE $0.1361$" for that arm is scoring a correct measurement of
+$\gamma/\nu$ against $d_f$. Nothing in the code changes — no estimator was ever handed
+$91/48$ — and P3's practical conclusion is unchanged and *strengthened*: the origin
+anchor is not a worse estimator of $d_f$, it is not an estimator of $d_f$ at all. The
+south arm's numbers, the cv comparison and the Assumption-6 argument are all unaffected.
+The general-$d$ derivation is in `models/percolation_zd.py`; the seed-set-dimension
+picture it belongs to is `experiments/05_percolation_highd/README.md`, H7.
+
+### Why the exponent was believed to be the same for both anchors
 
 A site at height $h$ above the south side is connected to it with probability of the
 order of the bulk one-arm probability $\pi_1(h)\asymp h^{-5/48}$ (reach distance $h$, then
@@ -36,8 +69,9 @@ $$\mathbb{E}Y_i \;\asymp\; \sum_{h=1}^{i} i\cdot h^{-5/48} \;\asymp\; i\cdot i^{
 
 and the sum is dominated by $h\sim i$ — deep in the bulk, so the exponent is the bulk
 $d_f$, not a surface exponent. The origin anchor gives $\mathbb{E}|C(0)\cap B_i| \asymp i^2\pi_1(i) = i^{91/48}$
-by the same exponent. **Both anchors estimate the same $\gamma$; the difference is
-entirely in the bias and the noise.**
+by the same exponent. ~~**Both anchors estimate the same $\gamma$; the difference is
+entirely in the bias and the noise.**~~ **False — see the correction above.** They
+estimate $91/48$ and $43/24$ respectively.
 
 ### Why the side anchor should converge faster (the hypothesis)
 

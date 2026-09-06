@@ -17,8 +17,11 @@ as `params["anchor"] = "origin"`, but ONLY so the two can be compared head to
 head in one experiment (experiments/03_percolation_zd/, Experiment P2). It is
 not the default and is not the observable this rung validates.
 
-Both anchors have the SAME leading exponent, so the comparison is about the
-noise, not about the answer:
+CORRECTION (2026-09-06): the two anchors do NOT have the same leading
+exponent. What follows was written believing they did; the "south" half is
+right and the "origin" half is not, and the paragraph marked below says what
+the origin actually measures. See models/percolation_zd.py for the general-d
+derivation and experiments/03_percolation_zd/README.md for the numbers.
 
     E Y_i  ~  a0 * i**gamma,   gamma = d_f = 91/48 = 1.8958333...
 
@@ -29,15 +32,29 @@ probability event given the arm, by RSW), so
 
     E Y_i ~ sum_{h=1}^{i} i * h**(-5/48) ~ i * i**(43/48) = i**(91/48);
 
-and for "origin", because E|C(0) cap B_i| ~ i**2 * pi_1(i) ~ i**(91/48) by the
-same exponent. The sum for "south" is dominated by h ~ i, i.e. by sites deep
-in the bulk -- the exponent is the bulk d_f, not a surface exponent.
+and the sum is dominated by h ~ i, i.e. by sites deep in the bulk -- the
+exponent is the bulk d_f, not a surface exponent.
+
+(The original text continued "and for origin, because E|C(0) cap B_i| ~
+i**2 * pi_1(i) ~ i**(91/48) by the same exponent". That is arithmetically
+wrong -- i**2 * i**(-5/48) is i**(43/24) -- and it is the error the CORRECTION
+above records.)
 
 Where they differ is the article's Assumption 6 (eq. 332), sigma_k^2 ->
 sigma_inf^2, which the whole CLT (eq. 583) and the Wilson interval (eq. 720)
 rest on:
 
-  - "origin": Y_i = 0 unless the centre is connected to distance ~i, which has
+  - "origin": THIS ANCHOR MEASURES gamma/nu = 2 - eta = 43/24 = 1.7917, NOT
+    d_f = 91/48. E|C(0) cap B_i| = sum_x tau(x) ~ i**(2 - 2 beta/nu) is the
+    box-restricted SUSCEPTIBILITY; equivalently P(reach i) * E[|C| | reach i]
+    ~ i**(-beta/nu) * i**d_f, smaller than i**d_f by exactly the one-arm
+    probability. The claim above that E|C(0) cap B_i| ~ i**2 pi_1(i) ~
+    i**(91/48) is the error: i**2 * i**(-5/48) = i**(43/24), not i**(91/48).
+    experiments/03_percolation_zd's P3 run measured 1.7593 .. 1.7955, which is
+    43/24, and it was read as a bias. The Assumption 6 argument that follows
+    is unaffected and still correct.
+
+    Y_i = 0 unless the centre is connected to distance ~i, which has
     probability pi_1(i) ~ i**(-5/48). Conditionally it is of order
     i**(91/48)/pi_1(i), so
 
@@ -55,8 +72,12 @@ rest on:
     reason; it reports the rate instead, see `zero_rate`.)
 
 That is the hypothesis this model exists to test, stated as numbers in
-experiments/03_percolation_zd/README.md: same gamma, far smaller and far
-better-behaved noise, hence a faster-converging gamma-hat at equal budget.
+experiments/03_percolation_zd/README.md. As originally written it was "same
+gamma, far smaller and far better-behaved noise"; the noise half stands and
+the gamma half does not -- the two anchors estimate DIFFERENT exponents
+(91/48 and 43/24), so the head-to-head is not a comparison of two estimators
+of one quantity. Its practical conclusion -- use the side anchor -- is
+unchanged and strengthened.
 
 No target_fn -- deliberately, as for models/srw.py
 --------------------------------------------------

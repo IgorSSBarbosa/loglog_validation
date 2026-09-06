@@ -625,6 +625,42 @@ $d$-dimensional flood fill on critical lattices for all three anchors and all th
 geometries, the closed form $\mathbb EY_i = \sum_{k\le i}p^k$ at `dim` $=1$,
 `block_n` invariance, and the exact zero rate $(1-p)^{i^{\texttt{dim}-1}}$.
 
+**`anchor="origin"` does not measure $d_f$.** $\mathbb E|C(0)\cap B_i|$ is the
+box-restricted susceptibility, $i^{\gamma/\nu} = i^{d-2\beta/\nu}$ — $43/24$ in two
+dimensions, not $91/48$ — because $\mathbb E|C\cap B_i| = P(\text{reach }i)\cdot
+\mathbb E[|C|\mid\text{reach }i] \asymp i^{-\beta/\nu}i^{d_f}$. `percolation2d.py`'s
+docstring and `experiments/03_percolation_zd/README.md` said otherwise; both now carry
+the correction, and P3's own measured $1.7593\ldots1.7955$ converges on $43/24$.
+
+**Geometry** picks which axes are periodic: `"box"` none, `"cylinder"` every axis but
+$x_0$ (so the anchor face and its opposite are the only walls — the direct
+generalization of the 2-D cylinder), `"torus"` all of them. A `dim`-torus joins up to
+`dim` pairs of faces at once, so the label chains are long and `_wrap_roots` uses the
+**strict whole-pass termination test** `percolation_tau.py` had to introduce, not
+`percolation2d.py`'s squaring-only one.
+
+**`p_c` is a literature input, and the one real new risk.** In 2-D it is known to 14
+digits and nothing reachable resolves it; above 2-D it is a *different number per
+dimension* (`P_C_SITE_HYPERCUBIC`, with `P_C_SOURCE` recording the reference for each),
+and a wrong entry simulates an off-critical system — a bias no estimator here can see,
+because a slightly supercritical lattice still gives a clean power law with the wrong
+exponent. `crossing_fraction` is the diagnostic that checks a threshold instead of
+trusting it, and `src/estimate/check_criticality.py` is its driver.
+
+Two guards that only exist because high `dim` reaches them: `_MAX_DIM = 13` (`_structure`
+materializes a dense $3^{\texttt{dim}}$ array — 3.5 G entries at `dim` $=20$, from a
+typo) and `_MAX_SITES_PER_SAMPLE = 2^{31}-1` (`ndimage.label` returns int32, so a larger
+lattice cannot be labelled at all). Both raise naming `i` and `dim`.
+
+No `target_fn`: $d_f(\texttt{dim})$, and the exact mean-field $d_f = 4$ for
+`dim` $\ge 6$, are acceptance criteria in
+`experiments/05_percolation_highd/README.md`. Verified:
+`tools/tests/test_percolation_zd.py` — the bit-for-bit 2-D identity, exact enumeration of
+$\mathbb EY_i$ at (`dim`,$i$) $=(2,3),(3,2),(4,2)$ for both anchors, an independent
+$d$-dimensional flood fill on critical lattices for all three anchors and all three
+geometries, the closed form $\mathbb EY_i = \sum_{k\le i}p^k$ at `dim` $=1$,
+`block_n` invariance, and the exact zero rate $(1-p)^{i^{\texttt{dim}-1}}$.
+
 ### `percolation_tau_zd.py` — $\tau$ in any dimension, and the first exact target
 
 `percolation_tau_zd(s, n=1, dim=2, p=None, observable="bin", bin_ratio=2.0,

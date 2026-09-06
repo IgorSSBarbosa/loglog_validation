@@ -44,6 +44,19 @@ priority: **correctness of each piece, checked numerically, comes before any fig
    This was the concrete methodological fix requested for this project, correcting
    `presentation18-05-2026`'s origin-anchored $V(r)$.
 
+   **Two amendments, both measured (2026-09-06, `experiments/05_percolation_highd/`).**
+   (a) The rule is a $d\le4$ statement: the face-anchored count measures
+   $\max(d_f,\,d-1)$, so from $d=5$ it reports a trivial surface exponent.
+   `anchor="face_far"` (the far half of the box only) restores $\gamma=d_f$ in every
+   dimension. (b) The origin cluster it rejects is not a *worse* estimator of $d_f$ but
+   an estimator of a **different** exponent, $\gamma/\nu = d-2\beta/\nu$
+   ($=43/24$ in $d=2$, not $91/48$) — the rule's conclusion is right and its stated
+   reason was not. The general statement is that a $k$-dimensional seed slab gives
+   $\gamma = k+\gamma/\nu$ for $k<\beta/\nu$, $d_f$ for $\beta/\nu\le k\le d_f$, and
+   $k$ above that; the face is $k=d-1$ and the origin is $k=0$, and
+   `models/percolation_zd.py`'s `anchor="slab"` makes $k$ the parameter so the plateau
+   can be measured rather than assumed.
+
 ## Paper objects (source of truth — cite by equation/theorem, don't re-derive)
 
 | Object | Article location | Form |

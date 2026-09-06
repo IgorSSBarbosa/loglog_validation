@@ -534,6 +534,15 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         only in `box_exponent` ($1/d_f^- = 0.4049$ vs the 2-D model's $0.5$) agree on
         $\hat\tau$ to $0.003$ at $m_0\le3$, while the cv goes from flat ($0.384\to0.340$)
         to falling ($0.290\to0.148$) and the cost exponent from $1.21$ to $1.50$~~
+  - [x] ~~**The origin anchor does not measure $d_f$** — a correction to
+        `models/percolation2d.py`, `experiments/03_percolation_zd/README.md` and
+        `PLAN.md` ground rule 7 (2026-09-06). $\mathbb E|C(0)\cap B_i|$ is the
+        box-restricted susceptibility $i^{\gamma/\nu}=i^{d-2\beta/\nu}$ ($43/24$ in
+        $d=2$, not $91/48$): the slip was writing $i^2\pi_1(i)$ as $i^{91/48}$ when it is
+        $i^{43/24}$. P3's own origin arm measured $1.7593\ldots1.7955$, converging on
+        $43/24$ — recorded at the time as an observable failing to converge. Confirmed at
+        $d=3$: $1.995, 2.120, 1.865$ against $\gamma/\nu(3)=2.045$. No code changes; P3's
+        conclusion (use the side anchor) is unchanged and strengthened~~
   - [ ] **`SITES_PER_BUDGET_UNIT = 256` does not hold in high $\mathrm{dim}$.** The
         intent was that one allocation budget unit is $256$ lattice sites in every
         dimension (`box_factor` $=256^{1/\mathrm{dim}}$), so the recipe-writing rule needs
