@@ -602,15 +602,34 @@ def cost_hint(s: int, params: dict | None = None) -> float:
 
     params keys read: "dim", "box_factor", "box_exponent".
 
-    THE UNIT TRAP, dimension-free by construction. Only ratios across scales
-    reach an allocation, so the unit of this function is free -- but a recipe's
-    `budget` is NOT in these units: tools/allocation.py charges cost(i) = i**d
-    with the SCALE itself. One budget unit is box_factor**dim lattice sites,
-    which `default_box_factor` deliberately holds at SITES_PER_BUDGET_UNIT =
-    256 in every dimension, so "ask for S/256 to spend S sites" is the rule at
-    dim = 2 and at dim = 6 alike. Both directions of that conversion go through
-    tools/cost_model.cost_unit_ratio, which is what src/study/plan.py bisects
-    on; getting it wrong once predicted 740 s for a 42-hour run.
+    THE UNIT TRAP, and why "dimension-free by construction" is only half true.
+    Only ratios across scales reach an allocation, so the unit of this function
+    is free -- but a recipe's `budget` is NOT in these units: tools/allocation.py
+    charges cost(i) = i**d with the SCALE itself. One budget unit is about
+    box_factor**dim lattice sites, and `default_box_factor` sets that to
+    SITES_PER_BUDGET_UNIT = 256 in every dimension precisely so that "ask for
+    S/256 to spend S sites" reads the same everywhere.
+
+    IT DOES NOT READ THE SAME EVERYWHERE. `box_side`'s ceil makes cost(s) a
+    power law only asymptotically, and box_factor shrinks as 256**(1/dim), so in
+    high dimension L is SMALL and the rounding is a large relative cost.
+    Measured on s = 8..1024 under the allocation each dimension actually gets:
+
+        dim                    2      3     4     5      6     7
+        L range           50-679 15-106  9-41  6-23   5-15  4-13
+        cost_unit_ratio      264    277   434   413   1031   675
+
+    -- good to 8% at dim 2-3 and a 4x UNDER-estimate at dim 6. Not academic:
+    experiments/05_percolation_highd's dim = 6 tau recipe was written for 4e9
+    sites on the nominal rule and is 1.61e10, i.e. 43 CPU-minutes instead of 10.
+
+    Nothing downstream is wrong, because nothing downstream uses the nominal
+    number: tools/cost_model.cost_unit_ratio computes the ratio exactly for the
+    ladder and counts in hand, ceil included, and src/study/plan.py bisects on
+    predicted SECONDS rather than multiplying by a throughput. It is the
+    hand-written `budget` in a recipe that is off -- the same trap that once
+    predicted 740 s for a 42-hour run, surviving in the one place that is still
+    a human's arithmetic. Call cost_unit_ratio before writing one.
     """
     params = params or {}
     dim = _check_dim(params.get("dim", 2))

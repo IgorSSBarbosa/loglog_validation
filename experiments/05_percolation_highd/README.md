@@ -436,16 +436,30 @@ Two design points, both forced by the generalization and both stated in
   unit trap that once made `plan.py` predict $740$ s for a $42$-hour run does not acquire
   a per-dimension footnote.
 
-  One caveat, measured rather than assumed: $256$ is the *asymptotic* ratio, and the
-  `ceil` in $L(s)$ inflates it when $L$ is small — which in high dimension it always is,
-  because `box_factor` shrinks as $256^{1/\mathrm{dim}}$. Over the ladder
-  $s = 8\ldots1024$ the true `cost_unit_ratio` is $257$ at $\mathrm{dim}=2$
-  ($L = 50\ldots679$), $264$ at $\mathrm{dim}=3$ ($L = 15\ldots106$) and $340$ at
-  $\mathrm{dim}=6$ ($L = 5\ldots15$) — a $33\%$ under-estimate of the real cost if the
-  nominal $256$ is used there. `tools/cost_model.cost_unit_ratio` computes it exactly for
-  the ladder it is asked about, including that wobble, and `src/study/plan.py` bisects on
-  predicted seconds rather than multiplying by it, so the planner is not affected. A
-  hand-written `budget` is.
+  **That intent does not survive the `ceil`, and the failure grows with dimension.**
+  $L(s) = \lceil\texttt{box\_factor}\cdot s^{\texttt{box\_exponent}}\rceil$ is only
+  asymptotically a power law, and `box_factor` shrinks as $256^{1/\mathrm{dim}}$, so in
+  high dimension $L$ is small ($5\ldots15$ at $\mathrm{dim}=6$) and the rounding is a
+  large relative cost. Measured on the ladder $s = 8\ldots1024$ under the `neyman`
+  allocation each dimension actually gets:
+
+  | $\mathrm{dim}$ | 2 | 3 | 4 | 5 | 6 | 7 |
+  |---|---|---|---|---|---|---|
+  | $L$ range | 50–679 | 15–106 | 9–41 | 6–23 | 5–15 | 4–13 |
+  | true `cost_unit_ratio` | 264 | 277 | 434 | 413 | **1031** | 675 |
+
+  So "one budget unit is 256 sites" holds to $8\%$ at $\mathrm{dim}=2$–$3$ and is a
+  **$4\times$ under-estimate at $\mathrm{dim}=6$**. This bit in practice: the
+  $\mathrm{dim}=6$ run below was written for $4\times10^{9}$ sites on that rule and is
+  actually $1.61\times10^{10}$ — 43 CPU-minutes instead of 10.
+
+  Nothing downstream is wrong, because nothing downstream uses the nominal number:
+  `tools/cost_model.cost_unit_ratio` computes the ratio exactly for the ladder and counts
+  in hand, `ceil` included, and `src/study/plan.py` bisects on predicted *seconds* rather
+  than multiplying by a throughput. It is the **hand-written `budget` in a recipe** that
+  is off, which is the same shape as the trap that once made the planner predict $740$ s
+  for a $42$-hour run — surviving in the one place that is still a human's arithmetic.
+  Read `cost_unit_ratio` for the ladder before writing a high-$\mathrm{dim}$ budget.
 
 **Acceptance criteria.** (a) $\hat\tau$ within $2\%$ of $1 + \mathrm{dim}/d_f$ at
 $\mathrm{dim} = 3,4,5$; (b) within $1\%$ of $5/2$ at $\mathrm{dim} = 6$ and $7$, where the
@@ -516,6 +530,32 @@ more clusters and is quieter — and costs enough more that the same budget buys
 many samples at the top rung. The default trades that for a flat $\mathrm{cv}$, which is
 what Assumption 6 asks for. Neither choice reaches the estimator, and the table above is
 the evidence rather than the claim.
+
+**Result, $\mathrm{dim}=6$ (2026-09-06, FAIL against its own criterion).** The run this
+model was built for — the only *exact* target on a real process in this repo — and it does
+not reach it. Same ladder $s = 8\ldots1024$, torus, `bin`:
+
+| $m_0$ | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| $\hat\tau$ | 2.4121 | 2.4176 | 2.4239 | 2.4318 | 2.4424 | **2.4604** | 2.4483 |
+
+against $\tau = 5/2$ **exactly**: $-1.6\%$ at $m_0=5$, outside criterion (b)'s $1\%$. It is
+climbing monotonically and has not flattened, and the cv is $0.24$–$0.28$ and flat, so
+this is bias, not noise — the estimator is behaving, the *design* is not asymptotic. Both
+four-parameter fits are useless here ($\hat\tau = 2.87$ with $\hat\omega_1 = 0.032$
+direct; $13.2$ from the bias decay), which is what fitting a correction that has not
+decayed over the window looks like.
+
+The likely cause is the box: `box_factor` $=256^{1/6} = 2.52$ gives $L = 5\ldots15$, a
+handful of correlation lengths, and $\mathrm{dim}=6$ is *exactly* the upper critical
+dimension, where logarithmic corrections are expected on top of everything else. Two
+things to try, in order: a larger `box_factor` (more sites per lattice, fewer lattices —
+nearly free in precision per unit budget, see the 2-D calibration), and
+$\mathrm{dim}=7$ (`samples_tau_d7.json`), which has the same exact target *without*
+sitting on $d_c$.
+
+**This is the run that cost $1.61\times10^{10}$ sites instead of the $4\times10^9$ its
+recipe appears to ask for** — see the `cost_unit_ratio` caveat above. 43 CPU-minutes.
 
 ---
 

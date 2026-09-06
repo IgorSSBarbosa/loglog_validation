@@ -534,6 +534,19 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         only in `box_exponent` ($1/d_f^- = 0.4049$ vs the 2-D model's $0.5$) agree on
         $\hat\tau$ to $0.003$ at $m_0\le3$, while the cv goes from flat ($0.384\to0.340$)
         to falling ($0.290\to0.148$) and the cost exponent from $1.21$ to $1.50$~~
+  - [ ] **`SITES_PER_BUDGET_UNIT = 256` does not hold in high $\mathrm{dim}$.** The
+        intent was that one allocation budget unit is $256$ lattice sites in every
+        dimension (`box_factor` $=256^{1/\mathrm{dim}}$), so the recipe-writing rule needs
+        no per-dimension footnote. `box_side`'s `ceil` defeats it: `box_factor` shrinks
+        with $\mathrm{dim}$, so $L$ is small ($5$–$15$ at $\mathrm{dim}=6$) and the
+        rounding is a large relative cost. Measured `cost_unit_ratio` on
+        $s = 8\ldots1024$: $264, 277, 434, 413, \mathbf{1031}, 675$ at
+        $\mathrm{dim} = 2\ldots7$ — good to $8\%$ at $\mathrm{dim}\le3$, a $4\times$
+        under-estimate at $6$. Nothing downstream is wrong (`cost_unit_ratio` is exact for
+        the ladder in hand and `plan.py` bisects on seconds), but a **hand-written
+        `budget`** is: `samples_tau_d6.json` asks for what looks like $4\times10^{9}$
+        sites and is $1.61\times10^{10}$. Either document "call `cost_unit_ratio` first"
+        as the rule, or make `box_side` return a value the unit identity survives
   - [ ] $\tau$ at $\mathrm{dim}\ge6$, where $\tau = 5/2$ and $d_f = 4$ are **exact** --
         the first real (unplanted) process in this repo with a rational target.
         `samples_tau_d6.json` / `samples_tau_d7.json`; the $d=6$ run is ~$5.6\times10^9$
