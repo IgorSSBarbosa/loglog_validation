@@ -219,6 +219,25 @@ loglog_validation/
                                   target_fn: gamma = d_f = 91/48 is an acceptance
                                   criterion in experiments/03_percolation_zd/, same
                                   decision as srw
+    percolation_zd.py             percolation2d.py with the SPATIAL DIMENSION as a
+                                  parameter: same algorithms for any number of axes,
+                                  bit-identical to percolation2d at dim = 2.
+                                  cost_hint(i) = i**dim, so Assumption 7's exponent d
+                                  IS the dimension and one model sweeps d = 2..6.
+                                  Three anchors, because ground rule 7 is a dim <= 4
+                                  statement: gamma_face = max(d_f, dim-1), so the
+                                  face count measures the trivial surface exponent
+                                  from dim = 5 on, and anchor="face_far" (the far
+                                  half of the box only) restores gamma = d_f in every
+                                  dimension. p_c per dimension is a LITERATURE input
+                                  (P_C_SOURCE), checked by crossing_fraction /
+                                  src/estimate/check_criticality.py
+    percolation_tau_zd.py         percolation_tau.py the same way. tau = 1 + dim/d_f,
+                                  and at dim >= 6 tau = 5/2 and d_f = 4 are EXACT --
+                                  the first real (unplanted) process in the repo with
+                                  a rational target. box_exponent defaults to 1/d_f
+                                  rather than 1/dim: the 2-D default's cutoff drift
+                                  1 - d_f/dim is 0.052 there and 0.333 at dim = 6
   derivations/                  <- standalone write-ups too long for a docstring:
                                   the gamma MLE; the dropped allocation constant
                                   and the 88%-coverage defect
@@ -228,7 +247,8 @@ loglog_validation/
                                   (omega_1), Experiment C (budget allocation) and
                                   checkpoint 0.4 all live here
     02_rwre/                     random walk in random environment
-    03_percolation_zd/           site percolation, Z^d, d = 2..6/7
+    03_percolation_zd/           site percolation, Z^d -- the d = 2 rung
+    05_percolation_highd/        the same, dim as a model parameter: d = 3..7
     04_percolation_hierarchical/ Bethe lattice / hierarchical graphs
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
@@ -311,7 +331,12 @@ expansion, are the moment assumptions plausible) and **computational** (is $cost
    declared $2$, and on a cylinder $\hat d_f = 1.8995\pm0.0018$, within $0.2\%$ of
    $91/48$ and the first estimate in this project that is variance- rather than
    bias-limited — see `experiments/03_percolation_zd/README.md`. $\omega_1$ there is
-   still open, and so is the residual $+0.004$.
+   still open, and so is the residual $+0.004$. **$d\ge3$ is now runnable**
+   (`models/percolation_zd.py`, `models/percolation_tau_zd.py`,
+   `experiments/05_percolation_highd/`): the dimension is a model parameter, so
+   Assumption 7's cost exponent *is* it, and the first thing the generalization showed
+   is that ground rule 7's face-anchored observable measures $\max(d_f, d-1)$ — i.e.
+   the wrong exponent from $d=5$ on — which `anchor="face_far"` repairs.
 5. **Hierarchical / Bethe lattice** — exactly solvable via branching-process recursion
    (also currently an empty article appendix), so simulation can be checked against an
    exact generating-function computation rather than only Monte Carlo — the strongest

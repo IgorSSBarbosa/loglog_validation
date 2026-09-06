@@ -52,6 +52,10 @@ ARTIFACTS: dict[str, str] = {
                                                   # -- two observables, one budget
     "no_leakage":       "no_leakage.json",        # calibration/check_no_leakage.py
                                                   # -- planted truth vs recovered
+    "criticality":      "criticality.json",       # src/estimate/check_criticality.py
+                                                  # -- is the tabulated p_c the
+                                                  # critical point? spanning
+                                                  # probability vs box side
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
@@ -80,6 +84,8 @@ def _looks_like(kind: str, payload: dict) -> bool:
         return "cells" in keys and "budgets" in keys
     if kind == "gamma_estimates":
         return "all_points" in keys or "two_point" in keys
+    if kind == "criticality":
+        return "spanning" in payload and "scales" in payload
     if kind == "samples_meta":
         return "scales" in keys and "n" in keys and "cells" not in keys
     if kind == "omega1":

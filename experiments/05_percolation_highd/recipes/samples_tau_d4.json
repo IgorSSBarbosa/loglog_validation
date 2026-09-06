@@ -1,0 +1,8 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_zd",
+  "params": {"dim": 4, "observable": "bin", "bin_ratio": 2.0, "geometry": "torus"},
+  "scales": [8, 16, 32, 64, 128, 256, 512, 1024],
+  "n": {"rule": "neyman", "budget": 1.5625e7},
+  "seed": 20260906
+}

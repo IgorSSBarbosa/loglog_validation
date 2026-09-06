@@ -1,0 +1,8 @@
+{
+  "kind": "cost_probe",
+  "model": "percolation_zd",
+  "params": {"dim": 6, "anchor": "face_far", "geometry": "cylinder"},
+  "scales": [3, 4, 5, 6, 8, 10, 13, 16],
+  "repeats": 10,
+  "seed": 20260906
+}

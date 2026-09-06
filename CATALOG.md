@@ -48,6 +48,8 @@ flowchart TB
         CO["estimate/compare_observables.py<br/>R full experiments per arm"]
         P2D["models/percolation2d.py<br/>south vs origin, box vs cylinder<br/>p_c, d=2"]
         PTAU["models/percolation_tau.py<br/>ladder in CLUSTER SIZE s<br/>γ = 1-τ, d = 2·box_exponent"]
+        PZD["models/percolation_zd.py<br/>dim is a PARAMETER<br/>cost d = dim; face/face_far/origin"]
+        PTZD["models/percolation_tau_zd.py<br/>cluster size s on Z^dim<br/>τ = 1+dim/d_f, exact 5/2 at dim≥6"]
         P2D --> CO
         PTAU --> CO
     end
@@ -130,7 +132,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
-| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d`, `percolation_tau` |
+| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d`, `percolation_tau`, `percolation_zd`, `percolation_tau_zd` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
 
 ### `src/` — the scripts a human runs
@@ -167,6 +169,8 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `srw.py` | 143 | `model` | $\lvert S_k\rvert$ for a $\pm1$ random walk. Deliberately $\Theta(k)$: integer-style stepping, **not** `binomial`, so it stays a percolation stand-in with real cost. |
 | `synthetic.py` | 136 | `model` | Planted eq. (232) generator with arbitrary $(a_j,\omega_j)$ and pluggable noise. The only model with a `target_fn`. |
 | `percolation2d.py` | 390 | `model` | Critical site percolation, $Y_i$ = sites connected to the south side of an $i\times i$ box. Switches: `anchor` (south/origin), `geometry` (box/cylinder). $\gamma=d_f$, $d=2$. |
+| `percolation_zd.py` | 700 | `model` | `percolation2d.py` with the **spatial dimension as a parameter** — bit-identical to it at `dim=2`, and $\mathrm{cost}(i)=i^{\texttt{dim}}$, so the article's $d$ *is* the dimension. Anchors: `face` (ground rule 7, measures $\max(d_f,\texttt{dim}-1)$), `face_far` (measures $d_f$ in every dimension), `origin`. Geometries: box/cylinder/torus. `crossing_fraction` guards the per-dimension $p_c$ table. |
+| `percolation_tau_zd.py` | 640 | `model` | `percolation_tau.py` the same way. $\tau = 1+\texttt{dim}/d_f$, **exactly $5/2$ for $\texttt{dim}\ge6$** — the first real process here with a rational target. `box_exponent` defaults to $1/d_f$, not $1/\texttt{dim}$: the 2-D default's cutoff drift is $0.052$ there and $0.333$ at $\texttt{dim}=6$. |
 | `percolation_tau.py` | 497 | `model` | The cluster-number density at $p_c$ — **the ladder variable is a cluster size $s$, not a box side**, and $\gamma = 1-\tau$. Each rung gets its own $L(s)=\lceil f s^{b}\rceil$ torus, which is what replaces "discard the top of the $s$-range". Switches: `observable` (bin/tail), `geometry` (torus/box). |
 
 ---

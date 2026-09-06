@@ -3167,6 +3167,176 @@ def sec_static(a: Audit) -> None:
             lambda: not bare, detail="\n".join(bare))
 
 
+def sec_percolation_zd(a: Audit) -> None:
+    """models/percolation_zd -- the same lattice with dim as a parameter"""
+    from models import percolation2d as perc2d
+    from models import percolation_zd as pzd
+
+    a.begin("models/percolation_zd",
+            "site percolation on Z^dim, dim a model parameter, cost i**dim")
+
+    # The claim the whole generalization rests on: at dim = 2 this IS
+    # models/percolation2d.py, draw for draw.
+    for anchor in ("south", "origin"):
+        for geometry in ("box", "cylinder"):
+            a.check(f"dim=2 reproduces percolation2d bit for bit "
+                    f"({anchor}, {geometry})",
+                    lambda anchor=anchor, geometry=geometry: np.array_equal(
+                        perc2d.percolation2d(11, n=120, anchor=anchor,
+                                             geometry=geometry,
+                                             rng=np.random.default_rng(4)),
+                        pzd.percolation_zd(11, n=120, dim=2, anchor=anchor,
+                                           geometry=geometry,
+                                           rng=np.random.default_rng(4))))
+
+    rng = np.random.default_rng(0)
+    a.check("returns n counts in [0, i**dim] at dim = 3",
+            lambda: (lambda y: bool(y.shape == (500,) and y.min() >= 0
+                                    and y.max() <= 6 ** 3))(
+                pzd.percolation_zd(6, n=500, dim=3, rng=rng)))
+    a.check("p = 1 fills the box at dim = 4",
+            lambda: set(np.unique(pzd.percolation_zd(4, n=10, dim=4, p=1.0,
+                                                     rng=rng))),
+            expect={256})
+    a.check("face_far at p = 1 is the far half only",
+            lambda: set(np.unique(pzd.percolation_zd(4, n=10, dim=3, p=1.0,
+                                                     anchor="face_far",
+                                                     rng=rng))),
+            expect={2 * 16})
+    a.check("block_n does not change the numbers (dim = 3 torus)",
+            lambda: np.array_equal(
+                pzd.percolation_zd(7, n=200, dim=3, geometry="torus",
+                                   rng=np.random.default_rng(6), block_n=200),
+                pzd.percolation_zd(7, n=200, dim=3, geometry="torus",
+                                   rng=np.random.default_rng(6), block_n=5)))
+    a.close("dim = 1 matches its closed form sum_{k<=i} p**k",
+            lambda: float(pzd.percolation_zd(10, n=200_000, dim=1, p=0.7,
+                                             rng=np.random.default_rng(7)).mean()),
+            pzd.expected_face_count_1d(10, 0.7), 0.02)
+
+    a.check("cost_hint(i) = i**dim, so the article's d IS the dimension",
+            lambda: [pzd.cost_hint(16, {"dim": d}) for d in (2, 3, 5)],
+            expect=[256.0, 4096.0, 16.0 ** 5])
+    a.close("zero_rate is exactly (1-p)**(i**(dim-1))",
+            lambda: float((pzd.percolation_zd(3, n=200_000, dim=2, p=0.5,
+                                              rng=np.random.default_rng(8))
+                           == 0).mean()),
+            pzd.zero_rate(3, 2, 0.5), 0.01)
+
+    # The error branches no test file reaches by accident.
+    a.raises("an unknown anchor is refused", ValueError,
+             lambda: pzd.percolation_zd(4, n=1, anchor="north"), "unknown anchor")
+    a.raises("an untabulated p_c is refused rather than guessed", ValueError,
+             lambda: pzd.critical_p(14), "no tabulated p_c")
+    a.raises("a dimension whose 3**dim neighbourhood cannot be built is refused",
+             ValueError, lambda: pzd.percolation_zd(2, n=1, dim=20, p=0.5),
+             "dim must be in")
+    a.raises("a lattice past int32 label space is refused up front", ValueError,
+             lambda: pzd.percolation_zd(4096, n=1, dim=3), "int32 label space")
+
+    # The criticality diagnostic: it must respond to p, in the right direction,
+    # or a flat column at p_c would mean nothing.
+    a.check("crossing_fraction is monotone in p",
+            lambda: (lambda f: bool(f[0] < f[1] < f[2]))(
+                [pzd.crossing_fraction(8, n=200, dim=3, p=p, geometry="box",
+                                       rng=np.random.default_rng(9))
+                 for p in (0.25, 0.3116077, 0.38)]))
+
+    a.note("PLAN.md ground rule 7's observable is a dim <= 4 statement",
+           "generalizing its own 2-D derivation gives gamma_face = "
+           "max(d_f, dim-1), because sum_h h**(-beta/nu) stops being dominated "
+           "by h ~ i once beta/nu = dim - d_f exceeds 1, i.e. from dim = 5 on. "
+           "Measured at 4e9 sites in dim = 5: anchor='face' gives a last local "
+           "slope of 4.160 +/- 0.009 (heading to dim-1 = 4, 19 sigma from d_f) "
+           "while anchor='face_far' gives 3.512 +/- 0.068 against d_f = 3.54. "
+           "The default stays 'face' because that is what the rule says and "
+           "what dim = 2 must reproduce; the choice is measured, not asserted "
+           "-- experiments/05_percolation_highd/README.md, H2.")
+    a.note("p_c is a LITERATURE INPUT here, unlike every other constant",
+           "a wrong entry in P_C_SITE_HYPERCUBIC simulates an off-critical "
+           "system, and a slightly supercritical lattice still gives a clean "
+           "power law with the wrong exponent -- a bias no estimator in this "
+           "repo can see. P_C_SOURCE records the reference per dimension and "
+           "crossing_fraction (src/estimate/check_criticality.py) is the check; "
+           "it PASSes on the BOX at dim = 3, 4, 5 and is inconclusive at "
+           "dim = 6, so dim >= 6 rests on Mertens & Moore (2018) alone.")
+
+
+def sec_percolation_tau_zd(a: Audit) -> None:
+    """models/percolation_tau_zd -- the cluster-number density on Z^dim"""
+    from models import percolation_tau as ptau
+    from models import percolation_tau_zd as ptzd
+
+    a.begin("models/percolation_tau_zd",
+            "clusters at size scale s on Z^dim, gamma = 1 - tau")
+
+    for observable in ("bin", "tail"):
+        a.check(f"dim=2 reproduces percolation_tau bit for bit ({observable})",
+                lambda observable=observable: np.array_equal(
+                    ptau.percolation_tau(32, n=100, observable=observable,
+                                         rng=np.random.default_rng(9)),
+                    ptzd.percolation_tau_zd(32, n=100, dim=2,
+                                            observable=observable,
+                                            box_factor=16.0, box_exponent=0.5,
+                                            rng=np.random.default_rng(9))))
+
+    a.check("box_factor**dim is the sites in one budget unit, in every dim",
+            lambda: [round(ptzd.default_box_factor(d) ** d, 6)
+                     for d in (2, 3, 4, 6)],
+            expect=[256.0] * 4)
+    a.check("box_exponent defaults to 1/DF_LOWER, not 1/dim",
+            lambda: [round(ptzd.default_box_exponent(d) * ptzd.DF_LOWER[d], 9)
+                     for d in sorted(ptzd.DF_LOWER)],
+            expect=[1.0] * len(ptzd.DF_LOWER))
+    a.check("block_n does not change the numbers (dim = 3 torus)",
+            lambda: np.array_equal(
+                ptzd.percolation_tau_zd(8, n=150, dim=3,
+                                        rng=np.random.default_rng(10),
+                                        block_n=150),
+                ptzd.percolation_tau_zd(8, n=150, dim=3,
+                                        rng=np.random.default_rng(10),
+                                        block_n=5)))
+    a.check("the shared sampler reads the same observable off shared lattices",
+            lambda: (lambda pair: bool(set(pair[0]) == {8, 16}
+                                       and pair[1]["shared_lattice"]
+                                       and pair[1]["dim"] == 3
+                                       and pair[1]["sites"]
+                                       == 50 * pair[1]["L"] ** 3))(
+                ptzd.shared_sampler([8, 16], 50, {"dim": 3},
+                                    np.random.default_rng(11))))
+    a.close("Assumption 2 is reported, not asserted: the zero fraction is small "
+            "at the default box_factor",
+            lambda: ptzd.zero_fraction(
+                ptzd.percolation_tau_zd(16, n=1000, dim=3,
+                                        rng=np.random.default_rng(12))),
+            0.0, 0.20)
+
+    a.raises("an unknown observable is refused", ValueError,
+             lambda: ptzd.percolation_tau_zd(8, n=1, observable="histogram"),
+             "unknown observable")
+    a.raises("a box too small to hold a cluster of size s is refused", ValueError,
+             lambda: ptzd.percolation_tau_zd(4096, n=1, dim=2, box_factor=1.0,
+                                             box_exponent=0.0),
+             "does not fit in the box")
+    a.raises("a dimension with no design d_f bound is refused", ValueError,
+             lambda: ptzd.df_lower(11), "no design d_f bound")
+    a.raises("an unordered ladder is refused by the shared sampler", ValueError,
+             lambda: ptzd.shared_sampler([16, 8], 5, {"dim": 3},
+                                         np.random.default_rng(13)),
+             "strictly increasing")
+
+    a.note("DF_LOWER and DEFAULT_CUT_FRACTION are DESIGN constants, and one of "
+           "them was calibrated in 2-D and transferred",
+           "both size boxes and neither reaches an estimator, so a wrong value "
+           "changes the noise and the cost but not the fitted tau. DF_LOWER "
+           "replaces models/percolation_tau.py's box_exponent = 1/2, whose "
+           "cutoff drift 1 - d_f/dim is 5/96 in two dimensions and 1/3 at "
+           "dim = 6. DEFAULT_CUT_FRACTION = 0.05 was measured in 2-D against "
+           "the dimensionless ratio s/L**d_f -- principled to carry across, but "
+           "a transfer; experiments/05_percolation_highd/README.md's H5(c) and "
+           "H6(a) are the checks that it holds.")
+
+
 # ===========================================================================
 # Stages, and the runner
 # ===========================================================================
@@ -3178,7 +3348,8 @@ STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
-    "models": [sec_srw, sec_percolation2d, sec_percolation_tau, sec_synthetic],
+    "models": [sec_srw, sec_percolation2d, sec_percolation_tau,
+               sec_percolation_zd, sec_percolation_tau_zd, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
     "calibration": [sec_calibration],
     "static": [sec_static],

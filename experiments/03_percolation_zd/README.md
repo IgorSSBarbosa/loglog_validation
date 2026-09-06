@@ -366,8 +366,16 @@ ladder, which is the same prerequisite $\omega_1$ has needed since P2.
 - **Parallel generation.** `generate.py` is single-threaded; this machine has 12 threads
   and ground rule 2's spawned streams already make replicate-level fan-out safe and
   reproducible. This is what makes $i\ge1024$ affordable.
-- **$d\ge3$**: a general-$d$ simulator, where $\mathrm{cost}(i)=i^d$ starts to bite and
-  the allocation theory should earn its keep.
+- ~~**$d\ge3$**: a general-$d$ simulator~~ — **done, and moved to
+  `experiments/05_percolation_highd/`.** `models/percolation_zd.py` is this folder's
+  `percolation2d.py` with the spatial dimension as a parameter, and reproduces it **bit
+  for bit at $\mathrm{dim}=2$** (`test_matches_percolation2d_bit_for_bit`), so every
+  number on this page still describes that code path too. Two findings there bear on
+  this one: ground rule 7's face-anchored observable measures
+  $\max(d_f, d-1)$, so it is a $d\le4$ observable and `anchor="face_far"` is what
+  restores $\gamma=d_f$ in general; and `models/percolation_tau_zd.py`'s box rule must
+  use $\texttt{box\_exponent}=1/d_f$ rather than this folder's $1/2$, whose cutoff
+  drift is negligible only because $1-d_f/2 = 5/96$ in two dimensions.
 
 ### Measured and rejected
 

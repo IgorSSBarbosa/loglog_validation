@@ -25,6 +25,8 @@ import numpy as np
 
 from models import percolation2d as model_percolation2d
 from models import percolation_tau as model_percolation_tau
+from models import percolation_tau_zd as model_percolation_tau_zd
+from models import percolation_zd as model_percolation_zd
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -116,6 +118,30 @@ MODELS: dict[str, ModelSpec] = {
         # only as --expect-gamma / --truth at reporting time. See
         # models/percolation_tau.py.
         shared_sampler=model_percolation_tau.shared_sampler,
+    ),
+    "percolation_zd": ModelSpec(
+        simulate=model_percolation_zd.simulate,
+        cost_hint=model_percolation_zd.cost_hint,
+        # models/percolation2d.py generalized to a spatial dimension that is a
+        # PARAMETER, so Assumption 7's cost exponent d IS params["dim"]:
+        # cost_hint(i) = i**dim, exactly, and one model exercises the
+        # allocation theory at d = 2..6 (PLAN.md ladder step 4). At dim = 2 it
+        # reproduces MODELS["percolation2d"] bit for bit.
+        #
+        # No target_fn/true_gamma_key, for the same reason as every model
+        # above: d_f(dim), and the exact mean-field d_f = 4 for dim >= 6, are
+        # acceptance criteria in experiments/05_percolation_highd/README.md and
+        # reach the code only as --expect-gamma / --truth at reporting time.
+    ),
+    "percolation_tau_zd": ModelSpec(
+        simulate=model_percolation_tau_zd.simulate,
+        cost_hint=model_percolation_tau_zd.cost_hint,
+        # models/percolation_tau.py generalized the same way. The scale is a
+        # CLUSTER SIZE s and gamma = 1 - tau with tau = 1 + dim/d_f; at
+        # dim >= 6 that is EXACTLY 5/2, the first real (unplanted) process in
+        # this repo with a rational target. Kept out of the code path all the
+        # same.
+        shared_sampler=model_percolation_tau_zd.shared_sampler,
     ),
 }
 

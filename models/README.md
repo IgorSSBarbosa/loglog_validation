@@ -201,6 +201,8 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
+| `percolation_zd` | face-connected sites on $\mathbb Z^{\texttt{dim}}$ | $i^{\texttt{dim}}$ | `dim` (2–6) | see `experiments/05_percolation_highd` | no |
+| `percolation_tau_zd` | clusters at size scale $s$ on $\mathbb Z^{\texttt{dim}}$ | $L(s)^{\texttt{dim}}$ | $\texttt{dim}\cdot$`box_exponent` ($\texttt{dim}/d_f$) | see `experiments/05_percolation_highd` | no |
 
 ### `synthetic.py` — the planted generator
 
@@ -534,3 +536,152 @@ No model file imports another, or anything from `tools/`, `src/` or `experiments
 the two names that look alike and are not: `models` is this package of simulators,
 `tools.models` is the registry that indexes them. Writing both out in full is what keeps
 them apart.
+
+
+### `percolation_zd.py` — the same lattice, with the dimension as a parameter
+
+`percolation_zd(i, n=1, dim=2, p=None, anchor="face", geometry="box", rng=None,
+block_n=None)`. Every algorithm in `percolation2d.py` — the blocked float32 draw, the
+one-`ndimage.label`-per-block stacking, the vectorized pointer-jumping merge across
+periodic boundaries, the per-root keep-mask, the exact zero rate — written for an
+arbitrary number of axes, with `dim` moved out of the filename and into `params`.
+**At `dim = 2` it reproduces `percolation2d.py` bit for bit at the same seed**
+(`test_matches_percolation2d_bit_for_bit`, all four anchor × geometry combinations), so
+every measured number in `experiments/03_percolation_zd/README.md` still describes this
+code path too.
+
+**Why this is the model the article's Assumption 7 wanted.** `cost_hint(i) = i**dim`
+exactly, so *the article's cost exponent $d$ **is** the spatial dimension*: one recipe
+field sweeps $d = 2,3,4,5,6$ without one simulator per dimension. Where
+`percolation2d.py` made $d=2$ a geometric fact rather than a stated formula, this makes
+$d$ a **knob** — which is what the budget-allocation theory (eq. 945–946, whose optimal
+$n_i \propto i^{-d/2}$ and error rate $-\omega_1/(d+2\omega_1)$ both depend on $d$)
+has never been tested against.
+
+**Three anchors, because ground rule 7 is a $d\le4$ statement.** The 2-D derivation of
+$\gamma = d_f$ generalizes literally, and generalizing it is what shows where it stops:
+
+$$\mathbb E Y_i \;\asymp\; \sum_{h=1}^{i} i^{\,\texttt{dim}-1}\min(1,\pi_1(h)),
+\qquad \pi_1(h)\asymp h^{-\beta/\nu},\quad \beta/\nu = \texttt{dim}-d_f,$$
+
+a sum dominated by $h\sim i$ when $\beta/\nu<1$ and by $h = O(1)$ when $\beta/\nu>1$:
+
+$$\boxed{\ \gamma_{\text{face}} = \max(d_f,\ \texttt{dim}-1)\ }$$
+
+| `dim` | 2 | 3 | 4 | 5 | 6+ |
+|---|---|---|---|---|---|
+| $\beta/\nu$ | 0.104 | 0.477 | 0.955 | 1.46 | 2 |
+| $d_f$ | 1.896 | 2.523 | 3.045 | 3.54 | 4 |
+| $\texttt{dim}-1$ | 1 | 2 | 3 | 4 | 5 |
+
+So the face count measures $d_f$ up to `dim` $=4$ and the **trivial surface exponent**
+`dim`$-1$ from `dim` $=5$ on (4 where $d_f=3.54$; 5 where $d_f=4$). `dim` $=4$ is nearly
+degenerate on its own terms — $3.045$ against $3$ — so its crossover is slow.
+
+`anchor="face_far"` is the fix: count only the sites with $x_0 \ge i/2$, so the sum runs
+over $h\in[i/2,i)$ and gives $i^{d_f}$ in **every** dimension. It keeps both properties
+that made the face anchor beat the origin anchor in 2-D — the count is a sum over
+$\sim i^{\texttt{dim}-1}$ decorrelating columns, so $\mathrm{Var}(\xi_i) = O(1)$ and
+Assumption 6 holds; and $Y_i=0$ is a crossing failure, an $O(1)$ probability rather than
+one tending to $1$. Measured at `dim` $=3$ over $i=8\ldots64$ (cylinder,
+$6\times10^{8}$ sites), local slopes:
+
+| anchor | $8\!\to\!16$ | $16\!\to\!32$ | $32\!\to\!64$ | OLS |
+|---|---|---|---|---|
+| `face` | 2.657 | 2.614 | 2.600 | 2.622 |
+| `face_far` | 2.553 | 2.523 | 2.520 | 2.531 |
+
+against $d_f = 2.523$: `face_far` is already the better observable in three dimensions,
+where `face` is still correct in principle. `anchor="origin"` remains as the comparison
+arm, and `"south"` is accepted as an alias for `"face"` so a 2-D recipe reads the same
+against either model.
+
+**Geometry** picks which axes are periodic: `"box"` none, `"cylinder"` every axis but
+$x_0$ (so the anchor face and its opposite are the only walls — the direct
+generalization of the 2-D cylinder), `"torus"` all of them. A `dim`-torus joins up to
+`dim` pairs of faces at once, so the label chains are long and `_wrap_roots` uses the
+**strict whole-pass termination test** `percolation_tau.py` had to introduce, not
+`percolation2d.py`'s squaring-only one.
+
+**`p_c` is a literature input, and the one real new risk.** In 2-D it is known to 14
+digits and nothing reachable resolves it; above 2-D it is a *different number per
+dimension* (`P_C_SITE_HYPERCUBIC`, with `P_C_SOURCE` recording the reference for each),
+and a wrong entry simulates an off-critical system — a bias no estimator here can see,
+because a slightly supercritical lattice still gives a clean power law with the wrong
+exponent. `crossing_fraction` is the diagnostic that checks a threshold instead of
+trusting it, and `src/estimate/check_criticality.py` is its driver.
+
+Two guards that only exist because high `dim` reaches them: `_MAX_DIM = 13` (`_structure`
+materializes a dense $3^{\texttt{dim}}$ array — 3.5 G entries at `dim` $=20$, from a
+typo) and `_MAX_SITES_PER_SAMPLE = 2^{31}-1` (`ndimage.label` returns int32, so a larger
+lattice cannot be labelled at all). Both raise naming `i` and `dim`.
+
+No `target_fn`: $d_f(\texttt{dim})$, and the exact mean-field $d_f = 4$ for
+`dim` $\ge 6$, are acceptance criteria in
+`experiments/05_percolation_highd/README.md`. Verified:
+`tools/tests/test_percolation_zd.py` — the bit-for-bit 2-D identity, exact enumeration of
+$\mathbb EY_i$ at (`dim`,$i$) $=(2,3),(3,2),(4,2)$ for both anchors, an independent
+$d$-dimensional flood fill on critical lattices for all three anchors and all three
+geometries, the closed form $\mathbb EY_i = \sum_{k\le i}p^k$ at `dim` $=1$,
+`block_n` invariance, and the exact zero rate $(1-p)^{i^{\texttt{dim}-1}}$.
+
+### `percolation_tau_zd.py` — $\tau$ in any dimension, and the first exact target
+
+`percolation_tau_zd(s, n=1, dim=2, p=None, observable="bin", bin_ratio=2.0,
+box_factor=None, box_exponent=None, geometry="torus", rng=None, block_n=None)`.
+`percolation_tau.py` generalized the same way, `shared_sampler` included; at `dim` $=2$
+with `box_exponent=0.5, box_factor=16` it reproduces it bit for bit.
+
+$\tau = 1 + \texttt{dim}/d_f$ and $\gamma = 1-\tau$, so:
+
+| `dim` | 2 | 3 | 4 | 5 | 6+ |
+|---|---|---|---|---|---|
+| $\tau$ | $187/91$ | 2.189 | 2.313 | 2.412 | $\mathbf{5/2}$ |
+| $\gamma$ | $-96/91$ | $-1.189$ | $-1.313$ | $-1.412$ | $\mathbf{-3/2}$ |
+
+**`dim` $\ge 6$ is why this model is worth having.** Above the upper critical dimension
+$\tau = 5/2$ and $d_f = 4$ are *exact*, not literature best-fits — so a run there is
+scored against a known rational. Until now the only exact target in this repo was
+`synthetic`'s planted one; this is the first *real* simulated process with one.
+
+**The 2-D box rule does not survive the generalization.** With
+$L(s) = \lceil\texttt{box\_factor}\cdot s^{\texttt{box\_exponent}}\rceil$ the cutoff
+ratio $s/L^{d_f}$ drifts as $s^{1-d_f\cdot\texttt{box\_exponent}}$, and
+`percolation_tau.py`'s default $1/2$ is exactly $1/\texttt{dim}$ in two dimensions,
+where the drift exponent $1-d_f/\texttt{dim} = 5/96$ is negligible. It is not elsewhere:
+
+| `dim` | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|
+| $1-d_f/\texttt{dim}$ at $1/\texttt{dim}$ | 0.052 | 0.159 | 0.239 | 0.292 | 0.333 |
+
+so the default here is `box_exponent` $= 1/$`DF_LOWER[dim]`, which freezes the ratio
+(conservatively — `DF_LOWER` is a *lower* bound on $d_f$, so the box grows slightly
+faster than needed). The option `percolation_tau.py` documents as *available* becomes
+**mandatory** above two dimensions. Two consequences: the cost exponent is
+$d = \texttt{dim}/d_f = \tau-1 = -\gamma$ — the article's cost exponent and the exponent
+being measured are the same number — and $\lambda(s)$, the mean count per box, is
+constant along the ladder, so Assumption 6 holds outright.
+
+`DF_LOWER` is a **design** constant in exactly the sense an allocation rule's `omega1`
+is: it sizes boxes, never reaches an estimator, and getting it wrong changes the noise
+and the cost, not the fitted $\tau$. The experiment README states the test that shows it
+(two runs at different `box_exponent`, same $\hat\tau$).
+
+**`box_factor` is dimension-aware for the unit trap's sake.**
+$\lambda \asymp \texttt{box\_factor}^{\texttt{dim}}C$, so a `box_factor` carried across
+dimensions unchanged would move the count per box by orders of magnitude. What is carried
+across instead is `box_factor**dim` — the lattice sites in one allocation budget unit,
+i.e. `tools/cost_model.cost_unit_ratio` for this model — fixed at
+`SITES_PER_BUDGET_UNIT = 256`, `percolation_tau.py`'s 2-D value. So **"ask for $S/256$ to
+spend $S$ sites"** is the rule at `dim` $=2$ and at `dim` $=6$ alike, and the trap that
+once made `plan.py` predict 740 s for a 42-hour run does not acquire a per-dimension
+footnote. It does *not* equalize $\lambda$ across dimensions: $C$ is dimension-dependent
+and is a measurement — read `zero_fraction` off a pilot and raise `box_factor` if it is
+above $\approx10\%$.
+
+Verified: `tools/tests/test_percolation_tau_zd.py` — the bit-for-bit 2-D identity, an
+independent $d$-dimensional flood fill (counts *and* the full multiset of cluster sizes on
+a 3-torus, which is what the multi-axis merge can silently get wrong), `block_n`
+invariance, the box rule against its own definition, `binned_counts` against the per-rung
+path on the same lattices, and that the shared sampler's rungs are correlated while
+`simulate`'s are not.

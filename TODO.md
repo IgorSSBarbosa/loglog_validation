@@ -506,6 +506,62 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         safe and reproducible. Prerequisite for the wider ladder above ($31.7$ ms per
         sample at $i=1024$)
   - [ ] Wilson interval (eq. 720) on $\hat d_f$: needs $\omega_1$ first
-  - [ ] $d\ge3$: a general-$d$ simulator (`percolation_zd`), where $\mathrm{cost}(i)=i^d$
-        starts to bite and the allocation theory should earn its keep
+  - [x] ~~$d\ge3$: a general-$d$ simulator. **Done, 2026-09-06**:
+        `models/percolation_zd.py` and `models/percolation_tau_zd.py` are
+        `percolation2d.py` / `percolation_tau.py` with the spatial dimension as a
+        `params["dim"]`, bit-identical to their 2-D originals at `dim = 2`
+        (`test_matches_percolation2d_bit_for_bit`,
+        `test_matches_percolation_tau_bit_for_bit`). `cost_hint(i) = i**dim`, so
+        Assumption 7's exponent $d$ *is* the dimension and one recipe field sweeps
+        $d = 2\ldots6$. Experiments in `experiments/05_percolation_highd/`~~
+  - [x] ~~**Ground rule 7's observable is a $d\le4$ statement.** Generalizing the 2-D
+        derivation gives $\gamma_{\text{face}} = \max(d_f, d-1)$, because
+        $\sum_h h^{-\beta/\nu}$ stops being dominated by $h\sim i$ once
+        $\beta/\nu = d - d_f > 1$, i.e. from $d = 5$ on — so the face-connected count
+        measures the trivial surface exponent $d-1$ there, not $d_f$.
+        `anchor="face_far"` (the far half of the box only) restores $\gamma = d_f$ in
+        every dimension and keeps Assumption 6. Measured at $4\times10^9$ sites:
+        $\hat\gamma = 2.5295$ vs $d_f(3)=2.523$ and $3.0501$ vs $d_f(4)=3.045$
+        (`face_far`), against $2.5591$ and $3.2102$ (`face`)~~
+  - [x] ~~$\tau$ in $d=3$ (`models/percolation_tau_zd.py`): $\hat\tau = 2.1860$ / $2.1946$
+        at $m_0 = 5,6$ against $\tau(3) = 1 + 3/d_f = 2.18906$, on an 8-rung ladder
+        $s = 8\ldots1024$ at $4.3\times10^9$ sites. cv flat at $0.34$–$0.38$ (Assumption 6
+        clean, and *quieter* than the 2-D run's $0.58$–$0.62$), both $\omega_1$ estimators
+        available and agreeing to $0.03$. **The cluster-size ladder does not have the
+        memory problem the $d_f$ ladder has**: $L(s)\propto s^{1/d_f}$, so eight rungs fit
+        in every dimension up to 6~~
+  - [x] ~~`DF_LOWER` is a design constant, demonstrated not asserted: two runs differing
+        only in `box_exponent` ($1/d_f^- = 0.4049$ vs the 2-D model's $0.5$) agree on
+        $\hat\tau$ to $0.003$ at $m_0\le3$, while the cv goes from flat ($0.384\to0.340$)
+        to falling ($0.290\to0.148$) and the cost exponent from $1.21$ to $1.50$~~
+  - [ ] $\tau$ at $\mathrm{dim}\ge6$, where $\tau = 5/2$ and $d_f = 4$ are **exact** --
+        the first real (unplanted) process in this repo with a rational target.
+        `samples_tau_d6.json` / `samples_tau_d7.json`; the $d=6$ run is ~$5.6\times10^9$
+        sites and takes tens of minutes single-threaded
+  - [ ] $\omega_1$ in $d\ge3$ has **only one estimator available**: a ladder short
+        enough to fit in memory ($6$ rungs at $d=3$, $5$ at $d=4$, $4$ at $d=5$) leaves
+        fewer than the 4 drop-leading windows `estimate_omega1.py`'s bias-decay fit
+        needs, so it errors out and only the direct fit of eq. (232) reports. Two
+        independent estimators disagreeing is what the 2-D rung used to catch a bad
+        $\omega_1$; that check is gone above $d=2$ until the ladder can be widened
+  - [ ] **The $p_c$ table above $d=5$ is not independently checked.**
+        `src/estimate/check_criticality.py` PASSes at $d=3,4,5$ on the box (spanning
+        drift $-0.030$, $-0.035$, $+0.065$ against controls at $\mp0.12$ or more) and
+        is **inconclusive at $d=6$** ($+0.157$ against controls $-0.277/+0.233$): the
+        spanning probability's own finite-size correction is large at the box sides
+        $d=6$ can afford, and at and above the upper critical dimension flatness at
+        $p_c$ stops being the right criterion. $p_c(6)$ and above rest on Mertens &
+        Moore (2018) alone
+  - [ ] **The cylinder is the wrong geometry for the criticality check in high $d$**,
+        though it stays the right one for sampling: with $d-1$ periodic transverse
+        directions the spanning probability at $p_c$ rises with $i$ (drift $+0.04$ at
+        $d=3$, $+0.113$ at $d=4$, $+0.323$ at $d=5$) because more transverse channels
+        get more chances. Run H0 on the box
+  - [ ] The measured cost exponent falls increasingly short of the declared one as $d$
+        grows — $2.934\pm0.016$ vs $3$, $3.809\pm0.030$ vs $4$, $4.620\pm0.042$ vs $5$
+        (all PASS at the driver's 20% tolerance, the last flagged DISAGREE at
+        $9.1\sigma$). The affordable probe ladder shrinks with $d$ while the fixed
+        $\approx220\,\mu s$ dispatch overhead does not — it is 95% of the measurement
+        at the bottom rung in $d=4$ — so the affine fit has a short lever arm. Needs a
+        probe that reaches higher, which needs the memory budget raised
 - [ ] Phase 4 — Percolation on hierarchical/Bethe graphs, exact recursion cross-check
