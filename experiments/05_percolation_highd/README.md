@@ -706,6 +706,118 @@ that formula is a *conclusion* to be checked against the plateau, never an input
 
 ---
 
+## Experiment H8 — $\tau$ across $\mathrm{dim} = 2\ldots8$ at equal budget
+
+Every experiment above varies one thing at a fixed dimension. H8 varies the dimension and
+holds everything else — the same model, the same observable, the same ladder, the same
+estimator, and **the same number of lattice sites** — so the rows are comparable to each
+other rather than only to their own acceptance values.
+
+```bash
+for d in 2 3 4 5 6 7 8; do
+  python3 src/generate/generate.py -meta experiments/05_percolation_highd/recipes/samples_sweep_tau_d$d.json --tag sweep_tau_d$d
+done
+python3 src/report/dimension_table.py -data experiments/05_percolation_highd/data --dims 2-8
+```
+
+Three design choices, each forced:
+
+- **The cluster-size ladder, not the box-side one.** $L(s)\propto s^{1/d_f}$ keeps boxes
+  small, so the *same* 7-rung ladder $s = 8\ldots512$ fits in every dimension up to 8. A
+  box-side ladder is down to 4 rungs by $\mathrm{dim}=5$ and 3 by $\mathrm{dim}=7$ (see
+  "Reachable ladders"), which would make the rows incomparable by construction.
+- **7 rungs, not 6.** It is the minimum that leaves 4 drop-leading windows of $\ge4$
+  scales, which is what `estimate_omega1.py`'s bias-decay fit needs — so the
+  correction-to-scaling exponent gets two independent estimators rather than one.
+- **Equal *sites*, not equal `budget` field.** `cost_unit_ratio` runs $265 \to 1799$ over
+  $\mathrm{dim}=2\ldots8$, so each recipe's budget is $8\times10^{9}$ divided by its own
+  ratio. Realized: $8.00\times10^{9}$ sites for $\mathrm{dim}\le6$ and $7.97$/$7.91$ at
+  $7$/$8$ (integer rounding in the allocation at small $n$). This is the trap the
+  `cost_unit_ratio` caveat above exists for, applied.
+
+**Result (2026-09-07).** $m_0 = 3$, i.e. the largest window still leaving 4 rungs:
+
+| dim | $\hat\gamma$ | 95% CI | $\hat\tau$ | $\tau$ (lit) | err | $\hat d_f$ | $d_f$ (lit) |
+|---|---|---|---|---|---|---|---|
+| 2 | $-1.0407$ | $[-1.0451, -1.0363]$ | 2.0407 | 2.0549 | $-0.69\%$ | 1.9218 | 1.8958 |
+| 3 | $-1.1680$ | $[-1.1727, -1.1634]$ | 2.1680 | 2.1891 | $-0.96\%$ | 2.5684 | 2.5226 |
+| 4 | $-1.2828$ | $[-1.2887, -1.2769]$ | 2.2828 | 2.3138 | $-1.34\%$ | 3.1182 | 3.0446 |
+| 5 | $-1.3610$ | $[-1.3690, -1.3530]$ | 2.3610 | 2.4124 | $-2.13\%$ | 3.6737 | 3.5400 |
+| 6 | $-1.4250$ | $[-1.4344, -1.4156]$ | 2.4250 | $\mathbf{2.5}$ | $\mathbf{-3.00\%}$ | 4.2105 | 4.0000 |
+| 7 | $-1.4595$ | $[-1.4707, -1.4482]$ | 2.4595 | $\mathbf{2.5}$ | $-1.62\%$ | — | 4.0000 |
+| 8 | $-1.4840$ | $[-1.4994, -1.4687]$ | 2.4840 | $\mathbf{2.5}$ | $\mathbf{-0.64\%}$ | — | 4.0000 |
+
+Correction-to-scaling, direct fit of eq. (232):
+
+| dim | $a_0$ | $a_1$ | $\omega_1$ | rel_rmse | $\tau$ (fit) | |
+|---|---|---|---|---|---|---|
+| 2 | 0.0175 | $-0.692$ | 0.603 | $1.1\times10^{-3}$ | 2.0597 | |
+| 3 | 0.0307 | $-0.671$ | 0.730 | $1.8\times10^{-3}$ | 2.1807 | |
+| 4 | 0.0668 | $-1.153$ | 0.205 | $2.4\times10^{-3}$ | 2.3647 | |
+| 5 | 0.0278 | $-0.485$ | 0.667 | $3.4\times10^{-3}$ | 2.3722 | |
+| 6 | $7.6\times10^{3}$ | $-12.9$ | 0.037 | $5.8\times10^{-3}$ | 2.8196 | **not converged** |
+| 7 | 0.0188 | $3.8\times10^{10}$ | 13.91 | $1.1\times10^{-2}$ | 2.4454 | **not converged** |
+| 8 | 0.0161 | $2.7\times10^{10}$ | 13.67 | $1.3\times10^{-2}$ | 2.4640 | **not converged** |
+
+### What it says
+
+**The error is non-monotonic and peaks exactly at the upper critical dimension.**
+$-0.69, -0.96, -1.34, -2.13, \mathbf{-3.00}, -1.62, \mathbf{-0.64}\%$. That is the shape
+the physics predicts: $\mathrm{dim} = 6$ is $d_c$, where logarithmic corrections sit on
+top of the power law, and above it the mean-field behaviour is cleaner. $\mathrm{dim}=8$
+lands within $0.64\%$ of an **exactly known** $5/2$ — the best row in the table after
+$\mathrm{dim}=2$, on a process with no free parameters.
+
+**Every row is bias-limited, not variance-limited.** The drop-leading ladders climb
+monotonically in $m_0$ ($\mathrm{dim}=8$: $-1.4698 \to -1.4851$ over $m_0 = 0\ldots4$) and
+the confidence intervals — statistical only — exclude the literature value in every
+dimension. That is the expected reading and not a defect: a local slope on a finite ladder
+also carries the correction term, so an excluded truth means *the ladder is not
+asymptotic*, not that the estimator is wrong. Making the interval mean coverage needs the
+Wilson interval (eq. 720), which needs $\omega_1$ and $a_1$ — hence the next paragraph.
+
+**$\omega_1$ is only measurable up to $\mathrm{dim} = 5$.** From $6$ on, the
+four-parameter fit runs to the edge of its grid: $a_1 \sim 10^{10}$ with
+$\omega_1 \approx 13.9$ is not a correction, it is an optimizer with nothing to fit,
+because over $s = 8\ldots512$ the correction has not decayed at all. Where it does
+converge the values are $0.603, 0.730, 0.205, 0.667$ — scattered, with $\mathrm{dim}=4$ an
+outlier. **No dimensional trend in $\omega_1$ is claimed from this**; a wider ladder is
+the prerequisite, as it has been since `experiments/03_percolation_zd` P2.
+
+**Assumption 6 holds everywhere**, and more comfortably the higher the dimension: cv is
+flat within $\pm7\%$ for $\mathrm{dim}\le6$ and *falls* at $7$ and $8$
+($0.256\to0.139$, $0.141\to0.092$), because the box rule makes the boxes relatively
+larger there. It fails, when it fails, in the safe direction.
+
+### A reporting bug this sweep caught
+
+The first version of `src/report/dimension_table.py` derived the acceptance value as
+$\tau = 1 + \mathrm{dim}/d_f$, printing $2.75$ at $\mathrm{dim}=7$ and $3.00$ at $8$.
+**Hyperscaling holds only below $d_c$** — its failure is what *defines* $d_c$ — so the
+target is $\tau = 5/2$ for every $\mathrm{dim}\ge6$, and the relation cannot be run
+backwards to read a $d_f$ off a measured $\tau$ up there either (it gave $5.39$ at
+$\mathrm{dim}=8$, against the true $4$). `LITERATURE` now states $\tau$ outright and
+carries a `hyperscaling` flag; $\hat d_f$ is suppressed above $d_c$ rather than
+fabricated. Worth recording because the wrong version *looked* fine — a smooth column of
+plausible numbers, wrong by construction.
+
+### Cost
+
+$268$ minutes of CPU for the seven runs, and the throughput collapse is the whole reason
+the streaming design note (`plans/streaming_percolation.md`) exists:
+
+| dim | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|
+| minutes | 5.2 | 7.5 | 9.0 | 12.3 | 23.2 | 55.4 | **155.5** |
+| Msites/s | 25.65 | 17.72 | 14.75 | 10.84 | 5.74 | 2.41 | **0.86** |
+
+$\mathrm{dim}=8$ is $30\times$ slower per site than $\mathrm{dim}=2$ and is $58\%$ of the
+whole sweep. Part is real work — `ndimage.label`'s footprint is $2\,\mathrm{dim}+1$ cells
+— but the collapse past $\mathrm{dim}=6$ tracks the working set leaving cache: at
+$s=512$, $\mathrm{dim}=8$ one sample is $954$ MiB and `block_n = 1`.
+
+---
+
 ## Reachable ladders — the constraint that shapes every experiment here
 
 One sample at side $i$ in $\mathrm{dim}$ dimensions costs $i^{\mathrm{dim}}$ sites and

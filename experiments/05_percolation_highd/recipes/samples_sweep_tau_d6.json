@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_zd",
+  "params": {
+    "dim": 6,
+    "observable": "bin",
+    "bin_ratio": 2.0,
+    "geometry": "torus"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 7611479.9
+  },
+  "seed": 20260906,
+  "_comment": "dimension sweep: 8.0e+09 lattice sites, equal in every dimension. budget = sites / cost_unit_ratio = 8e+09/1051.0. See models/percolation_tau_zd.py's cost_hint on why that conversion is not 256 here."
+}

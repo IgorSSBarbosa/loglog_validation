@@ -556,6 +556,14 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $0.698\to0.000$) and leaves $\mathrm{dim}=5$ open in two places — whether $k=1$
         really falls out of the plateau (errors are $\pm0.2$–$1.8$ there), and why $k=3$
         reads $\approx4.0$ where the derivation says $3.54$
+  - [x] ~~A refused scale is a CEILING on the cost probe's climb, not a crash
+        (`tools/cost_model.climb_to_target`, 2026-09-07). `autopilot` on
+        `percolation_zd` at $\mathrm{dim}=3$ doubled to $i=2048$ — 80 GiB — and died at
+        the probe after nine minutes of pilot replicates. The climb now stops at a
+        refusal (`refused_at`), and if that leaves fewer than `PROBE_MIN_SCALES` rungs it
+        fills DOWNWARD keeping what it already timed (`extended_down`) rather than
+        restarting; a refusal on the way down too is a clear "not simulable at any useful
+        scale". Three tests~~
   - [ ] **`SITES_PER_BUDGET_UNIT = 256` does not hold in high $\mathrm{dim}$.** The
         intent was that one allocation budget unit is $256$ lattice sites in every
         dimension (`box_factor` $=256^{1/\mathrm{dim}}$), so the recipe-writing rule needs
@@ -569,6 +577,27 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         `budget`** is: `samples_tau_d6.json` asks for what looks like $4\times10^{9}$
         sites and is $1.61\times10^{10}$. Either document "call `cost_unit_ratio` first"
         as the rule, or make `box_side` return a value the unit identity survives
+  - [x] ~~**$\tau$ across $\mathrm{dim}=2\ldots8$ at equal budget** (H8, 2026-09-07):
+        $8\times10^{9}$ lattice sites per dimension, same 7-rung ladder $s=8\ldots512$,
+        same estimator. $\hat\tau$ is low everywhere and the error **peaks at the upper
+        critical dimension**: $-0.69, -0.96, -1.34, -2.13, \mathbf{-3.00}, -1.62,
+        \mathbf{-0.64}\%$ for $\mathrm{dim}=2\ldots8$ — log corrections at $d_c=6$,
+        cleaner mean field above it, and $\mathrm{dim}=8$ within $0.64\%$ of the EXACT
+        $5/2$. Every row bias-limited (drop-leading ladders still climbing; the
+        statistical CIs exclude the truth everywhere). cv flat to $\pm7\%$ up to
+        $\mathrm{dim}=6$ and falling at $7,8$~~
+  - [x] ~~A reporting bug caught by that sweep: `dimension_table.py` derived
+        $\tau = 1+\mathrm{dim}/d_f$, which **holds only below $d_c$** — printing $2.75$
+        at $\mathrm{dim}=7$ and $3.00$ at $8$ where the answer is $5/2$, and inverting to
+        a $\hat d_f$ of $5.39$ where the truth is $4$. `LITERATURE` now states $\tau$
+        outright with a `hyperscaling` flag and suppresses $\hat d_f$ above $d_c$~~
+  - [ ] **$\omega_1$ is unmeasurable above $\mathrm{dim}=5$ on this ladder.** The
+        four-parameter fit of eq. (232) runs to the edge of its grid from $\mathrm{dim}=6$
+        on ($a_1\sim10^{10}$, $\omega_1\approx13.9$, NOT CONVERGED) because the
+        correction has not decayed at all over $s=8\ldots512$. Where it converges the
+        values scatter ($0.603, 0.730, 0.205, 0.667$ at $\mathrm{dim}=2\ldots5$, with $4$
+        an outlier) and no dimensional trend is claimed. Needs a wider ladder, which needs
+        `plans/streaming_percolation.md`
   - [ ] $\tau$ at $\mathrm{dim}\ge6$, where $\tau = 5/2$ and $d_f = 4$ are **exact** --
         the first real (unplanted) process in this repo with a rational target.
         `samples_tau_d6.json` / `samples_tau_d7.json`; the $d=6$ run is ~$5.6\times10^9$
