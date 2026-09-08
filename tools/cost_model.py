@@ -437,16 +437,44 @@ def climb_to_target(spec, params: dict, rng, start: int,
     the guarantee this docstring states, but two of the three branches did
     not keep. A `max_doublings` below the floor is a contradiction and is
     refused up front rather than silently honoured.
+
+    A FOURTH stopping rule: the model REFUSING the scale. A climb doubles
+    blindly, and a model whose per-sample working set grows as i**dim runs out
+    of addressable memory long before it runs out of clock -- at dim = 3 the
+    climb reached i = 2048, i.e. 8.6e9 sites and 80 GiB, and
+    models/percolation_zd.py's guard raised, correctly. The climb used to let
+    that propagate, so a pilot that had already spent nine minutes drawing
+    replicates died at the cost probe with a ValueError about a scale nobody
+    asked for (user, 2026-09-06). A refusal is now a CEILING: the climb stops,
+    keeps the rungs it has, and records `refused_at`.
+
+    A ceiling reached too early is not an error either, because the probe does
+    not care WHERE the rungs are -- d is a property of the model, not of the
+    window (`src/study/pilot.py`). pilot.py starts the climb at the ladder's
+    LARGEST scale, so on percolation_zd at dim = 3 the ceiling arrives after
+    three rungs, one short of PROBE_MIN_SCALES. The climb then fills DOWNWARD
+    (`extended_down`), halving below the smallest rung it has, which always has
+    room -- rather than restarting, which would re-time the expensive rungs it
+    already measured. Only running out of room at i = 1 is fatal, and that
+    means the parameters cannot be simulated at any useful scale.
     """
     if max_doublings < PROBE_MIN_SCALES:
         raise ValueError(
             f"max_doublings={max_doublings} cannot reach PROBE_MIN_SCALES="
             f"{PROBE_MIN_SCALES} rungs, which the affine fit needs")
     scales, times_by_scale = [], {}
+    refused_at = None
     i = int(start)
     t_start = time.perf_counter()
     for _ in range(max_doublings):
-        agg, times = time_at_scale(spec, i, params, rng, repeats, aggregator)
+        try:
+            agg, times = time_at_scale(spec, i, params, rng, repeats, aggregator)
+        except (ValueError, MemoryError) as exc:
+            # The model says this scale is past what it can build. That is a
+            # ceiling on the climb, not a failure of the probe -- unless we do
+            # not yet have enough rungs to fit anything.
+            refused_at = i
+            break
         scales.append(i)
         times_by_scale[i] = times
         if len(scales) < PROBE_MIN_SCALES:
@@ -457,10 +485,42 @@ def climb_to_target(spec, params: dict, rng, start: int,
         if time.perf_counter() - t_start > time_budget:
             break
         i *= 2
+    # The ceiling can arrive before PROBE_MIN_SCALES rungs -- pilot.py starts
+    # the climb at the ladder's LARGEST scale, so on percolation_zd at dim = 3
+    # it gets three rungs and then 80 GiB. Fill downward rather than upward:
+    # d does not depend on where the window is, the rungs already measured are
+    # good and are kept, and halving always has room. Only a refusal at i = 1
+    # means the parameters cannot be simulated at all.
+    extended_down = []
+    while len(scales) < PROBE_MIN_SCALES:
+        j = (min(scales) if scales else int(start)) // 2
+        if j < 1:
+            raise ValueError(
+                f"the cost probe cannot reach {PROBE_MIN_SCALES} rungs: the "
+                f"model refused scale {refused_at} and there is nothing below "
+                f"{min(scales) if scales else start} left to measure. These "
+                f"parameters are not simulable at any useful scale.")
+        try:
+            _, times = time_at_scale(spec, j, params, rng, repeats, aggregator)
+        except (ValueError, MemoryError) as exc:
+            # Refused going DOWN as well: this is not a ceiling, the model
+            # cannot run these parameters at all.
+            raise ValueError(
+                f"the cost probe cannot reach {PROBE_MIN_SCALES} rungs: the "
+                f"model refused scale {j} on the way down as well as "
+                f"{refused_at} on the way up. These parameters are not "
+                f"simulable at any useful scale. Underlying refusal: {exc}"
+            ) from exc
+        scales.insert(0, j)
+        times_by_scale[j] = times
+        extended_down.append(j)
+
     out = _probe(scales, times_by_scale, repeats, aggregator,
                  target_seconds=target_seconds)
     out["reached_target"] = bool(out["elapsed"] and
                                  out["elapsed"][-1] >= target_seconds)
+    out["refused_at"] = refused_at
+    out["extended_down"] = extended_down or None
     return out
 
 def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:
