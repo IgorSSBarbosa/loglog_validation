@@ -202,6 +202,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
 | `percolation_zd` | face-connected sites on $\mathbb Z^{\texttt{dim}}$ | $i^{\texttt{dim}}$ | `dim` (2–6) | see `experiments/05_percolation_highd` | no |
+| `percolation_zd_stream` | the same, swept in slabs | $i^{\texttt{dim}}$ | `dim` | — | no |
 | `percolation_tau_zd` | clusters at size scale $s$ on $\mathbb Z^{\texttt{dim}}$ | $L(s)^{\texttt{dim}}$ | $\texttt{dim}\cdot$`box_exponent` ($\texttt{dim}/d_f$) | see `experiments/05_percolation_highd` | no |
 
 ### `synthetic.py` — the planted generator
@@ -708,3 +709,66 @@ a 3-torus, which is what the multi-axis merge can silently get wrong), `block_n`
 invariance, the box rule against its own definition, `binned_counts` against the per-rung
 path on the same lattices, and that the shared sampler's rungs are correlated while
 `simulate`'s are not.
+
+
+### `percolation_zd_stream.py` — the same numbers, in $O(i^{d-1})$ memory
+
+`percolation_zd_stream(i, n=1, dim=2, p=None, anchor="face", anchor_dim=None,
+geometry="box", rng=None, slab_h=None)`. `percolation_zd`'s observable, swept plane by
+plane along $x_0$ so the box is never materialized. Implements
+`plans/streaming_percolation.md` §3; §4's parallel divide-and-conquer is not done.
+
+**Why.** `percolation_zd` allocates $\approx10\,i^{\texttt{dim}}$ bytes per sample, and
+`block_n` bounds how many *samples* are in flight but cannot make one smaller. That caps
+the ladders at $i\le256$ (`dim` 3), $64$ (4), $32$ (5), $16$ (6) — 6, 5, 4, 4 rungs — and
+`experiments/05_percolation_highd` traces three separate weaknesses to exactly that
+(one $\omega_1$ estimator instead of two, a short cost-probe lever arm, no discriminating
+power in the $\mathrm{dim}=6$ criticality check).
+
+| `dim`, $i$ | box | frontier | |
+|---|---|---|---|
+| 3, 256 | 0.16 GiB | 0.8 MiB | $200\times$ |
+| 3, 512 | 1.25 GiB | 3.2 MiB | $390\times$ |
+| 3, 1024 | 10.0 GiB | 13.0 MiB | $790\times$ |
+| 3, 2048 | 80 GiB — **refused** | 52 MiB | — |
+
+**It is bit-identical to `percolation_zd` at the same seed**, which
+`plans/streaming_percolation.md` §6 predicted was impossible. numpy fills
+`rng.random(size=(rows,) + (i,)*dim)` in C order — sample-major, plane-minor — so a sweep
+that processes **one sample at a time**, drawing it plane by plane, consumes precisely
+that sequence. Only a sampler that *batches* samples has the problem the note described.
+Pinned by `test_bit_identical_to_percolation_zd` over every dimension, geometry and
+anchor; the independent lattice-agreement test (5760/5760) is kept as the cross-check.
+
+**What that costs.** No batching, so the per-sample Python/SciPy overhead is not
+amortized: measured **0.64–0.68× the speed** of the materialized model — 0.64/0.67/0.67
+at `dim` $=3$, $i = 256/512/1024$ and 0.67/0.68 at `dim` $=4$, $i = 64/96$. That ratio is
+flat, not converging: there is **no speed crossover**, and the "large win once the box
+leaves cache" the design note expected never appeared, because the box leaves cache in
+both models. The win is memory and reach, not throughput — $i=2048$ at `dim` $=3$ streams
+in 607 s where the materialized model refuses at 80 GiB. **Use `percolation_zd` wherever
+the box fits**; reach for this one when it does not.
+
+**The algorithm, and the two traps.** Connectivity is not causal in the sweep direction,
+so a greedy "decide as you pass" sweep undercounts (`plans/streaming_percolation.md` §2's
+$3\times3$ counterexample: true 6, greedy 5). Instead the sweep carries *unresolved*
+components — Hoshen–Kopelman with a frontier, each live component holding a size, a
+"touches the seed set" flag, and a far-half count for `face_far`; a component with no
+label left in the new frontier is dead and is banked. Freeing is by **compaction** (the
+live roots are renumbered densely each slab) rather than refcounting, which is what makes
+the memory bound hold. Two bugs found in testing, both torus-only and both now regression
+tests:
+
+- `first`, the plane-0 ids kept for the sweep-axis wrap, must be **renumbered through
+  every compaction** or they point at the wrong components two slabs later;
+- the interface union and each periodic transverse face must go into **one** merge pass —
+  a later pass can pull an id out from under a root an earlier pass linked to it (found by
+  brute force: a $4\times4$ torus losing one site of a six-site cluster). `_wrap_roots`
+  in `percolation_zd.py` collects every axis's edges before its loop for the same reason.
+
+`slab_h` trades frontier memory against the number of SciPy calls and **never changes the
+numbers** (`models/README.md`'s working-set rule, tested). `block_n` is accepted for
+signature parity and ignored — batching is exactly what would break bit-identity.
+`cost_hint` is identical to `percolation_zd`'s, so allocations, budgets and
+`cost_unit_ratio` carry over and the two are comparable at equal budget. The int32 label
+ceiling now applies to the **frontier**, $i^{\texttt{dim}-1}$, not the box.

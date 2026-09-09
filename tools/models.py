@@ -27,6 +27,7 @@ from models import percolation2d as model_percolation2d
 from models import percolation_tau as model_percolation_tau
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
+from models import percolation_zd_stream as model_percolation_zd_stream
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -132,6 +133,21 @@ MODELS: dict[str, ModelSpec] = {
         # above: d_f(dim), and the exact mean-field d_f = 4 for dim >= 6, are
         # acceptance criteria in experiments/05_percolation_highd/README.md and
         # reach the code only as --expect-gamma / --truth at reporting time.
+    ),
+    "percolation_zd_stream": ModelSpec(
+        simulate=model_percolation_zd_stream.simulate,
+        cost_hint=model_percolation_zd_stream.cost_hint,
+        # percolation_zd swept in slabs: same observable, same parameters, same
+        # cost_hint (i**dim -- streaming changes the MEMORY, not the work), but
+        # O(i**(dim-1)) working set instead of O(i**dim). It IS bit-identical
+        # to percolation_zd at a given seed: numpy fills C-order, so sweeping
+        # ONE sample's planes in order consumes exactly the stream that model's
+        # single rng.random(size=(rows,) + (i,)*dim) call does. That is a test.
+        # It stays a separate model anyway, for the reason in
+        # plans/streaming_percolation.md §6 (as corrected): the performance
+        # profile is the opposite one -- ~0.65x the throughput for 200-790x
+        # less memory -- so which model to reach for is a real choice, not an
+        # implementation detail to hide behind one name.
     ),
     "percolation_tau_zd": ModelSpec(
         simulate=model_percolation_tau_zd.simulate,

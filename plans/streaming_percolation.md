@@ -1,6 +1,9 @@
 # Plan — a streaming percolation sampler: $O(i^{d-1})$ memory instead of $O(i^d)$
 
-**Status: DESIGN ONLY, not implemented. Needs sign-off (ground rule 3) before any code.**
+**Status: §3 IMPLEMENTED as `models/percolation_zd_stream.py` (2026-09-09), signed off by
+the user. §4 (the parallel divide and conquer) is still design only. §6's central claim —
+that streaming cannot be bit-identical — turned out to be WRONG, and the correction is
+recorded there rather than edited away.**
 Proposed by Igor, 2026-09-06, after `autopilot` on `percolation_zd` died at the cost
 probe with an 80 GiB refusal. Written up as a *new model* rather than a change to the
 existing ones — see §6, which is the part that most needs agreement.
@@ -169,6 +172,27 @@ to surface it. A streaming rewrite has strictly more of that kind of surface.
 
 ## 6. The decision that needs sign-off: a NEW model, not a rewrite
 
+> **CORRECTION (2026-09-09, after implementing §3).** The premise below is false, and it
+> was falsified by the first thing the implementation tried to do. numpy fills
+> `rng.random(size=(rows,) + (i,)*dim)` in C order, which is **sample-major and
+> plane-minor**: sample 0's planes in sequence, then sample 1's. A sweep that processes
+> **one sample at a time**, drawing it plane by plane, consumes exactly that sequence —
+> so it *is* bit-identical, at every anchor, geometry, $i$ and $\mathrm{dim}$. Verified
+> directly (`rng.random((rows,i,i))` equals per-sample per-plane draws) and pinned by
+> `test_bit_identical_to_percolation_zd`.
+>
+> What the argument below actually establishes is narrower: a sweep that **batches
+> samples** cannot be bit-identical, because batching interleaves their planes. The first
+> draft did batch, which is how the wrong conclusion got written down. Not batching costs
+> the per-sample overhead — which is why streaming is ~1.4× *slower* at small $i$ — and
+> buys the seed equivalence, the `slab_h` invariance `models/README.md` demands of a
+> working-set knob, and a far stronger test than §5.1's.
+>
+> The **conclusion** stands unchanged, for the reasons in the last two paragraphs of this
+> section: a separate model, because the performance profiles are opposite and a model
+> with recorded results should not change its runtime characteristics underneath them.
+> Only the reason changes.
+
 **Streaming cannot be bit-identical to the current models.** `_draw_open` consumes
 `rng.random(size=(rows,) + (i,)*dim)` in one call; a slab-by-slab sweep consumes the same
 stream in a different order and produces different lattices from the same seed. Every
@@ -200,10 +224,10 @@ samples are drawn.
 
 | # | question | my recommendation |
 |---|---|---|
-| Q1 | New models, or change the existing ones? | **New** (§6) |
-| Q2 | Which first? | **τ** — the win is largest ($d\ge7$ is memory-bandwidth bound *now*), the algorithm is simpler (no anchor), and the current sweep is visibly suffering |
+| Q1 | New models, or change the existing ones? | **New** (§6) — **DONE**, and the reason changed: bit-identity turned out to be achievable, so the separation is about performance profile, not reproducibility |
+| Q2 | Which first? | ~~τ~~ → **`percolation_zd` first, done 2026-09-09.** The τ sweep that motivated putting it first (H8) has since finished, and the blocked path is now `percolation_zd`: it is what an `autopilot` run walked into, and measuring $d_f$ above $d_c$ needs it, since hyperscaling cannot supply $d_f$ from τ up there. τ is the follow-up |
 | Q3 | Sequential streaming only, or the parallel merge too? | **Sequential first**, §4 as a separate follow-up |
-| Q4 | Is a Python-level per-slab loop fast enough? | **Unknown — measure before committing.** $O(i)$ `ndimage.label` calls on $(\mathrm{dim}{-}1)$-slabs replace one call on the box. Expect a loss at small $i$ and a large win where the box leaves cache; the crossover is the number that decides whether this becomes a default or stays a big-$i$ path |
+| Q4 | Is a Python-level per-slab loop fast enough? | **MEASURED 2026-09-09: fast enough, but never faster — there is no crossover.** 0.64×, 0.67×, 0.67× the materialized speed at $\mathrm{dim}=3$, $i=256/512/1024$, and 0.67×/0.68× at $\mathrm{dim}=4$, $i=64/96$: flat, not converging. The predicted “large win where the box leaves cache” did not appear — the box leaves cache in *both* models, and streaming pays per-sample overhead on top. So this stays a **big-$i$ path, not a default**: the win is memory and reach ($200$–$790\times$, and $i=2048$ at $\mathrm{dim}=3$ runs in 607 s where materializing refuses at 80 GiB), never throughput |
 | Q5 | Does `_MAX_SITES_PER_SAMPLE` still apply? | Yes, but against the **frontier**, not the box: int32 labels bound the labels alive at once, not the sites ever visited. The ceiling moves from $i^{\mathrm{dim}} < 2^{31}$ to $i^{\mathrm{dim}-1} < 2^{31}$ |
 | Q6 | Do the ladders change once it exists? | Not automatically. Widening them is what unblocks the second $\omega_1$ estimator and the $d=6$ criticality check, but each is its own experiment with its own acceptance criteria |
 
