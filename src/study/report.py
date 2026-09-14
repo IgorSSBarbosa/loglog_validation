@@ -362,15 +362,21 @@ def _d_check_section(sd: Path) -> list[str]:
     chk = (json.loads(pj.read_text()).get("cost") or {}).get("d_check")
     if not chk or chk.get("declared") is None:
         return []
-    verdict, z = chk.get("verdict"), chk.get("z")
+    verdict, z, thr = chk.get("verdict"), chk.get("z"), chk.get("threshold")
     zs = f"{z:+.2f}" if z is not None else "n/a"
     flag = "" if verdict == "pass" else "  **<-- CHECK THIS**"
+    # The cutoff is printed because it is NOT 3: it is the t quantile at
+    # D_MISMATCH_Z's alpha, and it moves with how many probes the se came from.
+    # A reader comparing z against 3 in their head would misread the verdict.
+    cut = f"+/-{thr:.2f}" if thr is not None else "n/a"
     return [
         "## Cost exponent: declared vs measured", "",
         "| | |", "|---|---|",
         f"| measured (clock) | {chk.get('measured')} +/- {chk.get('d_se')} |",
         f"| declared (model cost_hint or --assert-d) | {chk.get('declared')} |",
+        f"| se from | {chk.get('se_source')} |",
         f"| z | {zs} |",
+        f"| cutoff | {cut} |",
         f"| verdict | {verdict}{flag} |",
         "",
         "`d` is the MEASURED value in every case; the declaration is only ever "

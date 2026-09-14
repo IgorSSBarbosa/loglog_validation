@@ -30,11 +30,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
@@ -58,6 +60,26 @@ from src.generate.generate import generate, resolve_n  # noqa: E402
 #: no independence from the sample draws -- and a fixed seed keeps a re-run of
 #: the pilot from moving d for reasons unrelated to the machine.
 COST_PROBE_SEED = 0
+
+#: How many INDEPENDENT cost probes the pilot runs. Not a precision knob -- a
+#: calibration one. A single probe states an se for its own d_hat (the affine
+#: fit's Gauss-Newton covariance, or a bootstrap over its repeat timings) that
+#: measures only WITHIN-probe jitter, and the cost arm of
+#: calibration/check_no_leakage.py measured both against the actual
+#: probe-to-probe spread and found the covariance 3.6-18x too small and the
+#: bootstrap wrong by up to 6x in either direction -- because what moves between
+#: one climb and the next is cache and frequency state, the scheduler, whatever
+#: else the machine is doing, and neither of them looks there. The consequence was a mismatch gate that fired on 32-34% of runs
+#: whose declared cost was exact by construction. Repeating the probe measures
+#: the spread that matters directly, and averaging over it shrinks the real
+#: error of d by sqrt(n) as a bonus. See `_resolve_d` and D_MISMATCH_Z.
+D_PROBES = 5
+
+#: Seconds after which extra probes are abandoned (>= 2 always attempted, since
+#: one probe has no spread). On srw a probe is ~0.2 s and all D_PROBES run; the
+#: ceiling exists for a model whose climb runs into PROBE_TIME_BUDGET, where
+#: five probes would be 100 s of a pilot's time spent on a diagnostic.
+D_PROBE_TIME_BUDGET = 30.0
 
 
 def study_dir(root: Path, name: str) -> Path:
@@ -100,7 +122,8 @@ def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
     return replicate_summary(stats, scales)
 
 
-def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
+def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
+                          probes: int = D_PROBES) -> dict:
     """Measure d = the cost exponent of Assumption cost_is_power_law (eq. 353).
 
     Both halves live in tools/cost_model.py and are shared with the standalone
@@ -120,11 +143,33 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
     used. See `_resolve_d`: before 2026-08-29 a declaration was written
     straight into constants.json, so on srw (cost_hint(i) = i exactly) d = 1
     entered by definition and this probe never had to recover anything.
+
+    The climb is run `probes` times from independent seeds, and the returned
+    dict carries `d_across_probes` = {d, sd, se, n}: the MEAN of the per-probe
+    affine exponents and the spread across them. That block is what `_resolve_d`
+    prefers, and the reason is measured rather than assumed -- see D_PROBES. The
+    last probe's own scales, timings and affine fit are returned alongside it so
+    the record still shows one complete climb.
     """
     spec = get_model(model)
-    probe = climb_to_target(spec, params, np.random.default_rng(COST_PROBE_SEED),
-                            start=int(max(scales)), repeats=repeats)
-    return fit_cost_probe(probe, spec.cost_hint, params)
+    start, fits, t0 = int(max(scales)), [], time.perf_counter()
+    for j in range(max(1, probes)):
+        fits.append(fit_cost_probe(
+            climb_to_target(spec, params, np.random.default_rng(COST_PROBE_SEED + j),
+                            start=start, repeats=repeats),
+            spec.cost_hint, params))
+        if len(fits) >= 2 and time.perf_counter() - t0 > D_PROBE_TIME_BUDGET:
+            break
+    out = fits[-1]
+    ds = [float(f["affine"]["d"]) for f in fits
+          if (f.get("affine") or {}).get("d") is not None]
+    out["d_probes"] = ds
+    out["probe_seeds"] = [COST_PROBE_SEED + j for j in range(len(fits))]
+    if len(ds) >= 2:
+        sd_ = float(np.std(ds, ddof=1))
+        out["d_across_probes"] = {"d": float(np.mean(ds)), "sd": sd_,
+                                  "se": sd_ / math.sqrt(len(ds)), "n": len(ds)}
+    return out
 
 
 #: |z| beyond which the clock and a declared cost are called a mismatch.
@@ -133,6 +178,13 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS) -> dict:
 #: the draw you asked for -- stopping would throw away hours of sampling over a
 #: diagnostic. It is recorded in pilot.json and reprinted by report.py instead,
 #: so it cannot be lost by scrolling past.
+#:
+#: This is a NORMAL-theory cutoff: |z| > 3 is a 0.27% false-alarm rate only if
+#: se(d) is KNOWN. It never is -- it is estimated from a handful of numbers, and
+#: a ratio with a noisy denominator has heavier tails than the normal. So the
+#: number actually compared against is `_mismatch_threshold(dof)`, the t
+#: quantile at this same two-sided alpha; D_MISMATCH_Z sets the alpha, not the
+#: cutoff. With D_PROBES = 5 the cutoff is 6.62, not 3.
 D_MISMATCH_Z = 3.0
 
 #: Above this share, the affine fit's `a` term is most of the cheapest
@@ -179,6 +231,26 @@ def _d_se_bootstrap(cost: dict, draws: int = D_SE_BOOTSTRAP,
     return sd_ if np.isfinite(sd_) and sd_ > 0 else None
 
 
+def _mismatch_threshold(dof: int | None) -> float:
+    """The |z| cutoff that actually delivers D_MISMATCH_Z's false-alarm rate.
+
+    When se(d) comes from the spread of `dof + 1` independent probes,
+    (d_hat - declared)/se is t distributed with `dof` degrees of freedom, not
+    normal. Comparing it against 3 tests at a far looser alpha than 3 sounds:
+    at dof = 4, P(|t| > 3) = 4%, fifteen times the normal's 0.27%.
+
+    `dof = None` means the se is a within-probe one (fit covariance, or the
+    bootstrap over repeats) and there is no honest dof to use: the cost arm
+    measured those wrong by FACTORS, not by a tail (see D_PROBES), and no
+    quantile fixes a scale error. The cutoff stays at D_MISMATCH_Z and the
+    verdict carries the caveat instead.
+    """
+    alpha = 2.0 * float(stats.norm.sf(D_MISMATCH_Z))
+    if dof is None or dof < 1:
+        return D_MISMATCH_Z
+    return float(stats.t.isf(alpha / 2.0, dof))
+
+
 def _resolve_d(cost: dict, declared_override: float | None = None,
                *, trust_declared: bool = False):
     """The pilot's d. The CLOCK measures it; a declaration only CHECKS it.
@@ -205,10 +277,22 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
     Constant means no usable d exists at all and the caller must stop.
     """
     aff = cost.get("affine") or {}
-    d_val, d_se = aff.get("d"), aff.get("d_se")
+    across = cost.get("d_across_probes") or {}
     declared = declared_override if declared_override is not None \
         else cost.get("declared_d")
-    warnings, se_source = [], "affine fit covariance"
+    warnings = []
+    if across.get("n", 0) >= 2:
+        # Repeated probes: d is their mean and se is their spread, so the error
+        # bar is on the quantity actually reported. This is the calibrated path.
+        d_val, d_se = across["d"], across["se"]
+        se_source = f"spread across {across['n']} cost probes"
+        dof = int(across["n"]) - 1
+    else:
+        # One probe only (an older artifact, or every repeat's fit failed). The
+        # se here is within-probe, and measured wrong by factors -- see D_PROBES.
+        # Kept live for back-compat; any MISMATCH it raises says so.
+        d_val, d_se = aff.get("d"), aff.get("d_se")
+        se_source, dof = "affine fit covariance", None
 
     share = cost.get("overhead_share")
     if share is not None and share > OVERHEAD_SHARE_NOTE:
@@ -220,8 +304,8 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
             f"separates it out and is what d uses.")
 
     check = {"declared": declared, "measured": d_val, "d_se": None,
-             "z": None, "verdict": None, "se_source": None,
-             "overhead_share": share}
+             "z": None, "threshold": None, "verdict": None, "se_source": None,
+             "n_probes": across.get("n"), "dof": dof, "overhead_share": share}
 
     if trust_declared:
         if declared is None:
@@ -252,10 +336,15 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
         d_se = _d_se_bootstrap(cost)
         se_source = "bootstrap over probe repeats" if d_se else None
 
-    prov = (f"pilot cost probe, affine fit over {len(cost['scales'])} scales "
-            f"({cost['scales'][0]}..{cost['scales'][-1]})")
-    if se_source and se_source != "affine fit covariance":
-        prov += f", se from {se_source}"
+    rungs = (f"{len(cost['scales'])} scales "
+             f"({cost['scales'][0]}..{cost['scales'][-1]})")
+    if dof is not None:
+        prov = (f"pilot cost probe, mean of {across['n']} independent affine "
+                f"fits over {rungs}, se from their spread")
+    else:
+        prov = f"pilot cost probe, affine fit over {rungs}"
+        if se_source and se_source != "affine fit covariance":
+            prov += f", se from {se_source}"
     c = measured(d_val, d_se, prov)
     check.update(d_se=d_se, se_source=se_source)
 
@@ -273,18 +362,24 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
         return c, check, warnings
 
     z = (d_val - declared) / d_se
-    check["z"] = float(z)
-    if abs(z) > D_MISMATCH_Z:
+    thr = _mismatch_threshold(dof)
+    check["z"], check["threshold"] = float(z), thr
+    if abs(z) > thr:
         check["verdict"] = "MISMATCH"
+        caveat = "" if dof is not None else (
+            "\n    CAVEAT: this se is a WITHIN-probe one, and on the cost arm "
+            "those came out wrong by factors of 3-18 against the real "
+            "probe-to-probe spread, so this alarm is weak evidence. Re-run the "
+            "pilot to get the across-probe se (D_PROBES) before acting on it.")
         warnings.append(
-            f"D MISMATCH: the clock measured d = {d_val:.4f} +/- {d_se:.4f}, "
-            f"but the declared cost says {declared:g} -- that is z = {z:+.2f}, "
-            f"beyond +/-{D_MISMATCH_Z:g}.\n"
+            f"D MISMATCH: the clock measured d = {d_val:.4f} +/- {d_se:.4f} "
+            f"({se_source}), but the declared cost says {declared:g} -- that is "
+            f"z = {z:+.2f}, beyond +/-{thr:.2f}.\n"
             f"    Either the cost_hint is wrong, or this machine has stopped "
             f"being compute-bound (load, throttling, swap).\n"
             f"    d is the MEASURED value; every wall-clock prediction "
             f"downstream inherits this disagreement. Recorded in pilot.json "
-            f"as cost.d_check.")
+            f"as cost.d_check." + caveat)
     else:
         check["verdict"] = "pass"
     return c, check, warnings

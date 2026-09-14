@@ -344,8 +344,14 @@ def arm_cost(replicates: int, cost_ds=COST_DS, start=COST_START_SCALE,
         for _ in range(replicates):
             probe = measure_cost_exponent("synthetic", params, [start])
             probes.append(probe)
+            # The pilot's d is the mean across the probe's own repeated climbs
+            # (D_PROBES), so that is what this arm must score -- not the last
+            # climb's affine fit, which is one of the numbers averaged.
+            across = probe.get("d_across_probes") or {}
             aff = probe.get("affine") or {}
-            if aff.get("d") is not None:
+            if across.get("d") is not None:
+                ests.append(float(across["d"]))
+            elif aff.get("d") is not None:
                 ests.append(float(aff["d"]))
             # Every probe goes through the pilot's own decision path, not just
             # the last one: `_resolve_d` scores the model's declared cost
@@ -362,14 +368,16 @@ def arm_cost(replicates: int, cost_ds=COST_DS, start=COST_START_SCALE,
         last = probes[-1]
         d_hat = float(np.mean(ests)) if ests else float("nan")
         se = _se(ests)
-        # Three standard errors for the same d, recorded side by side because
+        # Four standard errors for the same d, recorded side by side because
         # they do not agree and the pilot's mismatch gate depends on which one
-        # it uses: the across-probe spread (`se`, what repeated measurement
-        # actually shows), the affine fit's Gauss-Newton covariance (what
-        # `_resolve_d` prefers, from ONE probe at dof = 1), and the bootstrap
-        # over that probe's own repeat timings (`_resolve_d`'s fallback).
+        # it uses: the across-CALL spread (`se`, what repeated measurement
+        # actually shows), the affine fit's Gauss-Newton covariance from ONE
+        # climb at dof = 1, the bootstrap over that climb's own repeat timings,
+        # and -- since 2026-09-14, and what `_resolve_d` now prefers -- the
+        # spread across the D_PROBES climbs inside a single call.
         se_cov = (last.get("affine") or {}).get("d_se")
         se_boot = _d_se_bootstrap(last)
+        se_within_probe_set = (last.get("d_across_probes") or {}).get("se")
         misses = sum(1 for r in resolved if r["verdict"] == "MISMATCH")
         rows.append({
             "cell": len(rows), "d": {"planted": float(d), "recovered": d_hat,
@@ -377,6 +385,13 @@ def arm_cost(replicates: int, cost_ds=COST_DS, start=COST_START_SCALE,
             "per_replicate_d": ests,
             "se_across_probes": se, "se_fit_covariance": se_cov,
             "se_bootstrap_over_repeats": se_boot,
+            # What `_resolve_d` now uses: the spread inside ONE call's probe
+            # set. It is the same KIND of quantity as `se_across_probes` above
+            # -- both measure variation BETWEEN climbs -- which the two
+            # single-probe ses are not, and that is the whole fix. Read them as
+            # one estimate each, not as a precise ratio: an sd from 5 numbers
+            # carries ~35% of itself.
+            "se_within_probe_set": se_within_probe_set,
             "probe_scales": last["scales"],
             "overhead_share": last.get("overhead_share"),
             "declared_d": last.get("declared_d"),
@@ -498,6 +513,15 @@ def inject_leak(leaks: dict) -> None:
             if isinstance(probe.get("affine"), dict):
                 probe["affine"]["d"] = leaks["d"]
                 probe["affine"]["d_se"] = None
+            # Since 2026-09-14 `_resolve_d` PREFERS the across-probe block, so
+            # the injection has to reach it too. Patching only `affine` would
+            # leave this control quietly measuring the honest path and
+            # reporting PASS -- a broken detector that looks like a working one,
+            # which is the exact failure mode this whole file exists to catch.
+            if isinstance(probe.get("d_across_probes"), dict):
+                n = int(probe["d_across_probes"]["n"])
+                probe["d_probes"] = [leaks["d"]] * n
+                probe["d_across_probes"].update(d=leaks["d"], sd=0.0, se=0.0)
             return probe
 
         globals()["measure_cost_exponent"] = leaky_cost
@@ -653,13 +677,22 @@ def format_report(arms: list[dict], verdict: dict) -> str:
                            f"{_rel(r):>8.2%}{flag}")
     for arm in arms:
         if arm["arm"] == "cost" and arm.get("mismatch_rate") is not None:
+            # Every cell here declares its cost exponent exactly, so the rate
+            # printed IS the false-alarm rate of _resolve_d's gate. It read
+            # 32-34% while the se came from inside a single probe; taking it
+            # from the spread ACROSS probes (D_PROBES, 2026-09-14) is what this
+            # line exists to keep honest, in either direction.
+            rate = arm["mismatch_rate"]
             out.append(
                 f"\n  _resolve_d called MISMATCH on {arm['mismatches']} of "
-                f"{arm['probes']} probes ({arm['mismatch_rate']:.0%}) -- every "
-                f"one a FALSE ALARM,\n  since the burn realizes exactly what "
-                f"cost_hint declares. The gate scores one probe\n  against its "
-                f"own error estimate, and a single probe's d moves by more "
-                f"than that.")
+                f"{arm['probes']} probes ({rate:.0%}) -- every one a FALSE "
+                f"ALARM,\n  since the burn realizes exactly what cost_hint "
+                f"declares." + ("\n  The gate is calibrated: it does not fire "
+                                "on a correct declaration."
+                                if rate <= 0.02 else
+                                "\n  The gate is MIS-calibrated: se(d) is too "
+                                "small for the cutoff it is\n  compared "
+                                "against. See D_PROBES in src/study/pilot.py."))
     out.append(f"\n\n{'arm':<12}{'param':<8}{'max|z|':>8}{'thresh':>8}"
                f"{'max rel':>9}{'slope':>9}{'R^2':>8}   verdict")
     out.append("-" * 80)
