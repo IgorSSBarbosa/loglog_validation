@@ -33,6 +33,7 @@ import json
 import math
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -43,8 +44,11 @@ ROOT = HERE.parent.parent                    # repo root; src/<layer>/ -> ../../
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.artifacts import artifact_path, default_out_dir, load_recipe, write_artifact  # noqa: E402
-from tools.constants import format_table, measured, override, save  # noqa: E402
+from tools.artifacts import (  # noqa: E402
+    artifact_path, default_out_dir, load_recipe, read_artifact, write_artifact)
+from tools.constants import (  # noqa: E402
+    Constant, format_table, load as load_constants, measured, override, save)
+from tools import cost_cache  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
 from tools.cost_model import (  # noqa: E402
     PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
@@ -86,6 +90,11 @@ D_PROBES = 5
 #: declared-vs-measured check at dof = 1 and a cutoff of |z| > 235.8, which
 #: cannot fire. Five cheap probes cost 12 s and give dof = 4, cutoff 6.62.
 D_PROBE_TIME_BUDGET = 30.0
+
+
+def _now() -> str:
+    """UTC stamp, same shape write_artifact puts on every artifact."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def study_dir(root: Path, name: str) -> Path:
@@ -192,6 +201,40 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
         out["d_across_probes"] = {"d": float(np.mean(ds)), "sd": sd_,
                                   "se": sd_ / math.sqrt(len(ds)), "n": len(ds)}
     return out
+
+
+def resolve_cost(model, params, scales, *, reuse_cache: bool = False) -> dict:
+    """The cost probe, measured now or reused from this machine's cache.
+
+    `reuse_cache` is --reuse-cost, and it is opt-in for the reason in
+    tools/cost_cache.py: a stale `d` makes every wall-clock prediction in the
+    study wrong in a way nothing downstream can detect. The flag is the user
+    asserting that the machine has not changed since the entry was written, and
+    the entry's age travels with the constant it produces -- `d`'s provenance
+    line says when and where it was measured, so a reused number can never read
+    as a fresh one.
+
+    The entry is rejected on a ladder mismatch as well as on a machine one.
+    `d` does not depend on the window (that is why probe_window may place it
+    anywhere), but the two remaining fields that DO -- the rung the overhead
+    share is quoted at, and what `reached_target` refers to -- would then
+    describe a window this study never had. Re-probing costs ~12 s, so the
+    conservative choice is free.
+    """
+    if reuse_cache:
+        entry = cost_cache.load(model, params)
+        if entry is not None and entry.get("probe"):
+            cached = dict(entry["probe"])
+            cached["from_cache"] = {"created": entry.get("created"),
+                                    "machine": entry.get("machine"),
+                                    "describe": cost_cache.describe(entry),
+                                    "throughput": entry.get("throughput")}
+            print(f"  cost probe: {cost_cache.describe(entry)}, "
+                  f"window {cached.get('scales')}", file=sys.stderr)
+            return cached
+        print("  --reuse-cost: nothing cached for this model on this machine "
+              "yet; measuring", file=sys.stderr)
+    return measure_cost_exponent(model, params, scales)
 
 
 #: |z| beyond which the clock and a declared cost are called a mismatch.
@@ -404,8 +447,16 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
         prov = f"pilot cost probe, affine fit over {rungs}"
         if se_source and se_source != "affine fit covariance":
             prov += f", se from {se_source}"
+    cached = cost.get("from_cache")
+    if cached:
+        # A reused measurement stays a measurement -- the clock did take it --
+        # but it was not taken during THIS pilot, and the line that says so
+        # travels with the number into constants.json, plan.json's frozen copy
+        # and details.md. `<-- NOT MEASURED` is for overrides and would be a
+        # lie here; silence would be the other kind of lie.
+        prov = f"{prov} [{cached['describe']}]"
     c = measured(d_val, d_se, prov)
-    check.update(d_se=d_se, se_source=se_source)
+    check.update(d_se=d_se, se_source=se_source, from_cache=bool(cached))
 
     if declared is None:
         check["verdict"] = "no declaration to check"
@@ -444,9 +495,132 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
     return c, check, warnings
 
 
+def _same_configuration(source_recipe: dict, recipe: dict) -> list[str]:
+    """What differs between the pilot that was measured and the one asked for.
+
+    Model and params because a different process is a different omega1. SCALES
+    because omega1 and a1 were FITTED on that ladder -- the quantity is the
+    model's, but the estimate is the ladder's, and carrying a number measured
+    over 2..128 into a study over 8..1024 without saying so would be exactly
+    the anonymous constant tools/constants.py exists to stop. The machine
+    constants are the ones that survive a ladder change; they live in
+    tools/cost_cache.py and travel under --reuse-cost instead.
+    """
+    diffs = []
+    if source_recipe.get("model") != recipe.get("model"):
+        diffs.append(f"model: {source_recipe.get('model')!r} -> "
+                     f"{recipe.get('model')!r}")
+    if (source_recipe.get("params") or {}) != (recipe.get("params") or {}):
+        diffs.append(f"params: {source_recipe.get('params')} -> "
+                     f"{recipe.get('params')}")
+    a = [int(x) for x in source_recipe.get("scales") or []]
+    b = [int(x) for x in recipe.get("scales") or []]
+    if a != b:
+        diffs.append(f"scales: {a} -> {b}")
+    return diffs
+
+
+def source_entropy(source_sd: Path) -> int | None:
+    """The root seed the source study drew from, if it recorded one.
+
+    Read off `final.json`'s seed records rather than the recipe, because it is
+    the seeds actually used that a new study must not collide with.
+    """
+    final = read_artifact(source_sd, "final", required=False) or {}
+    for rec in final.get("seeds") or []:
+        if isinstance(rec, dict) and rec.get("entropy") is not None:
+            return int(rec["entropy"])
+    return None
+
+
+def read_for_reuse(source_sd: Path, *, recipe: dict | None = None) -> dict:
+    """Carry a finished pilot's constants into a new study. Draws nothing.
+
+    THE POINT. A pilot is the expensive half of a study -- 456 s of the 20
+    minutes in the run that prompted this -- and every constant it measures is
+    a property of the model and the ladder, not of the study directory it
+    happens to sit in. Re-planning the same model at a different budget, or at
+    a target precision, does not need the draws taken again.
+
+    WHAT THIS COSTS, stated because it is not nothing. Studies that share a
+    pilot share its errors: an omega1 that came out high moves the m0 of every
+    plan built on it, and the B_fs term of every report, in the same direction.
+    Their gamma-hats stay independent -- the run draws fresh, from a stream
+    this function refuses to let collide (see `source_entropy`) -- but the
+    stated bias is common-mode, so a disagreement between two such studies is
+    evidence about the runs and an AGREEMENT is weaker evidence than it looks.
+    Every constant carries `[reused from <study>]` into constants.json for that
+    reason, and report.py prints provenance verbatim.
+
+    The scales must match: see `_same_configuration`.
+    """
+    source_sd = Path(source_sd)
+    consts = load_constants(source_sd)
+    if not consts:
+        raise SystemExit(
+            f"no constants.json in {source_sd}, so there is no pilot to reuse.\n"
+            f"  Run one there first, or point --reuse-pilot at a study that "
+            f"has finished its pilot.")
+    source = read_artifact(source_sd, "pilot", required=False)
+    if not source or "recipe" not in source:
+        raise SystemExit(
+            f"{source_sd} has constants but no pilot.json holding the recipe "
+            f"they were measured on.\n  Without it nothing records WHAT was "
+            f"drawn, and a reused constant would be anonymous.")
+
+    source_recipe = source["recipe"]
+    if recipe is not None:
+        diffs = _same_configuration(source_recipe, recipe)
+        if diffs:
+            raise SystemExit(
+                "the pilot being reused was measured on a different "
+                "configuration:\n  " + "\n  ".join(diffs) +
+                "\n  omega1 and a1 are fitted ON the ladder, so they do not "
+                "carry across one.\n  Either drop -meta (the reused pilot's "
+                "own recipe is used), or run a fresh pilot.\n  To carry only "
+                "the MACHINE constants across a ladder change, use "
+                "--reuse-cost instead.")
+
+    tag = f"reused from {source_sd.name}"
+    carried = {k: Constant(c.value, c.se, f"{c.source} [{tag}]", c.origin)
+               for k, c in consts.items()}
+    return {"constants": carried, "recipe": source_recipe, "pilot": source,
+            "source_dir": source_sd, "entropy": source_entropy(source_sd)}
+
+
+def write_reused(sd: Path, data: dict, log=print) -> dict:
+    """Commit a validated reuse into the new study directory.
+
+    Split from `read_for_reuse` so that every refusal -- a configuration
+    mismatch, a seed collision -- happens before anything is written. A study
+    directory holding constants from a run that was then refused is a trap for
+    whoever reads it next.
+    """
+    sd = Path(sd)
+    sd.mkdir(parents=True, exist_ok=True)
+    save(sd, data["constants"])
+    write_artifact(sd, "pilot", {**data["pilot"],
+                                 "reused_from": str(data["source_dir"]),
+                                 "reused_at": _now()},
+                   produced_by="src/study/pilot.py (reuse)")
+    src = data["pilot"]
+    log(f"pilot reused from {data['source_dir']}")
+    log(f"  {src.get('replicates', '?')} replicate(s), scales "
+        f"{data['recipe'].get('scales')}, drawn in "
+        f"{src.get('drawn_seconds', float('nan')):.1f} s -- not redrawn")
+    return data
+
+
+def reuse(source_sd: Path, sd: Path, *, recipe: dict | None = None,
+          log=print) -> dict:
+    """read_for_reuse + write_reused: the whole operation, for pilot.py's CLI."""
+    return write_reused(sd, read_for_reuse(source_sd, recipe=recipe), log=log)
+
+
 def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
           existing: list | None = None, assert_d: float | None = None,
-          trust_declared_d: bool = False, cost: dict | None = None) -> dict:
+          trust_declared_d: bool = False, cost: dict | None = None,
+          reuse_cache: bool = False) -> dict:
     """Draw `replicates` replicates, fit the constants, write them to `sd`.
 
     `cost` re-uses a cost probe measured earlier instead of running another.
@@ -515,7 +689,7 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         return float(np.std([p[key] for p in per], ddof=1) / np.sqrt(R)) if R > 1 else None
 
     if cost is None:
-        cost = measure_cost_exponent(model, params, scales)
+        cost = resolve_cost(model, params, scales, reuse_cache=reuse_cache)
 
     cv_by_rep = np.array([r["cv"] for r in reps], float)     # (R, len(scales))
     cv_per_scale = cv_by_rep.mean(axis=0)
@@ -551,6 +725,10 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
             f"  or state it:  --assert-d <value>   (checked against the clock, "
             f"not a substitute for it)\n")
     cost["d_check"] = d_check
+    if not cost.get("from_cache"):
+        # Writing is not opt-in: a fresh probe always lands in the cache so
+        # --reuse-cost has something to find next time. Reading it back is.
+        cost_cache.save(model, params, cost, throughput=throughput)
 
     sd.mkdir(parents=True, exist_ok=True)
     save(sd, consts)
@@ -585,6 +763,17 @@ def _main(argv=None) -> None:
     p.add_argument("--more", type=int, default=0,
                    help="add this many replicates to an existing pilot, keeping the "
                         "ones already drawn")
+    p.add_argument("--reuse-pilot", default=None, dest="reuse_pilot",
+                   help="name (or path) of a finished study whose constants to "
+                        "carry into this one instead of drawing. Model, params "
+                        "and SCALES must match: omega1 and a1 are fitted on the "
+                        "ladder. Every constant is stamped `[reused from ...]`")
+    p.add_argument("--reuse-cost", action="store_true", dest="reuse_cost",
+                   help="reuse this machine's cached cost probe (d) rather than "
+                        "re-timing the model. Survives a ladder change, unlike "
+                        "--reuse-pilot. Opt-in because a stale d makes every "
+                        "wall-clock prediction wrong undetectably; the entry's "
+                        "age is printed with the constant")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--assert-d", type=float, default=None, dest="assert_d",
                    help="a known cost exponent to CHECK the clock against, for "
@@ -612,16 +801,37 @@ def _main(argv=None) -> None:
         old = json.loads(prev.read_text())
         recipe, existing, reps = old["recipe"], old["per_replicate"], a.more
         print(f"adding {a.more} replicate(s) to the {old['replicates']} already in {sd}")
+    elif a.reuse_pilot and a.meta is None:
+        # The reused pilot carries its own recipe, so -meta is optional here.
+        # Given anyway, it is CHECKED against that one rather than replacing it.
+        if a.data_root is None:
+            raise SystemExit("--reuse-pilot without -meta needs --data-root to "
+                             "locate both studies")
+        recipe, root, reps = {}, a.data_root, 0
+        sd = study_dir(root, a.study)
     else:
         if a.meta is None:
-            raise SystemExit("-meta is required (or use --more on an existing pilot)")
+            raise SystemExit("-meta is required (or use --more on an existing "
+                             "pilot, or --reuse-pilot with --data-root)")
         recipe = load_recipe(a.meta, "samples")
         root = a.data_root or default_out_dir(a.meta)
         sd = study_dir(root, a.study)
         reps = a.replicates
 
+    if a.reuse_pilot:
+        src = Path(a.reuse_pilot)
+        if not src.exists():
+            src = study_dir(root, a.reuse_pilot)
+        out = reuse(src, sd, recipe=recipe if a.meta else None)
+        print(f"\nstudy   = {sd}")
+        print(format_table(out["constants"]))
+        print(f"\nnothing was drawn. next: python3 src/study/plan.py --study "
+              f"{a.study} --data-root {root}")
+        return
+
     r = pilot(recipe, sd, reps, seed=a.seed, existing=existing,
-              assert_d=a.assert_d, trust_declared_d=a.trust_declared_d)
+              assert_d=a.assert_d, trust_declared_d=a.trust_declared_d,
+              reuse_cache=a.reuse_cost)
 
     print(f"\nstudy   = {sd}")
     print(f"model   = {recipe['model']}  scales = {r['fit'] and recipe['scales']}")

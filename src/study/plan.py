@@ -102,9 +102,37 @@ def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
             "seconds": t["cost"] * ratio / throughput, **err}
 
 
+def total_error(plan: dict, replicates: int) -> float:
+    """The error on the ANSWER: R replicates averaged, bias and all.
+
+    `predict_error` describes ONE replicate. Averaging R of them divides the
+    scatter by sqrt(R) and does nothing whatever to the finite-size bias, which
+    shifts every replicate the same way -- the fact report.py exists to state
+    and the replicate interval is blind to. So the number a user who says
+    "I need 1e-3" is asking for is
+
+        sqrt(bias**2 + sd**2 / R),
+
+    not the per-replicate rmse, and the two differ by more than sqrt(R)
+    whenever the plan is bias-limited. Where bias alone already exceeds the
+    target, no budget reaches it and `budget_for_target` says so rather than
+    bisecting toward a wall.
+    """
+    R = max(1, int(replicates))
+    return sqrt(plan["bias"] ** 2 + plan["sd"] ** 2 / R)
+
+
 def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput,
-                      cost_ratio=1.0, lo=1e3, hi=1e18) -> dict:
-    """Smallest budget whose predicted RMSE meets `target_se`, by bisection.
+                      cost_ratio=1.0, replicates: int = 1,
+                      lo=1e3, hi=1e18) -> dict:
+    """Smallest budget whose predicted error meets `target_se`, by bisection.
+
+    `target_se` is the error on the FINAL answer -- the mean of `replicates`
+    replicates, `total_error` -- for the same reason `--time` is the total
+    wall clock rather than a per-replicate one: asking for a precision and
+    being handed a plan that delivers something else is the surprise this
+    workflow exists to remove. At replicates=1 the two coincide, which is what
+    every caller before 2026-09-14 meant.
 
     Bisection rather than algebra because the tuned allocation floors m0 and n
     to integers, so predicted RMSE is a staircase in B, not a smooth power law.
@@ -112,12 +140,16 @@ def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput
     kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv, throughput=throughput,
               cost_ratio=cost_ratio)
     top = plan_for_budget(hi, **kw)
-    if not top["feasible"] or top["rmse"] > target_se:
-        return {"feasible": False, "why": f"target {target_se:g} unreachable below B={hi:g}"}
+    if not top["feasible"] or total_error(top, replicates) > target_se:
+        floor = (f"; the finite-size bias alone is {top['bias']:.3g} at the "
+                 f"deepest affordable m0, and no number of replicates reduces it"
+                 if top.get("feasible") and top["bias"] > target_se else "")
+        return {"feasible": False,
+                "why": f"target {target_se:g} unreachable below B={hi:g}{floor}"}
     for _ in range(200):
         mid = sqrt(lo * hi)
         p = plan_for_budget(mid, **kw)
-        if p["feasible"] and p["rmse"] <= target_se:
+        if p["feasible"] and total_error(p, replicates) <= target_se:
             hi = mid
         else:
             lo = mid
@@ -284,6 +316,18 @@ def _main(argv=None) -> None:
                    help="write plan.json so run.py will execute it")
     a = p.parse_args(argv)
 
+    # report.py refits eq. (232) on the final ladder, and that fit has four
+    # free parameters (tools/correction.py). Below five rungs it raises -- AFTER
+    # the whole budget has been drawn, which is the one place this workflow must
+    # not fail. Caught here, where the ladder width is chosen and nothing has
+    # been spent. Found 2026-09-14 by running --m 3.
+    if a.m < 5:
+        raise SystemExit(
+            f"--m {a.m} gives a {a.m}-scale ladder, and the eq. (232) refit "
+            f"report.py runs on it\n  needs at least 5 (four free parameters). "
+            f"The run would draw in full and then fail\n  at the report. Use "
+            f"--m 5 or more; the default is 6.")
+
     sd = Path(a.data_root) / a.study
     consts = load(sd)
     if not consts:
@@ -347,8 +391,10 @@ def _main(argv=None) -> None:
     # dies in parse_duration.
     time_text = a.time or "60s"
     if a.target_se:
-        pl = budget_for_target(a.target_se, **kw)
-        head = f"to reach se(gamma) <= {a.target_se:g}"
+        pl = budget_for_target(a.target_se, replicates=R, **kw)
+        head = (f"to reach se(gamma) <= {a.target_se:g} on the MEAN of {R} "
+                f"replicate(s)" if R > 1 else
+                f"to reach se(gamma) <= {a.target_se:g}")
     else:
         # The budget is split between replicates, so --time means the TOTAL
         # wall clock. Asking for 2h and being handed a 6h run would be the
@@ -376,6 +422,8 @@ def _main(argv=None) -> None:
     if R > 1:
         print(f"         ~ {pl['sd'] / sqrt(R):.4g} on the mean of {R}, before the "
               f"t({R - 1}) widening")
+        print(f"         ~ {total_error(pl, R):.4g} on the ANSWER -- that scatter "
+              f"AND the bias, which does not average away")
 
     print(f"\nwhat other budgets buy, same constants "
           f"(budget is PER REPLICATE; total is x{R})")

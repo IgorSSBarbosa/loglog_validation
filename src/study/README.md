@@ -60,6 +60,90 @@ buys a confident wrong answer, which is worse than no answer; `--force`
 overrides. One `--seed` drives everything, spawning independent streams for the
 pilot and the run, and `autopilot.json` records every decision.
 
+## Two ways to say how big the study is
+
+`--time` is a budget and asks what precision it buys. `--target-se` is a
+precision and asks what it costs — and **stops after planning** unless `--yes`,
+because "how long would this take" is a question and starting a four-hour run
+is a poor way to answer it.
+
+```bash
+python3 src/study/autopilot.py -meta <recipe> --study s --target-se 5e-3 --replicates 5
+# ...
+#   proposed allocation, to reach se(gamma) <= 0.005 on the MEAN of 5 replicate(s)
+#     m0 = 2   scales [8, 16, 32, 64, 128, 256]   n = 840   29.9 min
+#   --target-se answers a question and stops. To draw it:  <the same line> --yes
+```
+
+The target is the error on the **answer**, not on one replicate — the same
+principle that makes `--time` the total. Averaging $R$ replicates divides the
+scatter by $\sqrt R$ and does nothing to the finite-size bias, so what is
+matched is $\sqrt{b^2 + s^2/R}$, and where $b$ alone already exceeds the target
+no budget reaches it and `budget_for_target` says so rather than bisecting
+toward a wall. (This changed `plan.py --target-se` too, on 2026-09-14; at
+`--replicates 1` the old and new meanings coincide.)
+
+## Reusing a pilot, and reusing a probe
+
+A pilot is the expensive half of a study — 456 s of a 20-minute run — and
+nothing in it depends on the budget the plan will be made for. Two flags carry
+it forward, and they carry **different** things because the constants divide in
+two:
+
+| | what it carries | what must match | flag |
+|---|---|---|---|
+| a finished study | $\omega_1, a_1, cv$ **and** $d$ | model, params, **scales** | `--reuse-pilot <study>` |
+| this machine's cache | $d$ and throughput only | model, params, **machine** | `--reuse-cost` |
+
+$\omega_1$ and $a_1$ are *fitted on the ladder*, so they do not cross one — the
+quantity is the model's but the estimate is that ladder's. $d$ and throughput
+are properties of the model and the **machine**, and the probe is fixed-seeded
+on purpose, so re-timing is re-deriving a number already known. That is why the
+cache survives a change of ladder and `--reuse-pilot` does not.
+
+```bash
+# the whole 4 minutes goes to the run; no pilot is drawn
+python3 src/study/autopilot.py --study s2 --data-root $D \
+        --reuse-pilot s1 --time 4m --replicates 5 --seed 20260907
+
+# "how long for se = 5e-3?" answered in 22 ms, from constants already measured
+python3 src/study/autopilot.py --study q --data-root $D \
+        --reuse-pilot s1 --target-se 5e-3 --replicates 5 --seed 99
+```
+
+**Two refusals keep this honest, and both fire before anything is written.**
+
+*A different configuration* is refused outright — the diff is printed, line per
+field, and `--reuse-cost` is named as the thing that does cross a ladder.
+
+*The same root seed* is refused, and this one fires in ordinary use: the root
+falls back to the **recipe's** seed, and the recipe comes from the study being
+reused, so by default the second study's run stream is the first's. autopilot
+spawns child 0 for the pilot and child 1 for the run, so an unchanged root
+means child 1 is the same stream and the new study would redraw the old one's
+replicates bit for bit — and report them as an independent measurement. That is
+ground rule 2's failure in its purest form, and it is caught by comparing the
+root entropy against the one in the source study's `final.json`.
+
+**What reuse costs**, stated because it is not nothing: studies that share a
+pilot share its errors. An $\omega_1$ that came out high moves the $m_0$ of
+every plan built on it and the $B_{\mathrm{fs}}$ of every report, in the same
+direction. The $\hat\gamma$'s stay independent — the runs draw fresh — so a
+*disagreement* between two such studies is evidence about the runs, while an
+*agreement* is weaker evidence than it looks. Every carried constant is stamped
+`[reused from <study>]`, and a cached $d$ carries the date, the host and its
+age, marked `STALE` past 30 days:
+
+```
+d  +3.0217 +/- 0.0047  (pilot cost probe, mean of 5 ... [reused from fracdim_probefix_d3_k1])
+d  +0.9485 +/- 0.0332  (pilot cost probe, ... [reused from local/cost_cache.json
+                        (measured 2026-06-01 on policorp, 106 d old, STALE)])
+```
+
+Reuse is opt-in in both directions but **writing the cache is not**: a fresh
+probe always lands in `local/cost_cache.json` (gitignored — these numbers
+describe one computer) so `--reuse-cost` has something to find next time.
+
 ## Or one step at a time
 
 ```bash
@@ -68,6 +152,8 @@ D=experiments/01_srw/data
 # 1. cheap pilot: measures d, omega1, a1, cv, and this machine's throughput
 python3 src/study/pilot.py -meta experiments/01_srw/recipes/samples_pilot.json \
         --study mystudy --replicates 3
+python3 src/study/pilot.py -meta ... --study mystudy --reuse-cost   # keep d, re-draw
+python3 src/study/pilot.py --study mystudy2 --data-root $D --reuse-pilot mystudy
 
 # 2. what a longer run would cost -- proposes, draws nothing
 python3 src/study/plan.py --study mystudy --data-root $D --time 90s

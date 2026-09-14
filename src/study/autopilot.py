@@ -205,7 +205,7 @@ def bfs_span(consts: dict, m0: int, m: int, rho: float) -> dict | None:
 
 
 def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput,
-                    cost_ratio=1.0):
+                    cost_ratio=1.0, target_se=None):
     """The m0 the plan would choose right now, for evaluating the gate at.
 
     The gate has to be checked at the m0 the answer will be computed at, and
@@ -216,13 +216,19 @@ def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput,
     seconds to a budget by multiplying by the throughput: that multiplication
     is only valid when the allocation's cost unit is the unit the throughput
     was measured in (tools/cost_model.cost_unit_ratio).
+
+    Under --target-se there is no remaining budget to fit into: the budget is
+    whatever the precision costs. The m0 the answer will be computed at is then
+    the one `budget_for_target` picks, so the gate is evaluated there -- the
+    same question asked of the other constraint.
     """
+    kw = dict(d=consts["d"].value, omega1=consts["omega1"].value, rho=rho, m=m,
+              a1=consts["a1"].value, cv=consts["cv"].value,
+              throughput=throughput, cost_ratio=cost_ratio)
     try:
-        pl = plan_mod.budget_for_seconds(
-            seconds_left / max(1, replicates),
-            d=consts["d"].value, omega1=consts["omega1"].value, rho=rho, m=m,
-            a1=consts["a1"].value, cv=consts["cv"].value, throughput=throughput,
-            cost_ratio=cost_ratio)
+        pl = (plan_mod.budget_for_target(target_se, replicates=replicates, **kw)
+              if target_se else
+              plan_mod.budget_for_seconds(seconds_left / max(1, replicates), **kw))
     except (KeyError, ValueError, ZeroDivisionError):
         return None
     return pl["m0"] if pl.get("feasible") else None
@@ -261,7 +267,8 @@ def scale_draws(recipe: dict, factor: int) -> dict:
 
 def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
                            replicates, seed, rho, m, throughput_guess,
-                           max_rounds=MAX_ROUNDS,
+                           max_rounds=MAX_ROUNDS, target_se=None,
+                           reuse_cache=False,
                            span_limit=report_mod._BFS_SPAN_LIMIT, log=print):
     """The doubling loop: draw, fit, judge; double the DRAWS and repeat if not.
 
@@ -306,7 +313,7 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
         # again for a bit-identical answer. Measured at 280 s per probe on the
         # run that prompted this, a 3-round pilot spent 14 minutes on it.
         out = pilot_mod.pilot(this, sd, replicates, seed=round_seeds[k],
-                              cost=cost)
+                              cost=cost, reuse_cache=reuse_cache)
         cost = out["cost"]
         reps, consts = out["reps"], out["constants"]
         spent = time.perf_counter() - t_start
@@ -323,7 +330,7 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
             consts["d"].value if consts.get("d") else 1.0)
         m0 = _provisional_m0(consts, max(1e-9, total_seconds - spent),
                              rho=rho, m=m, replicates=replicates, throughput=tp,
-                             cost_ratio=ratio_fn)
+                             cost_ratio=ratio_fn, target_se=target_se)
         span = bfs_span(consts, m0, m, rho) if m0 is not None else None
         rounds.append({"round": k + 1, "factor": factor,
                        "replicates": len(reps),
@@ -381,32 +388,165 @@ def _bar(total_steps: int, enabled: bool):
                 desc="drawing")
 
 
-def autopilot(recipe: dict, sd: Path, *, seconds: float, replicates: int,
-              seed=None, rho=2.0, m=6, pilot_cap=PILOT_CAP,
+def resume_command(sd: Path, *, replicates, target_se, seed, reuse_from) -> str:
+    """The invocation that draws what --target-se just priced.
+
+    Built here rather than in `_plan_run_report` because only the caller knows
+    HOW the constants were obtained. A resume line that quietly dropped
+    --reuse-pilot would send the user off to draw a fresh pilot for constants
+    they already have, which is the opposite of the flag's purpose; and one
+    that dropped --seed would walk into the collision guard.
+    """
+    parts = ["python3 src/study/autopilot.py",
+             "--study", sd.name, "--data-root", str(sd.parent)]
+    if reuse_from is not None:
+        parts += ["--reuse-pilot", str(Path(reuse_from).name)]
+    parts += ["--target-se", f"{target_se:g}", "--replicates", str(replicates)]
+    if seed is not None:
+        parts += ["--seed", str(seed)]
+    return " ".join(parts)
+
+
+def _reused_round(source: dict, consts, scales, *, rho, m, replicates,
+                  seconds, target_se, ratio_fn, throughput):
+    """The gate, evaluated on a pilot that was measured somewhere else.
+
+    Reusing a pilot must not mean skipping the check on it. Both gates read
+    things the source study already wrote down -- `ladder_check` the
+    per-replicate summaries, the B_fs span the constants -- so they are asked
+    here exactly as they are asked of a fresh round. What DOES change between
+    studies is m0, because it comes from the new budget, and the span is a
+    function of m0. So a pilot that passed where it was measured can fail
+    here, and that is correct: the question is whether omega1 is pinned down
+    well enough for the plan THIS study is about to make.
+    """
+    reps = source.get("per_replicate") or []
+    lc = ladder_check(reps, scales)
+    m0 = _provisional_m0(consts, max(1e-9, seconds), rho=rho, m=m,
+                         replicates=replicates, throughput=throughput,
+                         cost_ratio=ratio_fn, target_se=target_se)
+    span = bfs_span(consts, m0, m, rho) if m0 is not None else None
+    rnd = {"round": 0, "factor": None, "replicates": len(reps),
+           "seconds": 0.0, "m0": m0, "span": span, "ladder": lc,
+           "omega1": consts["omega1"].value, "omega1_se": consts["omega1"].se,
+           "reused": True}
+    ok = (span is not None and span["span"] <= report_mod._BFS_SPAN_LIMIT
+          and lc["p"] <= LADDER_P_MAX)
+    return consts, [rnd], ok
+
+
+def _refuse_seed_collision(source_entropy, run_seed, source_dir) -> None:
+    """A reused pilot must not come with the source study's run stream.
+
+    autopilot spawns two children of one root: child 0 drives the pilot, child
+    1 the run. Reuse the pilot and keep the root -- which is what happens by
+    default, since the root falls back to the RECIPE's seed and the recipe
+    comes from the study being reused -- and child 1 is the same stream, so the
+    new study redraws the old one's replicates bit for bit. Two studies would
+    then report the same gamma from "independent" runs, which is ground rule
+    2's failure in its purest form: the one thing worse than a wasted run is a
+    duplicated one presented as a second measurement.
+
+    Cheap to detect, because every run records its seeds: compare the root
+    entropy against the one in the source study's final.json.
+    """
+    if source_entropy is None:
+        return
+    rec = seed_record(run_seed)
+    if int(rec.get("entropy", -1)) != int(source_entropy):
+        return
+    raise SystemExit(
+        f"\nrefusing to reuse {source_dir} with the same root seed "
+        f"({source_entropy}).\n"
+        f"  The run stream is child 1 of that root in both studies, so this "
+        f"run would redraw\n  the source study's replicates bit for bit and "
+        f"report them as an independent\n  measurement (PLAN.md ground rule "
+        f"2).\n"
+        f"  Pass a different --seed, e.g. --seed {int(source_entropy) + 1}.")
+
+
+def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
+              replicates: int, seed=None, rho=2.0, m=6, pilot_cap=PILOT_CAP,
               max_rounds=MAX_ROUNDS, force=False, progress=True,
-              log=print) -> dict:
-    """pilot -> plan -> run -> report, deciding in between. Returns the record."""
+              target_se: float | None = None, pilot_seconds_cap: float | None = None,
+              reuse_from: Path | None = None, reuse_cache: bool = False,
+              yes: bool = False, log=print) -> dict:
+    """pilot -> plan -> run -> report, deciding in between. Returns the record.
+
+    Two ways to say how big the study is, and exactly one of them is required.
+    `seconds` (--time) is a budget and asks what precision it buys; `target_se`
+    (--target-se) is a precision and asks what it costs. The second stops after
+    planning unless `yes`, because "how long would this take" is a question,
+    and answering it by starting the run would be a poor answer.
+
+    `reuse_from` skips the pilot entirely and carries another study's constants
+    in (see pilot.reuse). The gates are still evaluated, at THIS study's m0.
+    """
     t0 = time.perf_counter()
+    if (seconds is None) == (target_se is None):
+        raise SystemExit("autopilot needs exactly one of --time or --target-se")
+
+    # Read and validate the reused pilot, but write nothing yet: the seed
+    # collision below is a refusal too, and a study directory holding the
+    # constants of a run that was then refused is a trap for the next reader.
+    reused = (pilot_mod.read_for_reuse(reuse_from, recipe=recipe or None)
+              if reuse_from else None)
+    if reused and not recipe:
+        recipe = reused["recipe"]
+
     # Independent streams for the two draws. The pilot's samples must not
     # reappear in the run it sized -- that would be the same duplication
     # tools/rng.py's spawn(skip=) exists to prevent, one level up.
     pilot_seed, run_seed = spawn(seed if seed is not None else recipe.get("seed"), 2)
+    if reused:
+        _refuse_seed_collision(reused["entropy"], run_seed, reused["source_dir"])
+        pilot_mod.write_reused(sd, reused, log=log)
 
     scales = [int(x) for x in recipe["scales"]]
     log(f"study   = {sd}")
     log(f"model   = {recipe['model']}  scales = {scales}")
-    log(f"budget  = {human_time(seconds)} total, at most "
-        f"{human_time(seconds * pilot_cap)} of it on the pilot\n")
+    if target_se:
+        log(f"target  = se(gamma) <= {target_se:g} on the mean of {replicates} "
+            f"replicate(s); the budget is whatever that costs")
+    else:
+        log(f"budget  = {human_time(seconds)} total, at most "
+            f"{human_time(seconds * pilot_cap)} of it on the pilot")
+    log("")
 
-    consts, rounds, ok = pilot_until_determined(
-        recipe, sd, seconds_budget=seconds * pilot_cap, total_seconds=seconds,
-        replicates=replicates, seed=pilot_seed, rho=rho, m=m,
-        throughput_guess=1e8, max_rounds=max_rounds, log=log)
+    # The pilot's slice. Under --time it is a share of the total; under
+    # --target-se there is no total to take a share of, so it is stated
+    # outright (--pilot-time).
+    pilot_budget = (pilot_seconds_cap if seconds is None
+                    else seconds * pilot_cap)
+    if reused:
+        d_const = reused["constants"].get("d")
+        ratio_fn, _ = plan_mod._cost_ratio(
+            {"recipe": recipe, "scales": scales},
+            d_const.value if d_const else 1.0)
+        # The source study's own clock. Reusing a pilot means reusing the
+        # throughput it measured, so the wall-clock predictions here are that
+        # machine's -- which is this one, or the reuse should not have been
+        # asked for.
+        tp = reused["pilot"].get("throughput") or 1e8
+        consts, rounds, ok = _reused_round(
+            reused["pilot"], reused["constants"], scales, rho=rho, m=m,
+            replicates=replicates, seconds=(seconds or 0.0), target_se=target_se,
+            ratio_fn=ratio_fn, throughput=tp)
+    else:
+        consts, rounds, ok = pilot_until_determined(
+            recipe, sd, seconds_budget=pilot_budget,
+            total_seconds=seconds if seconds is not None else pilot_budget,
+            replicates=replicates, seed=pilot_seed, rho=rho, m=m,
+            throughput_guess=1e8, max_rounds=max_rounds, target_se=target_se,
+            reuse_cache=reuse_cache, log=log)
     pilot_seconds = time.perf_counter() - t0
 
-    log(f"\nconstants after {rounds[-1]['replicates']} replicate(s) at "
-        f"{rounds[-1]['factor']}x the recipe's draws, "
-        f"{human_time(pilot_seconds)}")
+    if reused:
+        log(f"\nconstants reused, {human_time(pilot_seconds)} spent (nothing drawn)")
+    else:
+        log(f"\nconstants after {rounds[-1]['replicates']} replicate(s) at "
+            f"{rounds[-1]['factor']}x the recipe's draws, "
+            f"{human_time(pilot_seconds)}")
     log(format_table(consts))
 
     # The ladder diagnostic, now that omega1/a1 are measured rather than
@@ -425,17 +565,27 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float, replicates: int,
         # The diagnosis is printed either way -- it is the evidence, and it is
         # the same evidence whether or not the run goes ahead. What --force
         # changes is only what happens next.
-        _diagnose(consts, rounds, sd, pilot_seconds, seconds, lc, force, log)
+        _diagnose(consts, rounds, sd, pilot_seconds, seconds or 0.0, lc, force, log)
         if not force:
             return _record_give_up(consts, rounds, sd, pilot_seconds, lc)
 
-    left = seconds - (time.perf_counter() - t0)
-    log(f"\nplanning with {human_time(left)} of the budget left "
-        f"({human_time(pilot_seconds)} went to the pilot)")
+    left = None if seconds is None else seconds - (time.perf_counter() - t0)
+    if target_se:
+        log(f"\nplanning for se(gamma) <= {target_se:g}"
+            + (f" ({human_time(pilot_seconds)} went to the pilot)"
+               if not reused else ""))
+    else:
+        log(f"\nplanning with {human_time(left)} of the budget left "
+            f"({human_time(pilot_seconds)} went to the pilot)")
     rec = _plan_run_report(recipe, sd, consts, rounds, lc, seconds=left,
                            replicates=replicates, seed=run_seed, rho=rho, m=m,
                            progress=progress, pilot_seconds=pilot_seconds,
-                           log=log, forced=not ok)
+                           log=log, forced=not ok, target_se=target_se,
+                           draw=yes or not target_se,
+                           resume=resume_command(
+                               sd, replicates=replicates, target_se=target_se,
+                               seed=seed, reuse_from=reuse_from)
+                           if target_se else "")
     if not ok:
         log("\n  !! --force: the constants above were NOT determined, and the "
             "answer\n     printed here inherits that. The eq. (720) bound's "
@@ -480,10 +630,19 @@ def _diagnose(consts, rounds, sd, pilot_seconds, seconds, lc, force, log) -> Non
         log("\nwhy it is not enough: omega1 has no standard error at all "
             "(one replicate has no spread),\n  so it cannot be shown to be "
             "determined.")
-    log(f"\nthe pilot used {human_time(pilot_seconds)} of "
-        f"{human_time(seconds)} ({len(rounds)} doubling round(s), ending at "
-        f"{rounds[-1]['replicates']} replicate(s) x "
-        f"{rounds[-1]['factor']}x the recipe's draws).")
+    if last.get("reused"):
+        # A reused pilot has no rounds and no budget of its own. What failed is
+        # the gate at THIS study's m0, and the fix is a better pilot, not more
+        # of this one -- so say which study it came from.
+        log(f"\nthese constants were reused, not drawn here: nothing in this "
+            f"study can improve them.\n  Deepen the pilot where it was "
+            f"measured ({last.get('replicates', '?')} replicate(s)), or drop "
+            f"--reuse-pilot and draw a fresh one.")
+    else:
+        log(f"\nthe pilot used {human_time(pilot_seconds)} of "
+            f"{human_time(seconds)} ({len(rounds)} doubling round(s), ending at "
+            f"{rounds[-1]['replicates']} replicate(s) x "
+            f"{rounds[-1]['factor']}x the recipe's draws).")
     if lc["p"] > LADDER_P_MAX:
         log(f"\nmost likely cause: THE LADDER. A pure power law still fits "
             f"(chi2/dof = {lc['chi2_per_dof']:.2f} on {lc['dof']} dof, "
@@ -519,18 +678,33 @@ def _record_give_up(consts, rounds, sd, pilot_seconds, lc) -> dict:
 
 def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
                      seed, rho, m, progress, pilot_seconds, log,
-                     forced=False) -> dict:
+                     forced=False, target_se=None, draw=True,
+                     resume="") -> dict:
     """Steps 2-4, with the plan accepted automatically and a bar over the run.
 
     `forced` means the gate failed and --force overrode it. It changes nothing
     about what is computed -- the same plan, the same draw, the same report --
     and is carried into autopilot.json so a result produced that way can never
     be mistaken later for one whose constants were determined.
+
+    `draw=False` is --target-se without --yes: plan and stop. plan.py is then
+    invoked WITHOUT --accept, so no plan.json is written -- the file means "a
+    decision was taken", and the user has not taken it yet. What they get is
+    the proposal, the wall clock it needs, and the command that runs it.
     """
-    argv = ["--study", sd.name, "--data-root", str(sd.parent),
-            "--time", f"{seconds:.0f}s", "--replicates", str(replicates),
-            "--rho", str(rho), "--m", str(m), "--accept"]
+    constraint = (["--target-se", repr(float(target_se))] if target_se
+                  else ["--time", f"{seconds:.0f}s"])
+    argv = (["--study", sd.name, "--data-root", str(sd.parent)] + constraint +
+            ["--replicates", str(replicates), "--rho", str(rho), "--m", str(m)]
+            + (["--accept"] if draw else []))
     plan_mod._main(argv)
+    if not draw:
+        log(f"\n  --target-se answers a question and stops. To draw it:"
+            f"\n      {resume} --yes")
+        return {"ok": True, "drawn": False, "forced": bool(forced),
+                "rounds": rounds, "ladder": lc, "pilot_seconds": pilot_seconds,
+                "target_se": float(target_se),
+                "constants": {k: vars(v) for k, v in consts.items()}}
     plan = read_artifact(sd, "plan")
     rp = plan.get("recipe_path")
     final_recipe = load_recipe(Path(rp), "samples") if rp else recipe
@@ -566,7 +740,8 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     report_mod.print_answer(res, log=log)
     log(f"\n  {sd / 'report.md'}\n  {sd / 'details.md'}\n  {fig}")
 
-    rec = {"ok": True, "forced": bool(forced), "rounds": rounds, "ladder": lc,
+    rec = {"ok": True, "drawn": True, "forced": bool(forced),
+           "rounds": rounds, "ladder": lc,
            "pilot_seconds": pilot_seconds, "plan": plan,
            "constants": {k: vars(v) for k, v in consts.items()},
            "gamma": res["gamma"], "wilson": res.get("wilson"),
@@ -581,14 +756,37 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
 
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("-meta", "--meta", dest="meta", type=Path, required=True,
+    p.add_argument("-meta", "--meta", dest="meta", type=Path, default=None,
                    help="samples recipe: the model, its params, and the SCALES. "
-                        "The ladder is never changed by this script.")
+                        "The ladder is never changed by this script. Optional "
+                        "only with --reuse-pilot, which carries its own.")
     p.add_argument("--study", required=True, help="name for the study directory")
     p.add_argument("--data-root", type=Path, default=None,
                    help="where studies live; defaults beside the recipe")
-    p.add_argument("--time", required=True,
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--time",
                    help="TOTAL wall clock for everything -- pilot and run: 2h, 90m, 45s")
+    g.add_argument("--target-se", type=float, dest="target_se",
+                   help="the precision you need on the ANSWER (the mean of "
+                        "--replicates replicates, bias included). The budget "
+                        "becomes whatever that costs; plans and STOPS unless "
+                        "--yes, because how long it would take is a question")
+    p.add_argument("--yes", action="store_true",
+                   help="with --target-se, draw the plan rather than only "
+                        "printing what it would cost")
+    p.add_argument("--pilot-time", default="5m", dest="pilot_time",
+                   help="with --target-se, how long the pilot may take -- there "
+                        "is no total for --pilot-cap to take a share of "
+                        "(default 5m). Ignored under --time")
+    p.add_argument("--reuse-pilot", default=None, dest="reuse_pilot",
+                   help="name (or path) of a finished study whose constants to "
+                        "carry in instead of drawing a pilot. Model, params and "
+                        "SCALES must match. The whole budget then goes to the "
+                        "run; needs a --seed distinct from that study's")
+    p.add_argument("--reuse-cost", action="store_true", dest="reuse_cost",
+                   help="reuse this machine's cached cost probe (d) instead of "
+                        "re-timing the model. Unlike --reuse-pilot this survives "
+                        "a change of ladder")
     p.add_argument("--replicates", type=int, default=3,
                    help="replicates in the first pilot round, and in the final run")
     p.add_argument("--seed", type=int, default=None,
@@ -611,14 +809,30 @@ def _main(argv=None) -> None:
 
     if not 0 < a.pilot_cap < 1:
         raise SystemExit(f"--pilot-cap must be in (0, 1); got {a.pilot_cap}")
-    recipe = load_recipe(a.meta, "samples")
+    if a.meta is None and not a.reuse_pilot:
+        raise SystemExit("-meta is required (or --reuse-pilot, which carries "
+                         "the recipe it was measured on)")
+    if a.meta is None and a.data_root is None:
+        raise SystemExit("--reuse-pilot without -meta needs --data-root to "
+                         "locate both studies")
+    recipe = load_recipe(a.meta, "samples") if a.meta else {}
     root = a.data_root or default_out_dir(a.meta)
     sd = pilot_mod.study_dir(root, a.study)
-    seconds = plan_mod.parse_duration(a.time)
 
-    rec = autopilot(recipe, sd, seconds=seconds, replicates=a.replicates,
-                    seed=a.seed, rho=a.rho, m=a.m, pilot_cap=a.pilot_cap,
-                    max_rounds=a.max_rounds, force=a.force, progress=a.progress)
+    reuse_from = None
+    if a.reuse_pilot:
+        reuse_from = Path(a.reuse_pilot)
+        if not reuse_from.exists():
+            reuse_from = pilot_mod.study_dir(root, a.reuse_pilot)
+
+    rec = autopilot(recipe, sd,
+                    seconds=plan_mod.parse_duration(a.time) if a.time else None,
+                    target_se=a.target_se,
+                    pilot_seconds_cap=plan_mod.parse_duration(a.pilot_time),
+                    replicates=a.replicates, seed=a.seed, rho=a.rho, m=a.m,
+                    pilot_cap=a.pilot_cap, max_rounds=a.max_rounds,
+                    force=a.force, progress=a.progress, yes=a.yes,
+                    reuse_from=reuse_from, reuse_cache=a.reuse_cost)
     raise SystemExit(0 if rec["ok"] else 1)
 
 

@@ -42,6 +42,7 @@ import ast
 import io
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -1129,6 +1130,53 @@ def sec_cost_model(a: Audit) -> None:
             lambda: tight["over_budget"] is True)
 
 
+def sec_cost_cache(a: Audit) -> None:
+    """tools/cost_cache -- d and throughput, kept per machine rather than per study"""
+    import tempfile
+    from tools.cost_cache import (STALE_DAYS, age_days, describe, key, load,
+                                  machine_id, save)
+
+    a.begin("tools/cost_cache", "d and throughput, per machine not per study")
+
+    a.check("machine_id names the host, the arch and the interpreter -- a "
+            "timing measured on one of them is not a measurement on another",
+            lambda: machine_id().count("/"), expect=2, detail=machine_id())
+    a.check("a key is order-free in params: the same process must hit the same "
+            "entry however the recipe spelled its dict",
+            lambda: key("m", {"a": 1, "b": 2}) == key("m", {"b": 2, "a": 1}))
+    a.check("...and separates models", lambda: key("m", {}) != key("n", {}))
+    a.check("...and params", lambda: key("m", {"dim": 3}) != key("m", {"dim": 4}))
+
+    path = Path(tempfile.mkdtemp()) / "cache.json"
+    a.check("a miss on an empty cache is None, not an error",
+            lambda: load("srw", {"q": 0.5}, path=path) is None)
+    save("srw", {"q": 0.5}, {"scales": [8, 16, 32, 64], "affine": {"d": 1.0}},
+         throughput=2.8e8, path=path)
+    hit = load("srw", {"q": 0.5}, path=path)
+    a.check("a saved probe comes back whole", lambda: hit["probe"]["scales"],
+            expect=[8, 16, 32, 64])
+    a.check("...with the throughput beside it", lambda: hit["throughput"],
+            expect=2.8e8)
+    a.check("...and is NOT handed to a different machine, which is the whole "
+            "reason the entry is keyed by one",
+            lambda: load("srw", {"q": 0.5}, path=path, machine="elsewhere") is None)
+    a.close("a fresh entry is zero days old", lambda: age_days(hit), 0.0, 0.01)
+    a.check("...and its description names when and where, for the provenance "
+            "line the constant carries",
+            lambda: "reused from" in describe(hit) and "on" in describe(hit),
+            detail=describe(hit))
+    old = {**hit, "created": "2020-01-01T00:00:00+00:00"}
+    a.check(f"an entry past {STALE_DAYS:.0f} days says STALE -- a note, never a "
+            "refusal, since the user asked for the reuse",
+            lambda: "STALE" in describe(old), detail=describe(old))
+    a.check("an unreadable timestamp is None rather than an exception",
+            lambda: age_days({"created": "not a date"}) is None)
+    path.write_text("{ this is not json")
+    a.check("a corrupt cache reads as an empty one: it holds nothing that "
+            "cannot be re-measured in seconds",
+            lambda: load("srw", {"q": 0.5}, path=path) is None)
+
+
 def sec_artifacts(a: Audit) -> None:
     """tools/artifacts -- one place that decides what every file is called"""
     from tools.artifacts import (ARTIFACTS, LEGACY, RECIPES, artifact_path, classify,
@@ -1355,8 +1403,15 @@ def sec_models_registry(a: Audit) -> None:
 
     a.begin("tools/models", "the registry -- a pure importer, no simulation of its own")
 
-    a.check("all four models are registered", lambda: sorted(MODELS),
-            expect=["percolation2d", "percolation_tau", "srw", "synthetic"])
+    # Spelled out rather than counted, so ADDING a model is a deliberate edit
+    # here and an accidental registration is caught. Last grown 2026-09-06 with
+    # the high-dimensional lattice; it had stood at the original four since,
+    # and failed silently in the audit until 2026-09-14.
+    a.check("every registered model is one we meant to register",
+            lambda: sorted(MODELS),
+            expect=["percolation2d", "percolation_tau", "percolation_tau_zd",
+                    "percolation_zd", "percolation_zd_stream", "srw",
+                    "synthetic"])
     a.raises("an unknown model is refused with the list of known ones", ValueError,
              lambda: get_model("nope"), contains="unknown model")
     srw, syn = get_model("srw"), get_model("synthetic")
@@ -1931,6 +1986,10 @@ TINY_RECIPES = {
         "kind": "samples", "model": "srw", "params": {"q": 0.5},
         "scales": [8, 16, 32, 64, 128, 256],
         "n": {"rule": "snr", "budget": 2e8}, "seed": 19},
+    "samples_other_ladder.json": {   # same model, DIFFERENT ladder: what
+        "kind": "samples", "model": "srw", "params": {"q": 0.5},   # --reuse-pilot
+        "scales": [16, 32, 64, 128, 256, 512],                     # must refuse
+        "n": {"rule": "snr", "budget": 2e8}, "seed": 24},
     "samples_perc_south.json": {
         "kind": "samples", "model": "percolation2d",
         "params": {"p": 0.59274605079210, "anchor": "south"},
@@ -1968,7 +2027,14 @@ class Scratch:
     """A temporary experiment directory, torn down when the audit finishes."""
 
     def __init__(self, base: Path | None = None):
+        from tools import cost_cache
+
         self.root = Path(base or tempfile.mkdtemp(prefix="loglog_audit_"))
+        # Writing the cost cache is not opt-in (tools/cost_cache.py), so every
+        # pilot this audit runs would otherwise land in the real machine's
+        # cache -- state outside the scratch tree, which is the one thing this
+        # class exists to prevent. Redirected for the audit and its children.
+        os.environ[cost_cache.CACHE_ENV] = str(self.root / "cost_cache.json")
         self.exp = self.root / "experiments" / "99_audit"
         self.recipes = self.exp / "recipes"
         self.data = self.exp / "data"
@@ -2619,6 +2685,107 @@ def sec_study(a: Audit, sc: Scratch) -> None:
                 lambda: json.loads(
                     (sc.data / "audit_trust" / "constants.json").read_text()
                 )["d"]["source"].startswith("user override"))
+
+    # --- reuse, and the two refusals that keep it honest -------------------
+    if (sd / "constants.json").exists():
+        from src.study.pilot import _same_configuration, source_entropy
+        from src.study.plan import total_error
+
+        a.check("total_error is the error on the ANSWER: the bias survives "
+                "averaging and the scatter does not",
+                lambda: round(total_error({"bias": 0.03, "sd": 0.04}, 4), 6),
+                expect=round((0.03 ** 2 + 0.04 ** 2 / 4) ** 0.5, 6))
+        a.check("...and at one replicate it is the per-replicate rmse, which "
+                "is what every caller before 2026-09-14 meant",
+                lambda: round(total_error({"bias": 0.3, "sd": 0.4}, 1), 6),
+                expect=0.5)
+        base = {"model": "srw", "params": {"q": 0.5}, "scales": [8, 16]}
+        a.check("_same_configuration passes an identical recipe",
+                lambda: _same_configuration(base, dict(base)), expect=[])
+        a.check("...and names the ladder when it differs, because omega1 and "
+                "a1 are fitted ON it",
+                lambda: len(_same_configuration(
+                    base, {**base, "scales": [16, 32]})), expect=1)
+        a.check("...the model, and the params",
+                lambda: len(_same_configuration(
+                    {**base, "model": "x", "params": {}}, base)), expect=2)
+
+        p = cli_ok(a, "--reuse-pilot carries another study's constants in and "
+                      "draws nothing",
+                   ["src/study/pilot.py", "--study", "audit_reuse",
+                    "--data-root", str(sc.data), "--reuse-pilot", study],
+                   stdout_has="nothing was drawn",
+                   creates=sc.data / "audit_reuse" / "constants.json")
+        if p:
+            carried = json.loads(
+                (sc.data / "audit_reuse" / "constants.json").read_text())
+            a.check("...stamping every constant with where it came from, so a "
+                    "reused number can never read as a fresh measurement",
+                    lambda: all(f"reused from {study}" in c["source"]
+                                for c in carried.values()),
+                    detail=carried["omega1"]["source"])
+            a.check("...and carrying the recipe, so plan.py still knows what "
+                    "was drawn",
+                    lambda: "recipe" in json.loads(
+                        (sc.data / "audit_reuse" / "pilot.json").read_text()))
+        cli_ok(a, "reusing a pilot measured on a DIFFERENT ladder is refused",
+               ["src/study/pilot.py", "-meta", sc.recipe("samples_other_ladder.json"),
+                "--study", "audit_reuse_bad", "--data-root", str(sc.data),
+                "--reuse-pilot", study],
+               expect_code=1, stderr_has="different configuration")
+        a.check("...leaving no study directory behind, since a refused reuse "
+                "that wrote constants would be a trap for the next reader",
+                lambda: not (sc.data / "audit_reuse_bad" / "constants.json").exists())
+        cli_ok(a, "reusing a study that does not exist says so",
+               ["src/study/pilot.py", "--study", "audit_reuse_none",
+                "--data-root", str(sc.data), "--reuse-pilot", "nosuch"],
+               expect_code=1, stderr_has="no constants.json")
+        a.check("source_entropy finds the root seed a study drew from, which "
+                "is what the collision guard compares against",
+                lambda: source_entropy(sd) is None or
+                        isinstance(source_entropy(sd), int),
+                detail=f"entropy={source_entropy(sd)}")
+
+        from src.study.autopilot import (_diagnose, _refuse_seed_collision,
+                                         _reused_round, resume_command)
+        from tools.rng import spawn
+
+        child = spawn(4242, 2)[1]
+        a.check("the seed guard passes when the roots differ",
+                lambda: _refuse_seed_collision(99, child, "x") is None)
+        a.raises("...and refuses when they are the same, because child 1 is "
+                 "the run stream in BOTH studies", SystemExit,
+                 lambda: _refuse_seed_collision(4242, child, "x"),
+                 contains="bit for bit")
+        a.check("...and does nothing when the source recorded no seed at all",
+                lambda: _refuse_seed_collision(None, child, "x") is None)
+
+        pj = json.loads((sc.data / "audit_reuse" / "pilot.json").read_text())
+        from tools.constants import load as load_consts
+        cs = load_consts(sc.data / "audit_reuse")
+        _, rnds, ok = _reused_round(
+            pj, cs, [int(x) for x in pj["recipe"]["scales"]], rho=2.0, m=6,
+            replicates=3, seconds=60.0, target_se=None, ratio_fn=1.0,
+            throughput=pj.get("throughput") or 1e8)
+        a.check("a reused pilot is still put through both gates, at THIS "
+                "study's m0 -- reuse is not a way around the check",
+                lambda: rnds[0]["ladder"] is not None and "reused" in rnds[0],
+                detail=f"m0={rnds[0]['m0']}, ok={ok}")
+        lines = []
+        _diagnose(cs, [{**rnds[0], "reused": True}], sc.data / "audit_reuse",
+                  0.0, 60.0, rnds[0]["ladder"], False, lines.append)
+        a.check("...and when it fails, the diagnosis says the fix is where the "
+                "pilot was MEASURED, since nothing here can improve it",
+                lambda: any("reused, not drawn here" in x for x in lines))
+        a.check("resume_command repeats the invocation with --reuse-pilot and "
+                "--seed kept, so following it does not redraw a pilot or walk "
+                "into the collision guard",
+                lambda: all(f in resume_command(
+                    sc.data / "q", replicates=5, target_se=5e-3, seed=7,
+                    reuse_from=sd) for f in ("--reuse-pilot", "--seed 7",
+                                             "--target-se 0.005")),
+                detail=resume_command(sc.data / "q", replicates=5,
+                                      target_se=5e-3, seed=7, reuse_from=sd))
 
     if (sd / "constants.json").exists():
         p = cli_ok(a, "plan.py proposes at a wall clock and draws nothing",
@@ -3432,7 +3599,7 @@ def sec_percolation_tau_zd(a: Audit) -> None:
 STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
-              sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
+              sec_cost_cache, sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
     "models": [sec_srw, sec_percolation2d, sec_percolation_tau,
                sec_percolation_zd, sec_percolation_tau_zd, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
