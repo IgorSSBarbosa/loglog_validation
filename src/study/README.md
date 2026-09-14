@@ -309,12 +309,46 @@ sample counts, not an estimate — roughly right is enough.
 
 ## Notes
 
-- **`d` comes from the model, not the clock, when it can.** A model with a
-  `cost_hint` declares its own cost, which is exact; the pilot times it anyway
-  and reports the gap. Timing alone is unreliable at the pilot's own scales —
-  a single `simulate(k, n=1)` call at $k=8$ is almost entirely Python dispatch,
-  which returned $d = 8.0 \pm 280$. The probe therefore climbs geometrically
-  away from the sample ladder until one call is slow enough to measure.
+- **`d` comes from the clock; a `cost_hint` only checks it.** A declaration
+  written straight into `constants.json` is the defect `_resolve_d` exists to
+  close — on srw, whose `cost_hint(i)` returns exactly $i$, $d=1$ then entered
+  *by definition* and the probe never had to recover anything. So the probe
+  times the model and scores the declaration as $z = (\hat d - d_{\rm decl})/
+  \mathrm{se}(\hat d)$; `--trust-declared-d` is the escape hatch and prints
+  `<-- NOT MEASURED` wherever it appears.
+- **Where the probe times is decided by measuring the per-call overhead**
+  (`tools/cost_model.py: probe_window`), not by climbing away from the ladder.
+  It measures $a_0$ at $i=1$, walks up to the first rung whose *work* clears
+  $\kappa a_0$ with $\kappa = 3$, and takes 4 rungs doubling from there,
+  packing them closer if the predicted cost exceeds `PROBE_WINDOW_BUDGET`.
+  Both ends matter and they fail differently: **too low** and the fit is not
+  noisy but wrong (srw over $8..64$ does not converge; over $32..256$ it
+  returns $3.42 \pm 0.69$ against a truth of 1), **too high** and it measures
+  a machine regime the study never enters — percolation_zd's cost per site is
+  flat at $2.03\times10^{-8}$ s across $64..512$ and rises 14% at $i=1024$,
+  where the working set leaves cache.
+
+  The same rule therefore sends the two models in opposite directions, which is
+  the point of measuring $a_0$ rather than assuming a scale:
+
+  | model | $a_0$ | window | cost, 5 probes | $\hat d$ | truth |
+  |---|---|---|---|---|---|
+  | srw | 8.7 µs | $8192..65536$ | 0.03 s | $0.978 \pm 0.044$ | 1 |
+  | percolation_zd, $\dim=3$ | 0.21 ms | $32..256$ | 11.7 s | $3.023 \pm 0.013$ | 3 |
+  | *(the same, under the old climb)* | — | $128..1024$ | 280 s (2 probes) | $3.086 \pm 0.042$ | 3 |
+
+  The old strategy started at the ladder's **largest** scale and only went up,
+  with the 4-rung floor outranking both of its stopping rules — so on a model
+  whose top rung is already slow it paid three unconditional doublings: 280 s
+  of a 20-minute study, 43% of the work of the final run, on draws that are
+  timed and discarded. It also left `D_PROBES` at 2 instead of 5, and the
+  declared-vs-measured check at $\mathrm{dof}=1$, cutoff $|z| > 235.8$ — a
+  test that cannot fire. Five cheap probes give $\mathrm{dof}=4$, cutoff 6.62.
+- **The probe runs once per pilot**, not once per doubling round. $d$ belongs
+  to the model and the machine, not to the draws, and the probe is fixed-seeded
+  on purpose — so a second probe in the same process re-derives the number it
+  already has. At 280 s a probe, a 3-round pilot spent 14 minutes on three
+  bit-identical answers.
 - **`--time` is the total**, split across replicates. Asking for 2h and getting
   a 6h run is the kind of surprise this workflow exists to remove.
 - **Samples are not kept** by default: a planned run is often hundreds of MB per

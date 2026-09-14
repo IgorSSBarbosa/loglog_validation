@@ -626,6 +626,20 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         (all PASS at the driver's 20% tolerance, the last flagged DISAGREE at
         $9.1\sigma$). The affordable probe ladder shrinks with $d$ while the fixed
         $\approx220\,\mu s$ dispatch overhead does not — it is 95% of the measurement
-        at the bottom rung in $d=4$ — so the affine fit has a short lever arm. Needs a
-        probe that reaches higher, which needs the memory budget raised
+        at the bottom rung in $d=4$ — so the affine fit has a short lever arm.
+        ~~Needs a probe that reaches higher, which needs the memory budget raised~~
+        **The lever arm is not the cause** (2026-09-14). Measured on
+        `percolation_zd` $\dim=5$, both windows placed above the overhead floor:
+        $8..16$ costs $1.7$ s and gives $4.849\pm0.051$; $8..32$ costs $33.5$ s
+        and gives $4.799\pm0.005$. Twenty times the compute moves $\hat d$ by
+        $0.05$ and *away* from the declaration, so a wider window measures the
+        same shortfall more precisely. The remaining candidate is the machine:
+        cost per site is not constant in $i$ (on $\dim=3$ it is flat at
+        $2.03\times10^{-8}$ s across $64..512$ and rises 14% at $i=1024$, where
+        the working set leaves cache), so "the cost exponent" is a property of
+        the scale range, and `cost_hint`'s $i^{\dim}$ is only its asymptote.
+        Open question: is the high-$d$ shortfall the same cache effect running
+        the other way (bigger boxes amortising better per site), and should
+        `d_check` compare against a *range-local* declared exponent rather than
+        the nominal one?
 - [ ] Phase 4 — Percolation on hierarchical/Bethe graphs, exact recursion cross-check

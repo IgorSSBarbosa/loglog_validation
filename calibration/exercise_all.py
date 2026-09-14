@@ -945,11 +945,13 @@ def sec_allocation(a: Audit) -> None:
 def sec_cost_model(a: Audit) -> None:
     """tools/cost_model -- the cost exponent d, and the two probes that measure it"""
     from tools.cost_model import (AGGREGATORS, COST_ESTIMATORS, DEFAULT_AGGREGATOR,
-                                  PROBE_MIN_SCALES, aggregate, climb_to_target,
-                                  compare_cost_models, declared_exponent,
-                                  estimate_cost_affine, estimate_cost_exponent,
-                                  fit_cost_probe, format_cost_comparison, median_ci,
-                                  time_at_scale, time_over_scales)
+                                  PROBE_MIN_SCALES, _space, aggregate,
+                                  climb_to_target, compare_cost_models,
+                                  declared_exponent, estimate_cost_affine,
+                                  estimate_cost_exponent, fit_cost_probe,
+                                  format_cost_comparison, measure_overhead,
+                                  median_ci, probe_window, time_at_scale,
+                                  time_over_scales)
     from tools.models import get_model
 
     a.begin("tools/cost_model", "the cost exponent d, and the two probes that measure it")
@@ -1087,6 +1089,44 @@ def sec_cost_model(a: Audit) -> None:
                                      np.random.default_rng(0), start=8,
                                      max_doublings=2),
              contains="PROBE_MIN_SCALES")
+
+    # probe_window: what pilot.py uses instead of the climb. The rule is
+    # "place the window just above the MEASURED per-call overhead", and what
+    # it has to get right is that the answer depends on the model, not on a
+    # fixed direction of travel.
+    a0, a0_scale = measure_overhead(srw_spec, {"q": 0.5},
+                                    np.random.default_rng(0), repeats=5)
+    a.check("measure_overhead times the smallest scale the model accepts",
+            lambda: a0 > 0 and a0_scale >= 1,
+            detail=f"a0 = {1e6 * a0:.1f} us at i = {a0_scale}")
+    a.check("_space gives distinct geometric rungs inside a narrow window",
+            lambda: _space(32, 64, 4), expect=[32, 40, 51, 64])
+    a.check("...and fewer than asked when the integers collide, so the caller "
+            "widens rather than silently fitting a short ladder",
+            lambda: len(_space(4, 5, 4)) < 4)
+    win = probe_window(srw_spec, {"q": 0.5}, np.random.default_rng(0),
+                       [8, 16, 32, 64, 128, 256])
+    a.check("probe_window walks UP past a cheap model's own ladder, because "
+            "that is where srw's work finally clears its dispatch overhead",
+            lambda: win["window_bottom"] > 256,
+            detail=f"ladder tops at 256, window is "
+                   f"{win['scales'][0]}..{win['scales'][-1]}")
+    a.check("...and keeps every rung above the overhead floor",
+            lambda: min(win["elapsed"]) >= a0 * win["overhead_factor"] * 0.5)
+    fit_cost_probe(win, srw_spec.cost_hint, {})
+    a.close("...so the affine fit still recovers srw's d = 1",
+            lambda: win["affine"]["d"], 1.0, 0.3,
+            detail=f"window {win['scales']}, "
+                   f"{win['predicted_seconds']:.3g} s predicted")
+    tight = probe_window(srw_spec, {"q": 0.5}, np.random.default_rng(0),
+                         [8, 16, 32, 64, 128, 256], seconds_budget=1e-9)
+    a.check("an impossible budget packs the rungs to the tightest window that "
+            "still has PROBE_MIN_SCALES of them, rather than dropping any",
+            lambda: len(tight["scales"]) >= PROBE_MIN_SCALES and
+                    tight["scales"][-1] < win["scales"][-1],
+            detail=f"{tight['scales']}, over_budget={tight['over_budget']}")
+    a.check("...and says so, so a short lever arm is never silent",
+            lambda: tight["over_budget"] is True)
 
 
 def sec_artifacts(a: Audit) -> None:

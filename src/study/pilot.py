@@ -47,8 +47,8 @@ from tools.artifacts import artifact_path, default_out_dir, load_recipe, write_a
 from tools.constants import format_table, measured, override, save  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
 from tools.cost_model import (  # noqa: E402
-    PROBE_MIN_SCALES, PROBE_REPEATS, aggregate, climb_to_target,
-    estimate_cost_affine, fit_cost_probe)
+    PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
+    estimate_cost_affine, fit_cost_probe, probe_window)
 from tools.models import get_model  # noqa: E402
 from tools.rng import spawn  # noqa: E402
 from tools.summary import replicate_summary, summarize_scale  # noqa: E402
@@ -76,9 +76,15 @@ COST_PROBE_SEED = 0
 D_PROBES = 5
 
 #: Seconds after which extra probes are abandoned (>= 2 always attempted, since
-#: one probe has no spread). On srw a probe is ~0.2 s and all D_PROBES run; the
-#: ceiling exists for a model whose climb runs into PROBE_TIME_BUDGET, where
-#: five probes would be 100 s of a pilot's time spent on a diagnostic.
+#: one probe has no spread). A backstop, and since probe_window replaced the
+#: climb it is no longer the thing that binds: each probe is capped at
+#: PROBE_WINDOW_BUDGET by a PREDICTED cost, before the expensive rung is timed,
+#: rather than by an elapsed-time check that can only fire after paying. On the
+#: run that prompted this (percolation_zd dim=3, 2026-09-14) the old climb blew
+#: through this ceiling by 9x -- 280 s -- because it is only consulted between
+#: whole probes, and D_PROBES = 5 degenerated to 2, leaving the
+#: declared-vs-measured check at dof = 1 and a cutoff of |z| > 235.8, which
+#: cannot fire. Five cheap probes cost 12 s and give dof = 4, cutoff 6.62.
 D_PROBE_TIME_BUDGET = 30.0
 
 
@@ -123,20 +129,35 @@ def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
 
 
 def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
-                          probes: int = D_PROBES) -> dict:
+                          probes: int = D_PROBES,
+                          seconds_budget: float = PROBE_WINDOW_BUDGET) -> dict:
     """Measure d = the cost exponent of Assumption cost_is_power_law (eq. 353).
 
     Both halves live in tools/cost_model.py and are shared with the standalone
-    probe (src/estimate/measure_cost.py): `climb_to_target` picks where to
-    time, `fit_cost_probe` fits cost(i) = a + b*i^d and reports the per-call
+    probe (src/estimate/measure_cost.py): `probe_window` picks where to time,
+    `fit_cost_probe` fits cost(i) = a + b*i**d and reports the per-call
     overhead it separated out.
 
-    The probe starts at the pilot's LARGEST scale and climbs away from there.
-    It must not simply time the sample ladder: those scales are chosen so the
-    correction term is visible, which means small, and at srw's 8..256 a single
-    simulate() call is almost entirely Python/NumPy dispatch -- timing them
-    returned d = 8.0 +/- 280. d is a property of the model, not of the window,
-    so measuring it further out costs nothing.
+    WHERE the probe times, since 2026-09-14 (user's call, after the run below).
+    It used to start at the pilot's LARGEST scale and climb upward, because the
+    sample ladder is chosen so the correction term is visible -- which means
+    small, and at srw's 8..256 a single simulate() call is almost entirely
+    Python/NumPy dispatch, which returned d = 8.0 +/- 280. That reasoning is
+    right for srw and wrong for anything expensive: on percolation_zd dim=3 a
+    call at the ladder's top already took 40 ms, 20x the target the climb was
+    climbing toward, and the rung floor made it double three more times anyway
+    -- 280 s, 43% of the work of the final run, on draws that are timed and
+    thrown away.
+
+    `probe_window` decides by MEASURING the per-call overhead and placing the
+    window just above it, so the same rule sends srw up to 8192..65536 (0.03 s
+    for five probes) and percolation_zd down to 32..256 (12 s, against 280 s
+    for two). d is a property of the model, not of the window, so measuring it
+    where the calls are cheap costs nothing -- but the window must stay where
+    the MACHINE still behaves the same way, and that is the other half of the
+    change: percolation_zd's per-site cost is flat across 64..512 and rises 14%
+    at i = 1024, where the working set leaves cache, and fitting through that
+    upturn is what returned d = 3.086 against a declared 3.
 
     A model that declares `cost_hint` gets that reported too, as `declared_d`
     -- but only as something to CHECK the clock against, never as the value
@@ -144,19 +165,19 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     straight into constants.json, so on srw (cost_hint(i) = i exactly) d = 1
     entered by definition and this probe never had to recover anything.
 
-    The climb is run `probes` times from independent seeds, and the returned
-    dict carries `d_across_probes` = {d, sd, se, n}: the MEAN of the per-probe
-    affine exponents and the spread across them. That block is what `_resolve_d`
-    prefers, and the reason is measured rather than assumed -- see D_PROBES. The
-    last probe's own scales, timings and affine fit are returned alongside it so
-    the record still shows one complete climb.
+    The window is placed `probes` times from independent seeds, and the
+    returned dict carries `d_across_probes` = {d, sd, se, n}: the MEAN of the
+    per-probe affine exponents and the spread across them. That block is what
+    `_resolve_d` prefers, and the reason is measured rather than assumed -- see
+    D_PROBES. The last probe's own scales, timings and affine fit are returned
+    alongside it so the record still shows one complete window.
     """
     spec = get_model(model)
-    start, fits, t0 = int(max(scales)), [], time.perf_counter()
+    fits, t0 = [], time.perf_counter()
     for j in range(max(1, probes)):
         fits.append(fit_cost_probe(
-            climb_to_target(spec, params, np.random.default_rng(COST_PROBE_SEED + j),
-                            start=start, repeats=repeats),
+            probe_window(spec, params, np.random.default_rng(COST_PROBE_SEED + j),
+                         scales, repeats=repeats, seconds_budget=seconds_budget),
             spec.cost_hint, params))
         if len(fits) >= 2 and time.perf_counter() - t0 > D_PROBE_TIME_BUDGET:
             break
@@ -164,6 +185,7 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     ds = [float(f["affine"]["d"]) for f in fits
           if (f.get("affine") or {}).get("d") is not None]
     out["d_probes"] = ds
+    out["probe_seconds"] = float(time.perf_counter() - t0)
     out["probe_seeds"] = [COST_PROBE_SEED + j for j in range(len(fits))]
     if len(ds) >= 2:
         sd_ = float(np.std(ds, ddof=1))
@@ -191,7 +213,16 @@ D_MISMATCH_Z = 3.0
 #: measurement, so the PURE power-law d_hat is measuring dispatch rather than
 #: work. affine["d"] is unaffected -- separating that overhead is precisely what
 #: it is for -- so this is recorded as a note, never a refusal.
-OVERHEAD_SHARE_NOTE = 0.2
+#:
+#: Raised from 0.2 when probe_window replaced the climb, because the window now
+#: TARGETS a share: its bottom rung is the first whose work clears
+#: PROBE_OVERHEAD_FACTOR times the overhead, so the share there is
+#: 1/(1 + kappa) = 0.25 by construction and a 0.2 threshold would have fired on
+#: every well-placed probe. Measured: 0.23-0.26 on percolation_zd dim=3. The
+#: margin above 0.25 is for the fit's own scatter in `a`; what this still
+#: catches is a window the rule could not honour, which `below_overhead_floor`
+#: reports directly.
+OVERHEAD_SHARE_NOTE = 0.35
 
 #: Resamples for the fallback se(d). Only used when the Gauss-Newton covariance
 #: is singular, which needs len(scales) <= 3 or a degenerate Jacobian.
@@ -294,18 +325,46 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
         d_val, d_se = aff.get("d"), aff.get("d_se")
         se_source, dof = "affine fit covariance", None
 
-    share = cost.get("overhead_share")
+    if cost.get("below_overhead_floor"):
+        warnings.append(
+            f"the probe never found a scale whose work clears the per-call "
+            f"overhead ({1e6 * (cost.get('overhead_seconds') or 0):.0f} us): it "
+            f"timed up to {cost.get('window_bottom')} and stopped there. d is "
+            f"fitted on measurements that are largely dispatch, and below that "
+            f"floor the affine fit is not merely noisy but wrong (srw over "
+            f"8..64 does not converge; over 32..256 it returns 3.42 +/- 0.69 "
+            f"against a truth of 1). Treat d as indicative.")
+    if cost.get("over_budget"):
+        warnings.append(
+            f"the probe window was packed to its tightest "
+            f"({cost.get('scales')}) and still costs more than "
+            f"PROBE_WINDOW_BUDGET = {cost.get('seconds_budget')} s. The lever "
+            f"arm is as short as {PROBE_MIN_SCALES} rungs allow, so se(d) is "
+            f"as wide as this model's cost permits.")
+
+    # Prefer the overhead the probe MEASURED at i = 1 over the one the affine
+    # fit inferred. They disagree, and in the direction that matters: on srw
+    # the fit reports 51% where the clock reports 25%, so the fitted share
+    # alone would raise this note on every well-placed window. `a` is fitted
+    # jointly with `d` over a short window and absorbs curvature belonging to
+    # the exponent -- the same unreliability that made probe_window measure
+    # the overhead rather than read it off the fit.
+    share = cost.get("overhead_share_measured")
+    share_src = "measured at i = 1"
+    if share is None:
+        share, share_src = cost.get("overhead_share"), "from the affine fit's a"
     if share is not None and share > OVERHEAD_SHARE_NOTE:
         # Not a refusal: this is the condition affine[] exists to survive.
         warnings.append(
             f"per-call overhead is {share:.0%} of the cheapest probe rung "
-            f"(> {OVERHEAD_SHARE_NOTE:.0%}), so the pure power-law d_hat "
-            f"({cost.get('d_hat')}) is measuring dispatch. The affine fit "
-            f"separates it out and is what d uses.")
+            f"({share_src}; > {OVERHEAD_SHARE_NOTE:.0%}), so the pure "
+            f"power-law d_hat ({cost.get('d_hat')}) is measuring dispatch. "
+            f"The affine fit separates it out and is what d uses.")
 
     check = {"declared": declared, "measured": d_val, "d_se": None,
              "z": None, "threshold": None, "verdict": None, "se_source": None,
-             "n_probes": across.get("n"), "dof": dof, "overhead_share": share}
+             "n_probes": across.get("n"), "dof": dof, "overhead_share": share,
+             "overhead_share_source": share_src}
 
     if trust_declared:
         if declared is None:
@@ -328,8 +387,8 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
             f"the cost probe produced no usable d ("
             f"{aff.get('error', 'affine fit failed')}), so the declared value "
             f"{declared:g} is being used UNCHECKED, stamped as an override. "
-            f"Widen the probe (PROBE_MAX_DOUBLINGS / PROBE_TARGET_SECONDS) to "
-            f"get a real measurement.")
+            f"Raise PROBE_WINDOW_BUDGET so the window can hold "
+            f"PROBE_MIN_SCALES rungs and get a real measurement.")
         return override(declared, "d"), check, warnings
 
     if d_se is None:
@@ -387,8 +446,19 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
 
 def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
           existing: list | None = None, assert_d: float | None = None,
-          trust_declared_d: bool = False) -> dict:
-    """Draw `replicates` replicates, fit the constants, write them to `sd`."""
+          trust_declared_d: bool = False, cost: dict | None = None) -> dict:
+    """Draw `replicates` replicates, fit the constants, write them to `sd`.
+
+    `cost` re-uses a cost probe measured earlier instead of running another.
+    d is a property of the model and the machine, not of the draws, and the
+    probe is seeded from a FIXED seed (COST_PROBE_SEED) precisely so that
+    repeating it cannot move d for reasons unrelated to the machine -- so a
+    second probe of the same model, on the same machine, in the same process
+    is guaranteed to spend its budget re-deriving the number it already has.
+    autopilot's doubling loop calls this function once per round and used to
+    pay for the probe every time: at the measured 280 s per probe, a 3-round
+    pilot spent 14 minutes on three bit-identical answers.
+    """
     model, params = recipe["model"], recipe.get("params", {})
     scales = [int(x) for x in recipe["scales"]]
     # `n` may be a scalar, a list, or an ALLOCATION RULE -- generate.py's own
@@ -444,7 +514,8 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     def spread(key):
         return float(np.std([p[key] for p in per], ddof=1) / np.sqrt(R)) if R > 1 else None
 
-    cost = measure_cost_exponent(model, params, scales)
+    if cost is None:
+        cost = measure_cost_exponent(model, params, scales)
 
     cv_by_rep = np.array([r["cv"] for r in reps], float)     # (R, len(scales))
     cv_per_scale = cv_by_rep.mean(axis=0)
@@ -475,8 +546,8 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
             f"  The affine fit cost(i) = a + b*i**d needs at least "
             f"{PROBE_MIN_SCALES} rungs and got "
             f"{len(cost.get('scales') or [])}: {cost.get('affine', {}).get('error', '')}\n"
-            f"  Widen the probe (tools/cost_model.py: PROBE_MAX_DOUBLINGS, "
-            f"PROBE_TARGET_SECONDS),\n"
+            f"  Raise the probe's budget (tools/cost_model.py: "
+            f"PROBE_WINDOW_BUDGET) so the window can hold that many rungs,\n"
             f"  or state it:  --assert-d <value>   (checked against the clock, "
             f"not a substitute for it)\n")
     cost["d_check"] = d_check

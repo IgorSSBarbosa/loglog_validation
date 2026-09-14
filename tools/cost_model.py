@@ -350,13 +350,18 @@ def format_cost_comparison(cmp: dict) -> str:
 #
 #   time_over_scales  times a ladder you name  -- src/estimate/measure_cost.py,
 #                     the standalone probe, where the ladder is the experiment.
-#   climb_to_target   doubles the scale until one call is slow enough --
-#                     src/study/pilot.py, where the ladder is not free: the
-#                     pilot's own scales are chosen so the CORRECTION term is
-#                     visible, which means SMALL, and a single simulate() call
-#                     there is almost entirely Python/NumPy dispatch.
+#   probe_window      MEASURES the per-call overhead, then places a window just
+#                     above it -- src/study/pilot.py, where the ladder is not
+#                     free: the pilot's own scales are chosen so the CORRECTION
+#                     term is visible, which means small, and a single
+#                     simulate() call there may be almost entirely dispatch.
+#   climb_to_target   doubles the scale from a start until one call is slow
+#                     enough. What pilot.py used before probe_window, kept
+#                     because it is the right strategy when no overhead
+#                     measurement is available, and still exercised by
+#                     calibration/exercise_all.py.
 #
-# Both hand the same {scales, elapsed, times, repeats, aggregator} to
+# All three hand the same {scales, elapsed, times, repeats, aggregator} to
 # `fit_cost_probe`, so the fitting, the overhead diagnostic and the
 # declared-vs-measured cross-check are written once. Before this split the two
 # callers had their own timing loop and their own fit, and only one of them
@@ -377,6 +382,48 @@ PROBE_TIME_BUDGET = 20.0
 
 #: Fewest rungs worth fitting: `estimate_cost_affine` has 3 free parameters.
 PROBE_MIN_SCALES = 4
+
+#: How many times a rung's WORK must exceed the per-call overhead before that
+#: rung is worth fitting. This is what PROBE_TARGET_SECONDS was a proxy for,
+#: and the proxy was wrong in both directions because it is an ABSOLUTE time
+#: while the thing it guards against is a RATIO. Measured on this machine
+#: (2026-09-14), fitting cost(i) = a + b*i**d over windows placed by this rule
+#: against windows placed by the old one:
+#:
+#:   model                     window        cost      d_hat           truth
+#:   percolation_zd dim=3      128..1024     280 s     3.086 +/- 0.042   3
+#:   percolation_zd dim=3       32..256       12 s     2.999 +/- 0.033   3
+#:   percolation_zd dim=3       16..128        3 s     2.953 +/- 0.013   3
+#:   srw                      1024..8192    0.04 s     1.000 +/- 0.014   1
+#:   srw                     16384..131072  0.07 s     1.027 +/- 0.013   1
+#:
+#: and BELOW the floor the fit is not merely noisy but wrong: srw over 8..64
+#: fails to converge at all, over 32..256 returns 3.42 +/- 0.69, and
+#: percolation_zd over 2..256 returns 2.913. kappa = 3 is where every model in
+#: the repo lands on a window whose d_hat is within 0.05 of its declared cost.
+PROBE_OVERHEAD_FACTOR = 3.0
+
+#: Seconds ONE probe may spend, including its overhead measurement and its
+#: walk up to the floor. A ceiling on a diagnostic, not a precision knob: the
+#: error budget prices se(d) = 0.042 at 1.0006x in RMSE (plan.py's
+#: `input_sensitivity`), so a probe has nothing to buy with more time. When the
+#: doubling window does not fit, the rungs are packed closer together rather
+#: than dropped -- a shorter lever arm widens se(d), which costs nothing, while
+#: fewer than PROBE_MIN_SCALES rungs means no affine fit at all.
+#:
+#: Deliberately NOT scaled with the pilot's own draw time, which was the
+#: obvious generalisation and is measured to buy nothing. On percolation_zd
+#: dim=5, where the budget is what binds:
+#:
+#:   window          cost     d_hat              declared
+#:   8..16 (packed)   1.7 s   4.849 +/- 0.051    5
+#:   8..32 (wide)    33.5 s   4.799 +/- 0.005    5
+#:
+#: 20x the compute moves d_hat by 0.05 and AWAY from the declaration. The
+#: shortfall in high d is systematic, not a lever-arm artefact -- see TODO.md,
+#: "the measured cost exponent falls increasingly short of the declared one as
+#: d grows" -- so a wider window measures the same wrong thing more precisely.
+PROBE_WINDOW_BUDGET = 6.0
 
 def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
                   aggregator: str = DEFAULT_AGGREGATOR) -> tuple[float, list[float]]:
@@ -522,6 +569,254 @@ def climb_to_target(spec, params: dict, rng, start: int,
     out["refused_at"] = refused_at
     out["extended_down"] = extended_down or None
     return out
+
+def measure_overhead(spec, params: dict, rng, repeats: int = PROBE_REPEATS,
+                     aggregator: str = DEFAULT_AGGREGATOR,
+                     ceiling: int | None = None) -> tuple[float, int]:
+    """Time one call at the smallest scale the model will accept.
+
+    This is `a` of the affine model cost(i) = a + b*i**d, measured rather than
+    fitted, and it is the quantity the whole window rule is built on. It has to
+    be measured because the FITTED `a` is unreliable exactly where it matters:
+    on percolation_zd dim=3 the affine fit over 128..1024 reported a = 3.2 ms
+    against a directly measured 0.21 ms, a factor of 15, because over a short
+    top-heavy window `a` absorbs curvature that belongs to `d`. Reading the
+    window off that number would have said "no rung below 128 is usable", and
+    the truth is that everything from 32 up is.
+
+    Nearly free: at i = 1 there is no work to do, so this costs
+    `repeats + 1` dispatches -- 0.5 ms on percolation_zd, 0.06 ms on srw.
+
+    Returns (seconds, the scale it was measured at). Climbs if the model
+    refuses i = 1, since some parameter sets have a minimum size.
+    """
+    i = 1
+    while ceiling is None or i <= max(1, int(ceiling)):
+        try:
+            agg, _ = time_at_scale(spec, i, params, rng, repeats, aggregator)
+            return float(agg), int(i)
+        except (ValueError, MemoryError):
+            i *= 2
+    raise ValueError(
+        f"the model refused every scale up to {ceiling}, so the per-call "
+        f"overhead cannot be measured and no probe window can be placed")
+
+
+def _space(bottom: int, top: int, count: int) -> list[int]:
+    """`count` geometrically spaced integer rungs from `bottom` to `top`.
+
+    Returns FEWER than `count` when the integers collide -- the window is too
+    narrow to hold that many distinct scales -- and the caller widens rather
+    than silently fitting a shorter ladder.
+    """
+    bottom, top = int(bottom), int(top)
+    if count < 2 or top <= bottom:
+        return [bottom]
+    r = (top / bottom) ** (1.0 / (count - 1))
+    return sorted({int(round(bottom * r ** k)) for k in range(count)})
+
+
+def probe_window(spec, params: dict, rng, ladder,
+                 repeats: int = PROBE_REPEATS,
+                 aggregator: str = DEFAULT_AGGREGATOR,
+                 min_scales: int = PROBE_MIN_SCALES,
+                 overhead_factor: float = PROBE_OVERHEAD_FACTOR,
+                 seconds_budget: float = PROBE_WINDOW_BUDGET,
+                 max_doublings: int = PROBE_MAX_DOUBLINGS) -> dict:
+    """Place the timing window just above the measured per-call overhead.
+
+    THE RULE, in three steps:
+
+      1. measure the overhead a0 (`measure_overhead`, ~0.5 ms);
+      2. walk up from the sample ladder's bottom, doubling, to the first rung
+         whose WORK clears the floor: t(i) - a0 >= PROBE_OVERHEAD_FACTOR * a0;
+      3. take `min_scales` rungs doubling from there, and pack them closer
+         together if the predicted cost does not fit `seconds_budget`.
+
+    Why this replaces `climb_to_target` in the pilot. That strategy starts at
+    the ladder's LARGEST scale and only ever goes up, with the rung floor
+    outranking both of its stopping rules -- so on a model whose top rung is
+    already slow it pays three unconditional doublings. Measured on
+    percolation_zd dim=3 with a 2..128 ladder (user's run, 2026-09-14): the
+    climb started at 128, where one call already took 40 ms, i.e. 20x the
+    target it was climbing toward, and still went to 1024. Cost 585 units of
+    the start scale, 280 s of a 20-minute study -- 43% of the work of the
+    final run, spent on draws that are timed and discarded.
+
+    Both ends of the window matter, and they fail differently:
+
+      TOO LOW and the fit is not noisy but WRONG -- the measurement is mostly
+      dispatch. srw over 8..64 does not converge at all; over 32..256 it
+      returns 3.42 +/- 0.69 against a truth of 1.
+      TOO HIGH and it measures a machine regime the study never enters. On
+      percolation_zd dim=3 the per-site cost is flat at 2.03e-8 s across
+      64..512 and rises 14% at i = 1024, where the working set leaves cache;
+      fitting through that upturn is what returned d = 3.086 instead of 3,
+      while the final run's largest box was i = 128. A bigger probe was not a
+      better measurement of the run's own d.
+
+    The rule reaches opposite conclusions for the two models in the repo, which
+    is the point of measuring a0 rather than assuming a scale: percolation_zd
+    dim=3 has a0 = 0.2 ms and clears the floor at i = 32, so the window comes
+    DOWN from 128..1024 to 32..256 (12 s, d = 2.999 +/- 0.033). srw has
+    a0 = 8.7 us and work of 3 ns per step, so it does not clear the floor until
+    i = 16384 and the window goes far ABOVE the ladder, as it always did
+    (0.07 s, d = 1.027 +/- 0.013). Cheap models were never the problem.
+
+    Returns the same payload as the other two probes, plus `overhead_seconds`,
+    `overhead_scale`, `window_bottom`, `predicted_seconds` and `over_budget`.
+    """
+    ladder = sorted(int(x) for x in ladder) or [1]
+    a0, a0_scale = measure_overhead(spec, params, rng, repeats, aggregator,
+                                    ceiling=ladder[-1])
+    floor_t = a0 * (1.0 + float(overhead_factor))
+
+    # Step 2: walk up to the floor. Every rung below the one we keep is
+    # cheaper than it, so the whole walk costs less than the window's own
+    # bottom rung -- and on a model whose ladder already sits above the floor
+    # (percolation_zd) it stops on the first or second try.
+    walk: dict[int, list[float]] = {}
+    bottom, refused_at = None, None
+    i = max(1, ladder[0])
+    for _ in range(max_doublings):
+        try:
+            t, times = time_at_scale(spec, i, params, rng, repeats, aggregator)
+        except (ValueError, MemoryError):
+            refused_at = i
+            break
+        walk[i] = times
+        if t >= floor_t:
+            bottom = i
+            break
+        i *= 2
+    below_floor = bottom is None
+    if below_floor:
+        # Never cleared the floor: the model refused a scale first, or ran out
+        # of doublings. Use the largest rung reached -- d measured there is
+        # overhead-contaminated, which `fit_cost_probe`'s overhead_share
+        # reports and `_resolve_d` turns into a warning.
+        if not walk:
+            raise ValueError(
+                f"the cost probe timed no scale at all: the model refused "
+                f"{refused_at}, the smallest scale on the ladder")
+        bottom = max(walk)
+
+    # Step 3: min_scales rungs doubling up, packed closer if too expensive.
+    # `cost_hint` prices the candidates exactly when the model declares one;
+    # otherwise the walk's own two slowest rungs give a slope. Predicting the
+    # cost is what lets the budget bind BEFORE the expensive rung is timed --
+    # the old climb checked its time budget only after paying.
+    predict_one = _rung_predictor(spec, params, walk, bottom, a0, aggregator)
+
+    def predicted(rungs):
+        return sum((repeats + 1) * predict_one(k) for k in rungs)
+
+    rungs = [bottom * 2 ** k for k in range(min_scales)]
+    top = rungs[-1]
+    while predicted(rungs) > seconds_budget and top > bottom * 2:
+        cand = _space(bottom, max(bottom * 2, int(top // 2)), min_scales)
+        if len(cand) < min_scales:
+            break
+        rungs, top = cand, cand[-1]
+    over_budget = predicted(rungs) > seconds_budget
+
+    # Time them, reusing anything the walk already measured.
+    times_by_scale = {k: walk[k] for k in rungs if k in walk}
+    for k in rungs:
+        if k in times_by_scale:
+            continue
+        try:
+            _, times = time_at_scale(spec, k, params, rng, repeats, aggregator)
+        except (ValueError, MemoryError):
+            # A ceiling inside the window: keep what is below it and re-space
+            # the rest underneath, exactly as the climb's downward fill does.
+            refused_at = k
+            break
+        times_by_scale[k] = times
+
+    # A ceiling INSIDE the chosen window -- the model refused a rung the budget
+    # was happy to pay for. Fill downward by halving, as the climb's own
+    # downward fill does: the rungs already timed are good, and halving always
+    # has room. These rungs are below the overhead floor by construction (the
+    # bottom was the FIRST scale above it), so the overhead share rises and
+    # `_resolve_d` says so -- which is the honest outcome, since a model that
+    # cannot be run where it should be timed leaves nowhere better to look.
+    scales = sorted(times_by_scale)
+    extended_down = []
+    while len(scales) < min_scales:
+        k = scales[0] // 2
+        if k < 1:
+            raise ValueError(
+                f"the cost probe cannot reach {min_scales} rungs: the model "
+                f"refused {refused_at} going up and there is nothing below "
+                f"{scales[0]} left to measure. These parameters are not "
+                f"simulable at any useful scale.")
+        try:
+            _, times = time_at_scale(spec, k, params, rng, repeats, aggregator)
+        except (ValueError, MemoryError) as exc:
+            raise ValueError(
+                f"the cost probe cannot reach {min_scales} rungs: the model "
+                f"refused {refused_at} going up and {k} going down. These "
+                f"parameters are not simulable at any useful scale."
+            ) from exc
+        times_by_scale[k] = times
+        extended_down.append(k)
+        scales = sorted(times_by_scale)
+
+    out = _probe(scales, times_by_scale, repeats, aggregator,
+                 target_seconds=PROBE_TARGET_SECONDS)
+    out["reached_target"] = bool(out["elapsed"] and
+                                 out["elapsed"][-1] >= PROBE_TARGET_SECONDS)
+    out["refused_at"] = refused_at
+    out["extended_down"] = extended_down or None
+    out["overhead_seconds"] = a0
+    out["overhead_scale"] = a0_scale
+    # The share of the cheapest rung that is dispatch, from the MEASURED
+    # overhead rather than the affine fit's `a`. Both are reported and they
+    # disagree: on srw the fit says 51% where the clock says 25%, and on
+    # percolation_zd dim=3 the fit said 3.2 ms against a measured 0.21 ms.
+    # `a` is fitted jointly with `d` over a short window and absorbs curvature
+    # that belongs to the exponent, which is the whole reason this rule
+    # measures the overhead instead of reading it off the fit.
+    out["overhead_share_measured"] = (float(a0 / out["elapsed"][0])
+                                      if out.get("elapsed") else None)
+    out["overhead_factor"] = float(overhead_factor)
+    out["window_bottom"] = int(bottom)
+    out["below_overhead_floor"] = bool(below_floor)
+    out["walk_scales"] = sorted(walk)
+    out["predicted_seconds"] = float(predicted(scales))
+    out["seconds_budget"] = float(seconds_budget)
+    out["over_budget"] = bool(over_budget)
+    return out
+
+
+def _rung_predictor(spec, params: dict, walk: dict, bottom: int, a0: float,
+                    aggregator: str):
+    """t_hat(i) for a rung not yet timed: a0 + work(bottom) * cost(i)/cost(bottom).
+
+    The ratio comes from the model's declared `cost_hint` when it has one --
+    exact, and free. With no declaration it comes from the slope between the
+    two slowest rungs the walk already timed, which is the best available
+    evidence at that moment and only ever used to decide whether to pack the
+    window tighter.
+    """
+    t_bottom = aggregate(walk[bottom], aggregator) if bottom in walk else a0
+    work = max(t_bottom - a0, 1e-12)
+
+    if spec.cost_hint is not None:
+        base = float(spec.cost_hint(bottom, params)) or 1.0
+        return lambda i: a0 + work * float(spec.cost_hint(int(i), params)) / base
+
+    timed = sorted(walk)
+    if len(timed) >= 2:
+        lo, hi = timed[-2], timed[-1]
+        w_lo = max(aggregate(walk[lo], aggregator) - a0, 1e-12)
+        w_hi = max(aggregate(walk[hi], aggregator) - a0, 1e-12)
+        d_guess = float(np.log(w_hi / w_lo) / np.log(hi / lo))
+    else:
+        d_guess = 1.0
+    return lambda i: a0 + work * (float(i) / bottom) ** d_guess
+
 
 def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:
     """Fit d from a probe, both ways, plus the overhead diagnostic.

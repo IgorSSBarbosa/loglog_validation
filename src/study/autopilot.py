@@ -286,7 +286,7 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
     Returns (consts, rounds, ok).
     """
     rounds = []
-    consts = None
+    consts, cost = None, None
     t_start = time.perf_counter()
     # One stream per round, drawn up front: a round is a fresh, independent
     # draw, never a continuation of the one it replaces (ground rule 2).
@@ -300,7 +300,14 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
         log(f"  pilot round {k + 1}: {replicates} replicate(s) at "
             f"{factor}x the recipe's draws")
         t = time.perf_counter()
-        out = pilot_mod.pilot(this, sd, replicates, seed=round_seeds[k])
+        # The cost probe is measured once and handed to every later round.
+        # d belongs to the model and the machine, not to the draws, and the
+        # probe is deliberately fixed-seeded -- so re-probing each round pays
+        # again for a bit-identical answer. Measured at 280 s per probe on the
+        # run that prompted this, a 3-round pilot spent 14 minutes on it.
+        out = pilot_mod.pilot(this, sd, replicates, seed=round_seeds[k],
+                              cost=cost)
+        cost = out["cost"]
         reps, consts = out["reps"], out["constants"]
         spent = time.perf_counter() - t_start
 
