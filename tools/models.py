@@ -25,6 +25,7 @@ import numpy as np
 
 from models import percolation2d as model_percolation2d
 from models import percolation_tau as model_percolation_tau
+from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_stream as model_percolation_zd_stream
@@ -148,6 +149,21 @@ MODELS: dict[str, ModelSpec] = {
         # profile is the opposite one -- ~0.65x the throughput for 200-790x
         # less memory -- so which model to reach for is a real choice, not an
         # implementation detail to hide behind one name.
+    ),
+    "percolation_susceptibility": ModelSpec(
+        simulate=model_percolation_susceptibility.simulate,
+        cost_hint=model_percolation_susceptibility.cost_hint,
+        # The first OFF-CRITICAL model here: the ladder is in the distance to
+        # p_c (eps = eps0/x, p = p_c - eps), not in a length, so eq. (232)'s
+        # gamma is the SUSCEPTIBILITY exponent gamma_susc = 43/18 in dim 2 --
+        # the same letter in the same equation as percolation_zd's d_f = 91/48,
+        # a different number because the ladder is different. Recipes say
+        # gamma_susc. With params["moment"] = 2 the same design measures
+        # (4-tau)/sigma, and the two together give sigma and tau.
+        #
+        # No target_fn/true_gamma_key, as everywhere else: 43/18, 91/36 and
+        # 187/91 are acceptance criteria in
+        # experiments/06_susceptibility/README.md, not inputs.
     ),
     "percolation_tau_zd": ModelSpec(
         simulate=model_percolation_tau_zd.simulate,

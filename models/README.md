@@ -772,3 +772,79 @@ signature parity and ignored — batching is exactly what would break bit-identi
 `cost_hint` is identical to `percolation_zd`'s, so allocations, budgets and
 `cost_unit_ratio` carry over and the two are comparable at equal budget. The int32 label
 ceiling now applies to the **frontier**, $i^{\texttt{dim}-1}$, not the box.
+
+### `percolation_susceptibility.py` — the first off-critical model, and the first ladder in $\varepsilon$
+
+Everything above is at $p = p_c$ and indexes its ladder by a LENGTH (a box side $i$, a
+cluster size $s$). This one sits BELOW the critical point and indexes the ladder by the
+distance to it:
+
+$$\varepsilon(x) = \varepsilon_0/x, \qquad p(x) = p_c - \varepsilon(x), \qquad x = 1, 2, 4, \dots$$
+
+A geometric ladder in $x$ is a geometric ladder in $1/\varepsilon$, so eq. (232) reads
+$\mathbb{E}Y_x \sim a_0 x^\gamma$ with **$\gamma$ the susceptibility exponent**
+$\gamma_{\text{susc}} = 43/18$ in $\dim = 2$ — the same letter in the same equation as
+`percolation_zd`'s $d_f = 91/48$, a different number because the ladder is different.
+$\varepsilon_0$ is a free amplitude: it multiplies $a_0$ and leaves $\gamma$ alone.
+Everything downstream (the $m_0$ window, the estimators, `tuned_allocation`) runs
+unmodified, which is the point of putting the experiment in these coordinates.
+
+`eps0` gets no dimension-independent default and `p_at` REFUSES rather than clips:
+$\varepsilon_0 = 1/2$ is `prompts/gamma_exponent.tex`'s own first rung and is fine at
+$p_c = 0.593$, but $p_c = 0.3116$ in $\dim = 3$ and $0.1090$ in $\dim = 6$, where
+$p_c - 1/2$ is negative. That is a real bug in the prompt's ladder, caught at the
+constructor rather than becoming a silently different experiment.
+
+**The observable is the whole lattice, not one cluster.** One sample is one $L^{\dim}$
+torus and
+
+$$Y = \frac{\sum_{\text{clusters}} s^{k+1}}{p\,L^{\dim}} = \frac{\sum_{\text{sites }x}|C(x)|^k}{p\,L^{\dim}}, \qquad \mathbb{E}Y = \mathbb{E}\!\left[|C(0)|^k \mid 0\text{ open}\right]$$
+
+exactly — the denominator is deterministic, so unlike a ratio-of-means estimator this has
+no ratio bias, and the $1/p$ (a known input) converts "cluster of a site" into "cluster of
+an OPEN site" and removes a factor that would otherwise carry its own $x^{-1}$ correction
+along the ladder. Drawing the textbook definition literally — one lattice, one origin, one
+number — would waste the whole lattice; this uses every site of it and is one
+`ndimage.label` call per block, reusing `percolation_zd`'s draw, stacking, and
+pointer-jumping wrap merge unchanged.
+
+`moment` $=2$ is not decoration. $\mathbb{E}|C| \sim s_\xi^{3-\tau}$ and
+$\mathbb{E}|C|^2 \sim s_\xi^{4-\tau}$, so the two exponents give
+$1/\sigma = e_2 - e_1$ and $\tau = 3 - e_1/(e_2-e_1)$: **one design, run at two moments,
+measures $\gamma_{\text{susc}}$, $\sigma$ and $\tau$** — and by
+`prompts/scaling_relations.tex`'s inversion, $(\tau,\sigma)$ determine every exponent
+below $d_c$.
+
+**The box side is declared, and the exponent it is declared with is the load-bearing
+choice.** $L(x) = \lceil \text{box\_factor}\cdot x^{\nu_{\text{box}}}\rceil$, so
+$L/\xi \sim x^{\nu_{\text{box}}-\nu}$:
+
+| | $L/\xi$ along the ladder | effect on the fit |
+|---|---|---|
+| $\nu_{\text{box}} < \nu$ | shrinks | finite-size bias GROWS with $x$ — biases $\gamma$ down |
+| $\nu_{\text{box}} = \nu$ | constant | bias is a constant FACTOR — moves $a_0$, leaves $\gamma$ alone |
+| $\nu_{\text{box}} > \nu$ | grows | bias shrinks along the ladder — $\gamma$ slightly up, bounded by the first rung |
+
+The default $1.5$ is $\ge\nu$ in every dimension ($\nu = 4/3$ at $\dim=2$, falling to
+$1/2$ at $\dim\ge6$), i.e. safe without consulting a table of $\nu$. This is
+`percolation_tau.py`'s `DF_LOWER` pattern, and it got the same treatment: measured, not
+asserted. `experiments/06_susceptibility/calibrate_box.py` swept `box_factor` at three
+rungs and found the finite-size deficit FLAT in $x$ at each `box_factor`
+($-55\%$, $-18\%$, $-2\%$ at $1, 2, 4$ across $x = 8, 16, 32$) — i.e. a $-55\%$ box is
+still an unbiased *exponent* measurement. The prompt's own rule ("increase $L$ until
+$S(p,L)$ stabilizes") is deliberately NOT implemented: per sample it is a data-dependent
+stopping rule, biased and with no cost knowable before the draw.
+
+`cost_hint(x) = L(x)**dim` with the actual ceil'd $L$, a power law with declared exponent
+$\nu_{\text{box}}\cdot\dim$ ($=8/3$ at the defaults) — so Assumption 7 holds by
+construction and the cost probe has a number to score against, as for `srw` ($d=1$) and
+`percolation_zd` ($d=\dim$).
+
+Verified: `tools/tests/test_percolation_susceptibility.py` (18 cases) — the reduction
+against a pure-Python BFS flood fill sharing no code with it (6 combinations of $\dim$,
+$L$, moment, geometry); the mean against exhaustive enumeration of all $2^9$ torus
+configurations, with the resolution stated so "agrees" is bounded; the mean against the
+low-density lattice-animal series $S = p^{-1}\sum_A s^2p^s(1-p)^{t(A)}$ (animals to size
+7), which is the infinite-lattice quantity the model actually claims; $p\to0$, $p=1$
+($Y = L^{\dim}$ exactly), `block_n` invariance, the $\dim\ge3$ ladder refusal, cost-hint
+exactness, and the $L/\xi$ growth law above.

@@ -643,3 +643,52 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         `d_check` compare against a *range-local* declared exponent rather than
         the nominal one?
 - [ ] Phase 4 — Percolation on hierarchical/Bethe graphs, exact recursion cross-check
+- [ ] Phase 5 — Off-critical percolation: $\gamma_{\text{susc}}$, $\sigma$, $\tau$ from a
+      ladder in the DISTANCE to $p_c$ (`prompts/gamma_exponent.tex`,
+      `experiments/06_susceptibility/`)
+  - [x] ~~Model: `models/percolation_susceptibility.py`,
+        `MODELS["percolation_susceptibility"]`. $\varepsilon(x)=\varepsilon_0/x$,
+        $p(x)=p_c-\varepsilon(x)$, so eq. (232)'s $\gamma$ IS $\gamma_{\text{susc}}$ and
+        every estimator/allocation tool runs unmodified. One sample is one $L^{\dim}$
+        torus with $Y=\sum_{\text{clusters}}s^{k+1}/(p L^{\dim})$, whose mean is
+        $\mathbb{E}[|C(0)|^k\mid 0$ open$]$ **exactly** (deterministic denominator, no
+        ratio bias), reusing `percolation_zd`'s draw/label/wrap merge. Verified:
+        `tools/tests/test_percolation_susceptibility.py` (18 cases) -- reduction against
+        an independent pure-Python flood fill, mean against exhaustive enumeration of all
+        $2^9$ torus configurations, mean against the low-density lattice-animal series
+        $S=p^{-1}\sum_A s^2p^s(1-p)^{t(A)}$, $p\to0$/$p=1$/block invariance/refusals~~
+  - [x] ~~**The prompt's $p=p_c-1/2$ ladder does not exist above $\dim=2$**
+        ($p_c=0.3116$ in $\dim 3$). `p_at` refuses rather than clips and names $p_c/2$~~
+  - [x] ~~**The box side is declared, and $\nu_{\text{box}}$ vs $\nu$ is what matters.**
+        $L/\xi\sim x^{\nu_{\text{box}}-\nu}$, so $\nu_{\text{box}}=\nu$ makes the
+        finite-size bias a constant FACTOR (moves $a_0$, leaves $\gamma$). Measured
+        (`calibrate_box.py`): the deficit is flat in $x$ at each `box_factor` --
+        $-55\%$, $-18\%$, $-2\%$ at $1,2,4$ across $x=8,16,32$ -- i.e. **a $-55\%$ box is
+        still an unbiased exponent measurement**. Replaces the prompt's
+        "increase $L$ until $S$ stabilizes", which per sample is a data-dependent
+        stopping rule (biased, and no cost knowable before the draw)~~
+  - [x] ~~$\dim=2$ ladder $x=1..128$, $n=1500$, two moments. Assumption 6 clean (cv flat
+        at $0.32$–$0.33$); Assumption 7 clean ($\hat d=2.6850\pm0.0223$ vs declared
+        $2.6650$, $+0.9\sigma$). Uncorrected OLS is $-5.35\sigma$ on $\gamma_{\text{susc}}$;
+        with the correction exponent DECLARED at $\omega_1=1$ (theory:
+        $\Delta_1=\Omega\nu\approx1.05$, plus an analytic $x^{-1}$ background) all five
+        land: $\gamma_{\text{susc}}=2.3916\pm0.0076$ vs $43/18$, $e_2=4.9105\pm0.0284$ vs
+        $177/36$, $1/\sigma=2.5189\pm0.0296$ vs $91/36$, $\tau=2.0505\pm0.0124$ vs
+        $187/91$, $d_f=1.9038\pm0.0224$ vs $91/48$ -- all within $0.4\sigma$~~
+  - [x] ~~**Ratios survive what exponents do not.** $\tau$ and $d_f$ are right even from
+        the UNCORRECTED fit ($z=+0.23,-0.23$) while both $e_1,e_2$ feeding them are
+        $3$–$5\sigma$ low: the leading correction contaminates them in the same direction
+        and cancels in $\tau=3-e_1/(e_2-e_1)$. An argument for
+        `prompts/scaling_relations.tex`'s two-parameter fit over per-exponent ladders --
+        and $d_f=1.893\pm0.014$ here came from **no simulation at $p_c$ at all**~~
+  - [ ] $\omega_1$ is DECLARED, not measured: free, it runs to $20$–$50$ with a diverging
+        covariance and `src/estimate/estimate_omega1.py` fails on this run. Identifying it
+        needs $\varepsilon_0\approx1/16$ (the rungs below $x=8$ are not in the scaling
+        regime: $\bar Y$/power-law is $1.49, 1.35, 1.17$ there) and $x\sim1024$, i.e.
+        $\approx64\times$ this run
+  - [x] ~~`box_factor` insensitivity arm (`gamma_susc_m1_bf4`, a QUARTER of the sites
+        per sample): $\bar Y$ ratio flat across the ladder ($0.969$–$1.003$, every rung
+        within $1.7\sigma$) and $\hat\gamma$ moves $+0.0049$ ($0.6\sigma$) corrected,
+        $+0.0050$ uncorrected. `box_factor` is a cost knob, not an accuracy knob~~
+  - [ ] $\dim=3$ / $\dim\ge6$ (where $\gamma_{\text{susc}}=1$, $1/\sigma=2$,
+        $\tau=5/2$ are exact)
