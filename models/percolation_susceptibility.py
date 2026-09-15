@@ -95,11 +95,27 @@ in a way worth recording:
         nu_box >  nu   L/xi grows, bias shrinks along the ladder, exponent biased
                        slightly upward but bounded by the bias at the first rung
 
-So nu_box >= nu is the safe side and nu_box = nu is the efficient one. The
-default is 1.5, which is >= nu in EVERY dimension (nu = 4/3 in dim 2 and falls
-to 1/2 at dim >= 6), i.e. safe without consulting a table of nu. dim = 2 recipes
-may lower it to 4/3 once the calibration justifies it -- and must then run two
-values and show gamma_hat agrees, the same demonstration DF_LOWER got.
+So nu_box >= nu is the safe side and nu_box = nu is the efficient one.
+
+THE RULE, decided explicitly (Igor, 2026-09-15), because this is a literature
+constant sitting inside a model and it should not be there by accident:
+
+  dim = 2          nu_box = 4/3 = nu exactly. L/xi is then CONSTANT along the
+                   ladder, so the finite-size bias is a constant factor: it
+                   moves a0 and leaves gamma alone (measured -- see
+                   experiments/06_susceptibility/, step 1)
+  other dim        an UPPER BOUND on nu, never the value. DEFAULT_NU_BOX = 1.5
+                   is one for every dim >= 2 (nu = 4/3 at dim 2, falling to 1/2
+                   at dim >= 6), so the default needs no table of nu at all
+  no bound known   measure nu and use the UPPER END OF ITS CONFIDENCE INTERVAL
+                   as the bound -- never the point estimate, which would be
+                   below the truth half the time and put the ladder in the
+                   bias-grows-with-x column above
+
+Whichever is used is recorded in the recipe's params and in the experiment's
+README. A dim = 2 recipe that lowers nu_box to 4/3 must also show gamma_hat is
+insensitive to the choice, the same demonstration DF_LOWER got -- done at
+box_factor 4 vs 8 (0.6 sigma).
 
 Torus rather than box: a wall truncates every cluster that touches it, and it
 does so worst exactly where xi approaches L, i.e. at the rungs that matter. The

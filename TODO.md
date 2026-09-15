@@ -681,7 +681,28 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         and cancels in $\tau=3-e_1/(e_2-e_1)$. An argument for
         `prompts/scaling_relations.tex`'s two-parameter fit over per-exponent ladders --
         and $d_f=1.893\pm0.014$ here came from **no simulation at $p_c$ at all**~~
-  - [ ] $\omega_1$ is DECLARED, not measured: free, it runs to $20$–$50$ with a diverging
+  - [x] ~~**Re-done the article's way** (`data/article_faithful*`, 2026-09-15, Igor's
+        request): `src/study/autopilot.py` on unmodified tools -- estimator eq. (523)-(526),
+        $\omega_1,a_1,\mathrm{cv},d$ all MEASURED by the pilot, ladder and $n$ from
+        `prop:opt`, interval eq. (720). Pilot passed both gates on $x=4..128$, $n=3000$,
+        $R=5$: $\omega_1=0.5917\pm0.1092$, $a_1=1.0114\pm0.1925$, $d=2.7835\pm0.0280$.
+        Run: $m_0=4$, $x=32..1024$, $n=57$, $R=5$, 3.0 h. **$\hat\gamma=2.3585$; eq. (720)
+        gives $[2.148, 2.569]$ and the $t(4)$ interval $[2.313, 2.404]$, both covering
+        $43/18$.** The result: the deficit $0.0304$ against a bias PREDICTED at $0.0317$
+        before drawing -- ratio $0.96$, so eq. (720)'s bias term got the size and sign
+        right from constants fitted on a shallower ladder~~
+  - [x] ~~**Precision here is bought with $m_0$, not $n$.** `prop:opt` answers 268 h for
+        $\mathrm{se}\le0.02$, correctly: $\omega_1=0.59$, $d=2.78$ give an error decay
+        $B^{-0.149}$, so halving it costs $105\times$. Within reach the answer is
+        bias-limited -- 2 h gives $0.0350$, 10 h gives $0.0324$. Machine wall measured:
+        one sample at $x=1024$ is $1.7\times10^9$ sites, 35.7 s, **19.6 GiB** peak, and the
+        allocation's preferred $x=2048,4096$ rungs are out of reach~~
+  - [ ] $\hat\omega_1=0.59\pm0.11$ vs the theoretical $\Delta_1=\Omega\nu\approx1.05$
+        ($4.2\sigma$). The bias it predicts is right, so the one-correction truncation
+        describes the estimator even if $\omega_1$ is not the textbook exponent -- is it
+        absorbing the analytic background of $\chi(p)$ (also $x^{-1}$), or a second
+        correction?
+  - [ ] Arm B's $\omega_1$ was DECLARED, not measured: free, it runs to $20$–$50$ with a diverging
         covariance and `src/estimate/estimate_omega1.py` fails on this run. Identifying it
         needs $\varepsilon_0\approx1/16$ (the rungs below $x=8$ are not in the scaling
         regime: $\bar Y$/power-law is $1.49, 1.35, 1.17$ there) and $x\sim1024$, i.e.
