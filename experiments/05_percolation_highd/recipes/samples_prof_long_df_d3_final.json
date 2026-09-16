@@ -1,0 +1,28 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "prof_long_df_d3",
+  "kind": "samples",
+  "model": "percolation_zd",
+  "n": 20,
+  "params": {
+    "anchor": "face",
+    "dim": 3,
+    "geometry": "cylinder"
+  },
+  "replicates": 3,
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "seed": null
+}

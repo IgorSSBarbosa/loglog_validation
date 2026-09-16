@@ -1,0 +1,35 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "progcheck3",
+  "kind": "samples",
+  "model": "synthetic",
+  "n": 73353278,
+  "params": {
+    "a0": 1.0,
+    "corrections": [
+      [
+        1.0,
+        1.0
+      ]
+    ],
+    "family": "lognormal",
+    "gamma": 0.5,
+    "sigma_inf2": 0.04
+  },
+  "replicates": 3,
+  "scales": [
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    524288
+  ],
+  "seed": null
+}

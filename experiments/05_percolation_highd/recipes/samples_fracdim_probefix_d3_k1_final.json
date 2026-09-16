@@ -1,0 +1,29 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "fracdim_probefix_d3_k1",
+  "kind": "samples",
+  "model": "percolation_zd",
+  "n": 2789,
+  "params": {
+    "anchor": "slab",
+    "anchor_dim": 1,
+    "dim": 3,
+    "geometry": "cylinder"
+  },
+  "replicates": 5,
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "seed": null
+}

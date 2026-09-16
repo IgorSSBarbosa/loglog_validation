@@ -1,0 +1,27 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "prof_df_d2",
+  "kind": "samples",
+  "model": "percolation2d",
+  "n": 55,
+  "params": {
+    "anchor": "south",
+    "p": 0.5927460507921
+  },
+  "replicates": 3,
+  "scales": [
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "seed": null
+}
