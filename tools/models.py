@@ -26,6 +26,7 @@ import numpy as np
 from models import percolation2d as model_percolation2d
 from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
+from models import percolation_tau_gpu as model_percolation_tau_gpu
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
 from models import percolation_tau_zd as model_percolation_tau_zd
@@ -157,6 +158,17 @@ MODELS: dict[str, ModelSpec] = {
         # only as --expect-gamma / --truth at reporting time. See
         # models/percolation_tau.py.
         shared_sampler=model_percolation_tau.shared_sampler,
+    ),
+    "percolation_tau_gpu": ModelSpec(
+        simulate=model_percolation_tau_gpu.simulate,
+        # percolation_tau's own cost_hint (L(s)**2) and box rules, imported,
+        # so neither can drift. Same cluster-number density on a CUDA GPU,
+        # cuRAND seeded from the driver's rng -- equal in DISTRIBUTION, not bit
+        # for bit; for shared_sampler also in the covariance between rungs,
+        # and its info is stamped `shared_lattice` as the CPU one is. See
+        # models/percolation_tau_gpu.py, experiments/10_percolation_tau_gpu.
+        cost_hint=model_percolation_tau_gpu.cost_hint,
+        shared_sampler=model_percolation_tau_gpu.shared_sampler,
     ),
     "percolation_zd": ModelSpec(
         simulate=model_percolation_zd.simulate,

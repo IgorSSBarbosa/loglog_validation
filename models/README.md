@@ -941,3 +941,15 @@ merge, it borrows `percolation_zd_gpu`'s. The one change of method: the per-samp
 `cupy.add.at`, because cupy's `bincount` needs ~184 extra device bytes per site.
 Equal in distribution to the CPU model, not bit for bit. See
 `experiments/09_percolation_susceptibility_gpu/README.md`.
+
+### `percolation_tau_gpu.py` — `percolation_tau` on a CUDA GPU
+
+Same signatures minus `block_n`, same observable, and the same `shared_sampler`. Box
+rules, bin windows, `cost_hint` and `zero_fraction` are imported from the CPU sibling.
+Draw, label and torus merge are `percolation_zd_gpu`'s at dim = 2. Counting keeps the CPU
+method (per-label size, label → sample map) but builds it with `cupy.add.at` and one
+scatter, not `bincount`. `simulate` is the one-window case of `binned_counts_gpu`, as on
+the CPU. `shared_sampler` returns the CPU sampler's `info`, `shared_lattice` stamp
+included. Equal in distribution to the CPU model, not bit for bit; for `shared_sampler`
+that includes the covariance between rungs. See
+`experiments/10_percolation_tau_gpu/README.md`.
