@@ -146,6 +146,16 @@ Verified: `tools/tests/test_measure_cost.py` (real-timing acceptance check, affi
 $\hat d\in[0.8,1.2]$ for `srw`; that the overhead is detected as strictly positive and
 is what biases the pure fit low; and that the aggregator is selectable and recorded).
 
+A model registered with `batched_cost` (every `*_gpu` model) is timed differently, on
+the same recipe: `tools/cost_model.py`'s `probe_batched`. On a GPU one call costs ~1.3 ms
+and one sample far less, so $n=1$ measures the call, not $i^d$, and even the affine fit
+fails (experiments 07, 08, 10). At each scale the probe doubles $n$ until the work
+clears the overhead, then records $(t(4n)-t(n))/3n$, the cost of one sample with the
+fixed cost cancelled. `cost_ms` is that per-sample cost, and the output adds `method`,
+`batch_n` and the measured overhead. `src/study/pilot.py` uses the same probe for such a
+model, and takes its throughput from it. Verified: `tools/tests/test_cost_probe_batched.py`
+(a fake model with a known fixed cost per call, and the dispatch in both drivers).
+
 `estimate_omega1.py` — Experiment B's analysis driver: reads a run directory and
 applies both of `tools/correction.py`'s $\omega_1$ estimators to it, writing
 `<run_dir>/omega1.json`. Never draws samples (generation and analysis are always

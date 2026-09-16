@@ -342,11 +342,11 @@ def format_cost_comparison(cmp: dict) -> str:
     return "\n".join(lines)
 
 # --------------------------------------------------------------------------
-# Timing a model: the two probes
+# Timing a model: the probes
 # --------------------------------------------------------------------------
 #
-# There are exactly two ways this repo measures cost(i), and they differ only
-# in WHICH scales get timed:
+# There are three ways this repo times cost(i) one sample per call, and they
+# differ only in WHICH scales get timed:
 #
 #   time_over_scales  times a ladder you name  -- src/estimate/measure_cost.py,
 #                     the standalone probe, where the ladder is the experiment.
@@ -361,7 +361,15 @@ def format_cost_comparison(cmp: dict) -> str:
 #                     measurement is available, and still exercised by
 #                     calibration/exercise_all.py.
 #
-# All three hand the same {scales, elapsed, times, repeats, aggregator} to
+# and one that times something else, for a model with ModelSpec.batched_cost:
+#
+#   probe_batched     the cost of ONE MORE sample inside a large call, read off
+#                     the slope in n at each scale of the ladder it is given.
+#                     Both measure_cost.py and pilot.py use it for such a
+#                     model, because on a GPU every one-sample-per-call probe
+#                     above measures the fixed cost of a call, not i**d.
+#
+# All four hand the same {scales, elapsed, times, repeats, aggregator} to
 # `fit_cost_probe`, so the fitting, the overhead diagnostic and the
 # declared-vs-measured cross-check are written once. Before this split the two
 # callers had their own timing loop and their own fit, and only one of them
@@ -426,8 +434,9 @@ PROBE_OVERHEAD_FACTOR = 3.0
 PROBE_WINDOW_BUDGET = 6.0
 
 def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
-                  aggregator: str = DEFAULT_AGGREGATOR) -> tuple[float, list[float]]:
-    """Time `spec.simulate(i, 1, params, rng)` `repeats` times.
+                  aggregator: str = DEFAULT_AGGREGATOR,
+                  n: int = 1) -> tuple[float, list[float]]:
+    """Time `spec.simulate(i, n, params, rng)` `repeats` times.
 
     Returns (aggregated seconds, the raw timings). One warm-up call is thrown
     away first: the first call through a code path pays import, branch
@@ -437,12 +446,14 @@ def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
     Timed one call at a time rather than as a batch divided by `repeats`, so
     the aggregator (median by default) can do its job -- jitter here is
     one-sided, and a mean hands the whole of any hiccup to the estimate.
+
+    `n` is 1 for every probe but `probe_batched`, which walks it up.
     """
-    spec.simulate(i, 1, params, rng)                     # warm the code path
+    spec.simulate(i, n, params, rng)                     # warm the code path
     times = []
     for _ in range(repeats):
         t0 = time.perf_counter()
-        spec.simulate(i, 1, params, rng)
+        spec.simulate(i, n, params, rng)
         times.append(time.perf_counter() - t0)
     return aggregate(times, aggregator), times
 
@@ -816,6 +827,128 @@ def _rung_predictor(spec, params: dict, walk: dict, bottom: int, a0: float,
     else:
         d_guess = 1.0
     return lambda i: a0 + work * (float(i) / bottom) ** d_guess
+
+
+#: The second call of a batched pair is this many times the first. The work
+#: between the two timings is then (BATCH_FACTOR - 1) times the first call's,
+#: which is already PROBE_OVERHEAD_FACTOR times the overhead: at 4 and 3, the
+#: difference is at least 9 overheads, far above their jitter, and a GPU call
+#: stays at a few tens of ms.
+BATCH_FACTOR = 4
+
+#: Largest n the batched walk may reach. percolation2d_gpu at i = 8 needed
+#: 2**19; a model still under the overhead floor at 2**24 samples is not paying
+#: per sample in any way this probe can measure, and it says so rather than
+#: fitting the floor.
+BATCH_MAX_N = 2 ** 24
+
+
+def probe_batched(spec, params: dict, rng, scales,
+                  repeats: int = PROBE_REPEATS,
+                  aggregator: str = DEFAULT_AGGREGATOR,
+                  overhead_factor: float = PROBE_OVERHEAD_FACTOR,
+                  batch_factor: int = BATCH_FACTOR,
+                  max_n: int = BATCH_MAX_N) -> dict:
+    """The cost of ONE MORE sample at each scale, for a model with `batched_cost`.
+
+    THE RULE, per scale k of the ladder given:
+
+      1. measure the per-call overhead a0 once (`measure_overhead`);
+      2. double n from 1 until one call simulate(k, n) takes
+         (1 + overhead_factor) * a0, i.e. until its work clears the overhead
+         floor that `probe_window` uses, walked in n instead of in scale;
+      3. time `repeats` interleaved pairs simulate(k, n), simulate(k, 4n), and
+         keep (t(4n) - t(n)) / (3n) from each pair. The fixed cost of a call
+         is in both timings and cancels, so what is left is the cost of one
+         sample and nothing else.
+
+    `elapsed` is then that marginal cost per scale, the same shape as every
+    other probe's, and `fit_cost_probe` fits it unchanged.
+
+    Why a separate probe (user, 2026-09-16). On a GPU a call pays 1.2-1.7 ms
+    whatever the box, while one sample is ~0.1 ms of device work even at 10**6
+    sites. On an idle card, with experiments 07-10's cost recipes unchanged:
+
+      model                           declared   n = 1 (time_over_scales)   this rule
+      percolation2d_gpu, 16..1024     2          0.80 +/- 0.23              2.020 +/- 0.004
+      percolation_zd_gpu d3, 8..256   3          2.34 +/- 0.20              2.994 +/- 0.015
+      percolation_susceptibility_gpu  2.665      2.789 +/- 0.066            2.691 +/- 0.037
+      percolation_tau_gpu, 16..4096   0.9993     1.287 +/- 0.172            0.9985 +/- 0.0023
+
+    The pilot's `probe_window` does escape the overhead, by climbing to single
+    boxes big enough to dwarf it: 4096..32768 on percolation2d_gpu (~10 GiB),
+    d = 2.06 +/- 0.003. But those are boxes the study never builds, and on a
+    shared card they may not fit. When they don't, the walk treats the
+    out-of-memory as a ceiling and fits what is left: d = 2.77 on
+    percolation_zd_gpu dim 3. This rule stays on the ladder it is given.
+
+    Why n is walked and not sized. Choosing n = S / cost_hint(k), a fixed work
+    per call, looks equivalent and is not: the fixed cost per sample is then
+    a0 * cost_hint(k) / S, which grows exactly like the declaration, so while
+    a0 dominates the fit hands the declared d back whatever the clock does.
+    The walk never reads `cost_hint`, so the clock still measures d and the
+    declaration only checks it (src/study/pilot.py's `_resolve_d`).
+
+    Fails loudly rather than fitting nonsense: RuntimeError if n reaches
+    `max_n` below the floor, or if any pair's larger call was not the slower
+    one -- something else was using the device between the two timings, and
+    a probe taken then describes that, not the model.
+    """
+    scales = sorted({int(k) for k in scales})
+    a0, a0_scale = measure_overhead(spec, params, rng, repeats, aggregator,
+                                    ceiling=scales[-1])
+    floor_t = a0 * (1.0 + float(overhead_factor))
+    times_by_scale, batch_n, call_seconds = {}, {}, {}
+    for k in scales:
+        n = 1
+        t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+        while t_n < floor_t:
+            if 2 * n > max_n:
+                raise RuntimeError(
+                    f"probe_batched: at scale {k}, {n} samples per call still "
+                    f"take {1e6 * t_n:.0f} us, under the floor of "
+                    f"{1e6 * floor_t:.0f} us = (1 + {overhead_factor:g}) x the "
+                    f"per-call overhead. The model's cost does not grow with n "
+                    f"here, so there is no per-sample cost to measure.")
+            n *= 2
+            t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+        big = batch_factor * n
+        spec.simulate(k, big, params, rng)               # warm the larger call
+        marginal, calls = [], []
+        for _ in range(repeats):
+            t0 = time.perf_counter()
+            spec.simulate(k, n, params, rng)
+            t1 = time.perf_counter()
+            spec.simulate(k, big, params, rng)
+            t2 = time.perf_counter()
+            marginal.append(((t2 - t1) - (t1 - t0)) / (big - n))
+            calls.append(t1 - t0)
+        if min(marginal) <= 0:
+            raise RuntimeError(
+                f"probe_batched: at scale {k}, a call of {big} samples was "
+                f"timed no slower than one of {n} (marginal costs "
+                f"{[f'{1e6 * m:.3g}' for m in marginal]} us). Something else "
+                f"was using the device during the probe; re-run it when the "
+                f"machine is idle.")
+        times_by_scale[k] = marginal
+        batch_n[str(k)] = n
+        call_seconds[str(k)] = aggregate(calls, aggregator)
+
+    out = _probe(scales, times_by_scale, repeats, aggregator)
+    out["method"] = "batched"
+    out["overhead_seconds"] = a0
+    out["overhead_scale"] = a0_scale
+    out["overhead_factor"] = float(overhead_factor)
+    out["batch_factor"] = int(batch_factor)
+    out["batch_n"] = batch_n
+    out["call_seconds"] = call_seconds
+    # The share of each first call that is fixed cost: at most
+    # 1/(1 + overhead_factor) by the walk. Deliberately NOT stored as
+    # `overhead_share_measured`, which pilot.py reads as the overhead's share of
+    # what was FITTED. Here that share is zero by construction, since the
+    # difference removes it.
+    out["call_overhead_share"] = max(a0 / t for t in call_seconds.values())
+    return out
 
 
 def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:

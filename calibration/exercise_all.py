@@ -951,8 +951,8 @@ def sec_cost_model(a: Audit) -> None:
                                   declared_exponent, estimate_cost_affine,
                                   estimate_cost_exponent, fit_cost_probe,
                                   format_cost_comparison, measure_overhead,
-                                  median_ci, probe_window, time_at_scale,
-                                  time_over_scales)
+                                  median_ci, probe_batched, probe_window,
+                                  time_at_scale, time_over_scales)
     from tools.models import get_model
 
     a.begin("tools/cost_model", "the cost exponent d, and the two probes that measure it")
@@ -1128,6 +1128,23 @@ def sec_cost_model(a: Audit) -> None:
             detail=f"{tight['scales']}, over_budget={tight['over_budget']}")
     a.check("...and says so, so a short lever arm is never silent",
             lambda: tight["over_budget"] is True)
+
+    # probe_batched: what both probes use for a batched_cost model. srw is not
+    # one, but its cost does grow with n, which is all the rule needs, and it
+    # runs without a GPU. What it must get right is staying ON the ladder it is
+    # given -- probe_window above left it -- and still recovering d.
+    bat = probe_batched(srw_spec, {"q": 0.5}, np.random.default_rng(0),
+                        [1024, 2048, 4096, 8192, 16384])
+    a.check("probe_batched times exactly the scales it is given",
+            lambda: bat["scales"], expect=[1024, 2048, 4096, 8192, 16384])
+    a.check("...at an n that shrinks as the scale grows, walked up to the "
+            "overhead floor rather than read off cost_hint",
+            lambda: bat["batch_n"]["1024"] >= bat["batch_n"]["16384"] >= 1,
+            detail=f"n = {bat['batch_n']}")
+    fit_cost_probe(bat, srw_spec.cost_hint, {})
+    a.close("...and the slope in n recovers srw's d = 1",
+            lambda: bat["affine"]["d"], 1.0, 0.3,
+            detail="wall clock on a shared machine; a wide tolerance on purpose")
 
 
 def sec_cost_cache(a: Audit) -> None:
@@ -1406,12 +1423,20 @@ def sec_models_registry(a: Audit) -> None:
     # Spelled out rather than counted, so ADDING a model is a deliberate edit
     # here and an accidental registration is caught. Last grown 2026-09-06 with
     # the high-dimensional lattice; it had stood at the original four since,
-    # and failed silently in the audit until 2026-09-14.
+    # and failed silently in the audit until 2026-09-14. Grown again
+    # 2026-09-16 with the four *_gpu models and rwre, which experiments 07-10
+    # registered without updating this list.
     a.check("every registered model is one we meant to register",
             lambda: sorted(MODELS),
-            expect=["percolation2d", "percolation_tau", "percolation_tau_zd",
-                    "percolation_zd", "percolation_zd_stream", "srw",
+            expect=["percolation2d", "percolation2d_gpu", "percolation_susceptibility",
+                    "percolation_susceptibility_gpu", "percolation_tau",
+                    "percolation_tau_gpu", "percolation_tau_zd", "percolation_zd",
+                    "percolation_zd_gpu", "percolation_zd_stream", "rwre", "srw",
                     "synthetic"])
+    a.check("exactly the *_gpu models declare batched_cost, so the cost probes "
+            "time them by the slope in n rather than one sample per call",
+            lambda: sorted(k for k, v in MODELS.items() if v.batched_cost),
+            expect=sorted(k for k in MODELS if k.endswith("_gpu")))
     a.raises("an unknown model is refused with the list of known ones", ValueError,
              lambda: get_model("nope"), contains="unknown model")
     srw, syn = get_model("srw"), get_model("synthetic")

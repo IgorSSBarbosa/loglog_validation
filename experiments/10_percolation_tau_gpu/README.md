@@ -191,3 +191,7 @@ measured cost at s = 16. The pure-power d̂ is 0.044. The ladder's largest box i
 per-call cost, as in 07 and 08. A first probe, run while the C jobs shared the GPU, gave
 1.167 ± 0.220. 03's CPU probe measured 1.049 ± 0.019. What a GPU cost probe should measure
 (larger n per call) is still the open follow-up.
+
+**Re-measured 2026-09-16 with `probe_batched`**, the follow-up done (experiment 07's E′).
+Same recipe, idle card: affine d̂ = **0.9985 ± 0.0023** against 0.9993, 0.1%, **PASS**. n
+went from 2048 at s = 16 to 8 at s = 4096, and the probe took 10.6 s.

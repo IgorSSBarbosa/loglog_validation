@@ -86,6 +86,18 @@ class ModelSpec:
     #: `shared_lattice` in its metadata (src/generate/generate_shared.py) so
     #: no reader can mistake one for the other.
     shared_sampler: Callable[..., tuple[dict, dict]] | None = None
+    #: True for a model whose simulate() pays a large FIXED cost per call and
+    #: very little per sample, so the clock can only see i**d inside a big
+    #: call. The *_gpu models (user, 2026-09-16): one call spends 1.2-1.7 ms
+    #: creating a cuRAND generator, launching kernels and syncing, whatever
+    #: the box, while one sample of 1e6 sites is ~0.1 ms of device work. Timed
+    #: one sample per call, as `time_over_scales` and `probe_window` do, that
+    #: measures the fixed cost: affine d = 1.10 +/- 0.26 on percolation2d_gpu,
+    #: declared 2. A batched model is timed by tools/cost_model.py's
+    #: `probe_batched` instead, which reads the cost of one more sample off
+    #: the slope in n. This describes how the model's cost is shaped, not what
+    #: device it runs on, so the drivers still never learn about hardware.
+    batched_cost: bool = False
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -147,6 +159,10 @@ MODELS: dict[str, ModelSpec] = {
         # imports cupy; simulate() raises without a GPU. See
         # models/percolation2d_gpu.py, experiments/07_percolation2d_gpu.
         cost_hint=model_percolation2d_gpu.cost_hint,
+        # One call is ~1.3 ms of fixed cost and one sample almost nothing, so
+        # d is timed on the slope in n, not one sample per call. See
+        # ModelSpec.batched_cost.
+        batched_cost=True,
     ),
     "percolation_tau": ModelSpec(
         simulate=model_percolation_tau.simulate,
@@ -169,6 +185,7 @@ MODELS: dict[str, ModelSpec] = {
         # models/percolation_tau_gpu.py, experiments/10_percolation_tau_gpu.
         cost_hint=model_percolation_tau_gpu.cost_hint,
         shared_sampler=model_percolation_tau_gpu.shared_sampler,
+        batched_cost=True,              # as percolation2d_gpu
     ),
     "percolation_zd": ModelSpec(
         simulate=model_percolation_zd.simulate,
@@ -192,6 +209,7 @@ MODELS: dict[str, ModelSpec] = {
         # rng -- equal to percolation_zd in DISTRIBUTION, not bit for bit.
         # See models/percolation_zd_gpu.py, experiments/08_percolation_zd_gpu.
         cost_hint=model_percolation_zd_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
     ),
     "percolation_zd_stream": ModelSpec(
         simulate=model_percolation_zd_stream.simulate,
@@ -232,6 +250,7 @@ MODELS: dict[str, ModelSpec] = {
         # models/percolation_susceptibility_gpu.py,
         # experiments/09_percolation_susceptibility_gpu.
         cost_hint=model_percolation_susceptibility_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
     ),
     "percolation_tau_zd": ModelSpec(
         simulate=model_percolation_tau_zd.simulate,

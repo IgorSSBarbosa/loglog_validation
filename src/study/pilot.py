@@ -52,7 +52,7 @@ from tools import cost_cache  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
 from tools.cost_model import (  # noqa: E402
     PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
-    estimate_cost_affine, fit_cost_probe, probe_window)
+    estimate_cost_affine, fit_cost_probe, probe_batched, probe_window)
 from tools.models import get_model  # noqa: E402
 from tools import progress as P  # noqa: E402
 from tools.rng import spawn  # noqa: E402
@@ -184,6 +184,15 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     `_resolve_d` prefers, and the reason is measured rather than assumed -- see
     D_PROBES. The last probe's own scales, timings and affine fit are returned
     alongside it so the record still shows one complete window.
+
+    A model with `batched_cost` (the *_gpu ones) is timed by `probe_batched`
+    on the pilot's own scales instead of by `probe_window`. On a GPU the
+    window rule climbs to single boxes big enough to dwarf a 1.3 ms call:
+    4096..32768 on percolation2d_gpu, where the study's top rung was 512,
+    ~10 GiB of device memory, d = 2.06 +/- 0.003 against 2, a D MISMATCH
+    at z = +20.8 (user, 2026-09-16). The batched probe times the cost of one
+    more sample at the scales the study draws. Both are repeated `probes`
+    times and averaged the same way.
     """
     spec = get_model(model)
     n_probes = max(1, probes)
@@ -191,15 +200,22 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     # 280 s with nothing on the console, on the run that prompted probe_window
     # (see that function). It is announced BEFORE the first rung is timed,
     # because the whole point is to be visible while it is still running.
-    P.say(f"  cost probe: measuring d over up to {n_probes} independent "
-          f"windows ({model}, budget {seconds_budget:g}s each)")
+    if spec.batched_cost:
+        P.say(f"  cost probe: measuring d over up to {n_probes} independent "
+              f"batched probes ({model}: cost of one more sample at each of "
+              f"the pilot's scales)")
+    else:
+        P.say(f"  cost probe: measuring d over up to {n_probes} independent "
+              f"windows ({model}, budget {seconds_budget:g}s each)")
     fits, t0 = [], time.perf_counter()
     with P.bar(n_probes, "cost probe", unit="probe", unit_scale=False) as pb:
         for j in range(n_probes):
-            win = probe_window(spec, params,
-                               np.random.default_rng(COST_PROBE_SEED + j),
-                               scales, repeats=repeats,
-                               seconds_budget=seconds_budget)
+            rng_j = np.random.default_rng(COST_PROBE_SEED + j)
+            if spec.batched_cost:
+                win = probe_batched(spec, params, rng_j, scales, repeats=repeats)
+            else:
+                win = probe_window(spec, params, rng_j, scales, repeats=repeats,
+                                   seconds_budget=seconds_budget)
             fits.append(fit_cost_probe(win, spec.cost_hint, params))
             d_j = (fits[-1].get("affine") or {}).get("d")
             pb.update(1)
@@ -244,9 +260,20 @@ def resolve_cost(model, params, scales, *, reuse_cache: bool = False) -> dict:
     share is quoted at, and what `reached_target` refers to -- would then
     describe a window this study never had. Re-probing costs ~12 s, so the
     conservative choice is free.
+
+    An entry measured by the other probe (`probe_window` for a model now
+    registered with `batched_cost`, or the reverse) is not reused either: it
+    timed a different quantity.
     """
     if reuse_cache:
         entry = cost_cache.load(model, params)
+        want = "batched" if get_model(model).batched_cost else "per_call"
+        if entry is not None and entry.get("probe") and \
+                entry["probe"].get("method", "per_call") != want:
+            P.say(f"  --reuse-cost: the cached probe for this model is "
+                  f"{entry['probe'].get('method', 'per_call')!r}, and this "
+                  f"model is timed {want!r}; measuring")
+            entry = None
         if entry is not None and entry.get("probe"):
             cached = dict(entry["probe"])
             cached["from_cache"] = {"created": entry.get("created"),
@@ -420,7 +447,21 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
     share_src = "measured at i = 1"
     if share is None:
         share, share_src = cost.get("overhead_share"), "from the affine fit's a"
-    if share is not None and share > OVERHEAD_SHARE_NOTE:
+    if share is not None and share > OVERHEAD_SHARE_NOTE and \
+            cost.get("method") == "batched":
+        # probe_batched's timings are already per SAMPLE, with the per-call
+        # overhead differenced out, so a fitted `a` here is a per-sample
+        # constant (a separator row, a copy to host), not dispatch. Same
+        # consequence for the pure fit, different cause, and saying "dispatch"
+        # would send the reader after a cost that is not in the numbers.
+        warnings.append(
+            f"a per-sample constant is {share:.0%} of the cheapest scale's "
+            f"per-sample cost ({share_src}; > {OVERHEAD_SHARE_NOTE:.0%}), so the "
+            f"pure power-law d_hat ({cost.get('d_hat')}) is biased by it. The "
+            f"per-call overhead is not in these numbers (the batched probe "
+            f"cancels it); the affine fit separates the constant and is what "
+            f"d uses.")
+    elif share is not None and share > OVERHEAD_SHARE_NOTE:
         # Not a refusal: this is the condition affine[] exists to survive.
         warnings.append(
             f"per-call overhead is {share:.0%} of the cheapest probe rung "
@@ -679,6 +720,15 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     # pace replicate 2 will run at. Per-replicate narrators would re-announce
     # "no timing yet" on every first rung and never predict anything.
     nar = P.ScaleNarrator(scales, counts_now, spec.cost_hint, params)
+    if spec.batched_cost and replicates > 0:
+        # The first simulate() of a process pays one-time device setup (CUDA
+        # context, cuRAND, kernel cache) that no later call pays and a real run
+        # amortises. A GPU pilot is short enough for it to dominate: 0.4 s of a
+        # 0.78 s pilot, so throughput read 3.86e9 sites/s against a real 1.0e10,
+        # and plan.py predicted 20 s for a replicate that took 7.6 s (user,
+        # 2026-09-16). Paid here, off the clock, from the cost probe's fixed
+        # seed, so the pilot's own streams are untouched.
+        spec.simulate(scales[0], 1, params, np.random.default_rng(COST_PROBE_SEED))
     # skip=have: these streams EXTEND the pool, they do not restart it. Without
     # it --more redraws the replicates already on disk (see tools/rng.py:spawn).
     for k, ss in enumerate(spawn(base, replicates, skip=have)):
@@ -738,6 +788,24 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     cv_se = (float(np.std(cv_by_rep.mean(axis=1), ddof=1) / np.sqrt(R))
              if R > 1 else None)
     throughput = (drawn_steps / drawn_seconds) if drawn_seconds > 0 else None
+    throughput_source = "the pilot's own clock"
+    aff = cost.get("affine") or {}
+    if spec.batched_cost and "d" in aff:
+        # A batched model's pilot clock is not its run's pace. Each rung is ONE
+        # call, and a GPU pilot is so short that the fixed cost of those calls
+        # is a fifth of it -- 20% on percolation2d_gpu even after the warm-up
+        # above -- while a real run spreads that cost over millions of
+        # samples. So throughput is the probe's per-sample cost, a + b*i**d,
+        # summed over this pilot's own allocation. Measured (user, 2026-09-16):
+        # plan.py's replicate at m0 = 4, scales 32..1024, took 15.68-15.95 s;
+        # the clock's 8.34e9 predicted 20.0 s, the probe's 1.04e10 16.0 s.
+        per_sample = sum(c * (aff["a"] + aff["b"] * float(i) ** aff["d"])
+                         for i, c in zip(scales, counts_now))
+        work = sum(c * (spec.cost_hint(i, params) if spec.cost_hint else 1.0)
+                   for i, c in zip(scales, counts_now))
+        throughput = work / per_sample
+        throughput_source = ("the batched cost probe: per-sample cost a + b*i**d "
+                             "over this pilot's allocation")
     prov = (f"pilot, {R} replicate{'s' if R > 1 else ''}, pooled then refitted once"
             if R > 1 else "pilot, 1 replicate (no stderr available)")
 
@@ -781,11 +849,13 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         "cv_per_scale": cv_per_scale.tolist(),
         "direct_fit": fit, "per_replicate": reps, "cost": cost,
         "gamma_pilot": fit["gamma"], "a0_pilot": fit["a0"],
-        "throughput": throughput, "drawn_seconds": drawn_seconds,
+        "throughput": throughput, "throughput_source": throughput_source,
+        "drawn_seconds": drawn_seconds,
         "drawn_steps": drawn_steps, "d_warnings": d_warnings,
     }, produced_by="src/study/pilot.py")
     return {"constants": consts, "fit": fit, "cost": cost, "replicates": R,
             "reps": reps, "cv_per_scale": cv_per_scale, "throughput": throughput,
+            "throughput_source": throughput_source,
             "d_check": d_check, "d_warnings": d_warnings}
 
 
@@ -890,7 +960,7 @@ def _main(argv=None) -> None:
               f"--data-root {root}")
     if r["throughput"]:
         print(f"\nthroughput  = {r['throughput']:.3g} steps/s "
-              f"(this machine, from the pilot's own clock)")
+              f"(this machine, from {r['throughput_source']})")
     print(f"\ngamma from the pilot itself: {r['fit']['gamma']:.4f}  "
           f"(indicative -- the plan exists to measure it properly)")
 

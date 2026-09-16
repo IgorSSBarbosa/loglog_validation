@@ -187,6 +187,63 @@ downstream is affected. The consequence to carry forward: **a GPU cost probe nee
 per call large enough for device work to dominate the overhead**. That is a change to
 the probe's recipe or driver, and belongs in a later checkpoint.
 
+**Correction (2026-09-16).** "Nothing downstream is affected" holds for `generate.py`,
+whose allocation takes d from `cost_hint`. It does not hold for the pilot → plan
+workflow. There `pilot.py` measures d from the clock and `plan.py` converts a budget to
+seconds with the pilot's throughput. Both were wrong on this model; see E′.
+
+### E′ — a cost measurement for batched models (2026-09-16)
+
+The follow-up above, done (user, 2026-09-16). The four `*_gpu` models are registered
+with `ModelSpec.batched_cost`, and both probes then time them with
+`tools/cost_model.py`'s `probe_batched`. At each scale it doubles n until one call takes
+4× the per-call overhead a₀, then keeps (t(4n) − t(n)) / 3n from interleaved pairs. That
+is the cost of one sample, with the fixed cost of the call cancelled. n is walked, never
+sized from `cost_hint`: at a fixed work per call the overhead per sample would grow
+exactly like the declaration and hand it back. Nothing was changed for any other model.
+
+No criterion was written before these runs. The comparisons are recorded, not gated.
+All runs were on an idle card (299 MiB in use, no other process).
+
+**The standalone probe, same recipe as E.**
+
+```bash
+python3 src/estimate/measure_cost.py -meta experiments/07_percolation2d_gpu/recipes/cost_gpu_cylinder.json --tag cost_gpu_batched
+```
+
+a₀ = 1181 µs. n runs from 262 144 at i = 16 down to 64 at i = 1024, and the fixed cost is
+at most 17% of the first call of a pair. Affine d̂ = **2.0202 ± 0.0043** against the
+declared 2, 1.0%. Pure power d̂ = 1.9971. The driver's check: **PASS** (tolerance 20%),
+where E gave 0.80 ± 0.23. The probe took 10.9 s.
+
+**Pilot → plan → one replicate.** `recipes/samples_gpu_pilot.json` (scales 8…512, neyman,
+budget 10⁹, 3 replicates), then `plan.py --time 60s`. The planned replicate was then
+timed through `src.generate.generate.generate(...)`, the call `run.py` makes, once cold
+and once warm.
+
+| pilot | its probe | d | throughput (sites/s) | plan's replicate | predicted | measured |
+|---|---|---|---|---|---|---|
+| before | `probe_window`, single boxes 4096…32768 (~10 GiB) | 2.0615 ± 0.0030 | 3.86·10⁹, pilot clock | m₀ = 3, 16…512, n = 221 054 | 20.0 s | 7.56–7.91 s |
+| + warm-up, batched probe | `probe_batched`, 8…512 | 2.0246 ± 0.0008 | 8.34·10⁹, pilot clock | m₀ = 4, 32…1024, n = 119 314 | 20.0 s | 15.68–15.95 s |
+| after | `probe_batched`, 8…512 | 2.0261 ± 0.0008 | 1.05·10¹⁰, from the probe | m₀ = 4, 32…1024, n = 150 002 | 20.0 s | **19.80–20.02 s** |
+
+What each change fixed:
+
+- **Warm-up.** Before it, the first rung of the first replicate took 0.4 s of one-time
+  CUDA setup, in a pilot that drew for 0.78 s. `pilot.py` now pays that before starting
+  the clock, from the cost probe's fixed seed, so the pilot's streams are unchanged.
+- **Throughput from the probe.** Even warm, 20% of a 0.36 s GPU pilot is the ~1.3 ms
+  fixed cost of one call per rung, which a real run spreads over millions of samples.
+  For a batched model the pilot's throughput is now Σ n_i·cost_hint(i) / Σ n_i·(a + b·iᵈ)
+  over its own allocation, from the probe's affine fit. That fit predicted the second
+  row's replicate at 16.0 s (measured 15.68–15.95 s) before it was used.
+
+**Still flagged: D MISMATCH.** The five batched probes agree to ±0.0008, so the 1.3% gap
+between the clock's 2.026 and the declared 2 is z = +34. The pilot's gate has no relative
+floor, while `compare_cost_models` has one (5%). The error budget prices se(d) at 1.0000×
+RMSE and moves m₀ by 0.00. The gate is the pilot's statistical rule, so it is recorded
+here and left unchanged.
+
 ## What this unlocks, not yet run
 
 At ~10¹⁰ sites/s a 4·10¹¹-site cylinder run is about a minute. That is the wider ladder

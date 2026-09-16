@@ -169,3 +169,8 @@ Affine d̂ = **2.789 ± 0.066** against the declared 2.665 (+1.9σ, 4.6%): insid
 20% tolerance, overhead a = 1502 µs. Unlike 07 and 08 the n = 1 probe works here, because
 the ladder's boxes reach 2.7·10⁷ sites and device work outweighs the ~1.5 ms fixed cost
 from x ≈ 16 up. 06's CPU probe measured 2.685 ± 0.022.
+
+**Re-measured 2026-09-16 with `probe_batched`**, the batched-model probe of experiment 07's
+E′, same recipe, idle card: affine d̂ = **2.6905 ± 0.0372** against 2.665, 1.0%, **PASS**.
+n went from 2048 at x = 4 to 1 at x ≥ 64, and the probe took 3.8 s. It no longer depends on
+the ladder reaching boxes big enough to hide the fixed cost.

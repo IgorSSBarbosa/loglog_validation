@@ -311,7 +311,8 @@ def _main(argv=None) -> None:
     p.add_argument("--rho", type=float, default=2.0)
     p.add_argument("--m", type=int, default=6)
     p.add_argument("--throughput", type=float, default=None,
-                   help="steps/second; measured from the pilot's own clock when absent")
+                   help="steps/second; the pilot's measured one when absent (its "
+                        "own clock, or for a batched_cost model its cost probe)")
     p.add_argument("--accept", action="store_true",
                    help="write plan.json so run.py will execute it")
     a = p.parse_args(argv)
@@ -358,7 +359,10 @@ def _main(argv=None) -> None:
     print(f"  {'m':<11}{a.m:>10d}              (design choice)")
     if ratio_note:
         print(ratio_note)
-    print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s")
+    print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s"
+          + ("  (--throughput)" if a.throughput is not None else
+             f"  (from {pilot['throughput_source']})"
+             if pilot.get("throughput_source") else ""))
 
     print("\nerror budget -- how far each constant's own uncertainty moves the plan")
     print(f"  {'constant':<11}{'+/- 1 se':>12}{'moves m0 by':>14}{'worst-case RMSE':>18}")

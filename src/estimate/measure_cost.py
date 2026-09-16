@@ -34,6 +34,15 @@ the pure-power d_hat far below the truth. The affine fit separates it out and
 recovers d correctly, so acceptance is checked against the affine d whenever
 it is available.
 
+A model registered with `batched_cost` (the *_gpu ones) is timed differently,
+by tools/cost_model.py's `probe_batched`. There one call's fixed cost is
+~1.3 ms and one sample's work a small fraction of that, so n = 1 measures
+the fixed cost and not i**d, and the affine fit cannot separate the two:
+d = 0.80, 2.34 and 1.29 against 2, 3 and 1 in experiments 07, 08 and 10. At
+each scale the batched probe grows n until the work clears the overhead, and
+records the cost of one more sample, (t(4n) - t(n)) / 3n, so the fixed cost
+cancels. The recipe does not change; the model decides.
+
 This module only measures and saves -- it never plots (mirrors
 generate.py/plot_loglog.py's split). See plot_cost.py for the log-log plot.
 
@@ -64,6 +73,7 @@ from tools.cost_model import (  # noqa: E402
     fit_cost_probe,
     format_cost_comparison,
     median_ci,
+    probe_batched,
     time_over_scales,
 )
 from tools.loglog import gamma_drop_leading  # noqa: E402
@@ -101,7 +111,9 @@ def measure(
     only in choosing its own scales instead of taking a ladder (see
     src/study/pilot.py's measure_cost_exponent). What this driver adds is the
     ladder as the EXPERIMENT: a named grid, its per-scale confidence
-    intervals, and the acceptance check below.
+    intervals, and the acceptance check below. A model with `batched_cost`
+    is timed by `probe_batched` on the same ladder instead, and `elapsed` is
+    then the cost of one sample inside a large call (module docstring).
 
     Reports two fits of the same timings:
 
@@ -118,7 +130,10 @@ def measure(
     seed_seq = np.random.SeedSequence(seed)
     rng = np.random.default_rng(seed_seq)
 
-    probe = time_over_scales(spec, scales, params, rng, repeats, aggregator)
+    if spec.batched_cost:
+        probe = probe_batched(spec, params, rng, scales, repeats, aggregator)
+    else:
+        probe = time_over_scales(spec, scales, params, rng, repeats, aggregator)
     fit_cost_probe(probe, spec.cost_hint, params)
     times = {k: probe["elapsed_all"][str(k)] for k in probe["scales"]}
 
@@ -135,6 +150,11 @@ def measure(
         "elapsed_all": {str(k): times[k] for k in probe["scales"]},
         "d_hat": probe["d_hat"],
         "affine": probe["affine"],
+        "method": probe.get("method", "per_call"),
+        **{k: probe[k] for k in ("overhead_seconds", "overhead_scale",
+                                 "overhead_factor", "batch_factor", "batch_n",
+                                 "call_seconds", "call_overhead_share")
+           if k in probe},
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
 
@@ -173,9 +193,24 @@ def _main(argv: list[str] | None = None) -> None:
 
     print(f"model={model!r}  params={params}  repeats={repeats}  seed={result['seed']}  "
           f"aggregator={result['aggregator']!r}")
-    print(f"{'k':>10} {'cost_ms':>12} {'ci_lo_ms':>12} {'ci_hi_ms':>12}")
+    batched = result["method"] == "batched"
+    if batched:
+        f = result["batch_factor"]
+        print(f"batched probe ({model!r} declares batched_cost): per-call overhead "
+              f"a0 = {1e6 * result['overhead_seconds']:.0f} us at k = "
+              f"{result['overhead_scale']}.\n  At each k, n doubles until one call "
+              f"takes {1 + result['overhead_factor']:g} x a0; cost_ms is the cost of "
+              f"ONE sample, (t({f}n) - t(n)) / {f - 1}n,\n  so the fixed per-call "
+              f"cost cancels (at most {result['call_overhead_share']:.0%} of the "
+              f"call it came from).")
+    print(f"{'k':>10} {'cost_ms':>12} {'ci_lo_ms':>12} {'ci_hi_ms':>12}"
+          + (f" {'n':>10}" if batched else ""))
+    # One sample on a GPU can be 1e-5 ms, which the CPU rows' fixed 4 decimals
+    # would print as zero.
+    fmt = ">12.4g" if batched else ">12.4f"
     for k, t, (lo_ci, hi_ci) in zip(result["scales"], result["elapsed"], result["elapsed_ci"]):
-        print(f"{k:>10} {t * 1e3:>12.4f} {lo_ci * 1e3:>12.4f} {hi_ci * 1e3:>12.4f}")
+        print(f"{k:>10} {t * 1e3:{fmt}} {lo_ci * 1e3:{fmt}} {hi_ci * 1e3:{fmt}}"
+              + (f" {result['batch_n'][str(k)]:>10}" if batched else ""))
 
     print(f"\npure power law  cost(i) = c*i^d      : d_hat = {result['d_hat']:.4f}")
     aff = result["affine"]

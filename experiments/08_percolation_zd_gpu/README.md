@@ -158,6 +158,12 @@ fixed cost is 108% of the measurement at i = 8. `measure_cost.py` times one samp
 call, and on a GPU that measures launch and sync overhead, not i^dim. Allocation uses
 the declared `cost_hint`, which is unchanged.
 
+**Re-measured 2026-09-16 with `probe_batched`**, the batched-model probe of experiment 07's
+E′, same recipe, idle card: affine d̂ = **2.9943 ± 0.0153** against 3, 0.2%, **PASS**. n
+went from 65 536 at i = 8 to 1 at i = 256, and the probe took 11.6 s. `generate.py`
+allocations use `cost_hint` and were never affected, but the pilot → plan workflow
+was: see 07's correction.
+
 ### Speed at the deep allocations (recorded)
 
 | dim, anchor | i | CPU Msites/s | GPU Msites/s | speed-up |

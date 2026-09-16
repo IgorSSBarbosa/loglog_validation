@@ -918,7 +918,14 @@ Two deliberate departures from the rules above, both for `*_gpu` models only (us
 
 Importing it never imports cupy. `simulate` raises `RuntimeError` naming
 `percolation2d` when cupy or a CUDA device is missing, and never falls back silently.
-See `experiments/07_percolation2d_gpu/README.md`.
+
+Its registry entry sets `batched_cost=True`, as every `*_gpu` entry does (user,
+2026-09-16). A call costs ~1.3 ms whatever the box, and one sample a small fraction of
+that, so timing one sample per call measures the fixed cost and not i². With the flag,
+`measure_cost.py` and the pilot time the cost of one more sample inside a large call
+(`tools/cost_model.py`'s `probe_batched`), and the pilot takes its throughput from that
+probe. A new GPU model needs the same flag. See
+`experiments/07_percolation2d_gpu/README.md`, including E′.
 
 ### `percolation_zd_gpu.py` — `percolation_zd` on a CUDA GPU
 
