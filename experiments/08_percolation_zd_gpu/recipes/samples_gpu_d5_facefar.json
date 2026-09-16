@@ -1,0 +1,20 @@
+{
+  "kind": "samples",
+  "model": "percolation_zd_gpu",
+  "params": {
+    "dim": 5,
+    "anchor": "face_far",
+    "geometry": "cylinder"
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000.0
+  },
+  "seed": null
+}

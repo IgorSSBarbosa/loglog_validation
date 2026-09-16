@@ -844,6 +844,18 @@ Importing it never imports cupy. `simulate` raises `RuntimeError` naming
 `percolation2d` when cupy or a CUDA device is missing, and never falls back silently.
 See `experiments/07_percolation2d_gpu/README.md`.
 
+### `percolation_zd_gpu.py` — `percolation_zd` on a CUDA GPU
+
+`percolation_zd_gpu(i, n=1, dim=2, p=None, anchor="face", anchor_dim=None,
+geometry="box", rng=None)`, plus `crossing_fraction_gpu`. Everything above about
+`percolation2d_gpu` applies: separate model, cuRAND seeded from the driver's rng, block
+size fixed by `block_rows(i, dim)`, equal in distribution rather than bit for bit, and
+cupy imported only inside `simulate`. It imports from `percolation_zd` the declarations
+plus the three pure indexing helpers (`_periodic_axes`, `_wrap_faces`, `_seed_slab`), so
+the geometry cannot disagree. The "origin" count uses the k = 0 seed-slab gather, the
+same number without cupy's memory-hungry `bincount`. See
+`experiments/08_percolation_zd_gpu/README.md`.
+
 ### `percolation_susceptibility.py` — the first off-critical model, and the first ladder in $\varepsilon$
 
 Everything above is at $p = p_c$ and indexes its ladder by a LENGTH (a box side $i$, a

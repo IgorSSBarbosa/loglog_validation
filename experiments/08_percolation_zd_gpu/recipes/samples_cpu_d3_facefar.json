@@ -1,0 +1,21 @@
+{
+  "kind": "samples",
+  "model": "percolation_zd",
+  "params": {
+    "dim": 3,
+    "anchor": "face_far",
+    "geometry": "cylinder"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000.0
+  },
+  "seed": null
+}

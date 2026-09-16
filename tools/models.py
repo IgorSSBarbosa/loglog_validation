@@ -29,6 +29,7 @@ from models import percolation_tau as model_percolation_tau
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
+from models import percolation_zd_gpu as model_percolation_zd_gpu
 from models import percolation_zd_stream as model_percolation_zd_stream
 from models import rwre as model_rwre
 from models import srw as model_srw
@@ -169,6 +170,15 @@ MODELS: dict[str, ModelSpec] = {
         # above: d_f(dim), and the exact mean-field d_f = 4 for dim >= 6, are
         # acceptance criteria in experiments/05_percolation_highd/README.md and
         # reach the code only as --expect-gamma / --truth at reporting time.
+    ),
+    "percolation_zd_gpu": ModelSpec(
+        simulate=model_percolation_zd_gpu.simulate,
+        # percolation_zd's own cost_hint (i**dim), imported, so it cannot
+        # drift. Every anchor, geometry and dim of the CPU model, drawn and
+        # labelled on a CUDA GPU from a cuRAND stream seeded by the driver's
+        # rng -- equal to percolation_zd in DISTRIBUTION, not bit for bit.
+        # See models/percolation_zd_gpu.py, experiments/08_percolation_zd_gpu.
+        cost_hint=model_percolation_zd_gpu.cost_hint,
     ),
     "percolation_zd_stream": ModelSpec(
         simulate=model_percolation_zd_stream.simulate,
