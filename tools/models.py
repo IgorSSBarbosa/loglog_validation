@@ -27,6 +27,7 @@ from models import percolation2d as model_percolation2d
 from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
 from models import percolation_susceptibility as model_percolation_susceptibility
+from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_gpu as model_percolation_zd_gpu
@@ -209,6 +210,16 @@ MODELS: dict[str, ModelSpec] = {
         # No target_fn/true_gamma_key, as everywhere else: 43/18, 91/36 and
         # 187/91 are acceptance criteria in
         # experiments/06_susceptibility/README.md, not inputs.
+    ),
+    "percolation_susceptibility_gpu": ModelSpec(
+        simulate=model_percolation_susceptibility_gpu.simulate,
+        # percolation_susceptibility's own cost_hint (L(x)**dim, ceil'd L) and
+        # box rule, imported, so neither can drift. Same off-critical
+        # observable on a CUDA GPU, cuRAND seeded from the driver's rng --
+        # equal in DISTRIBUTION, not bit for bit. See
+        # models/percolation_susceptibility_gpu.py,
+        # experiments/09_percolation_susceptibility_gpu.
+        cost_hint=model_percolation_susceptibility_gpu.cost_hint,
     ),
     "percolation_tau_zd": ModelSpec(
         simulate=model_percolation_tau_zd.simulate,

@@ -1,0 +1,22 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility",
+  "params": {
+    "dim": 2,
+    "eps0": 0.5,
+    "box_factor": 8.0,
+    "nu_box": 1.3333333333333333,
+    "moment": 2,
+    "geometry": "torus"
+  },
+  "scales": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
+  "n": 1500,
+  "seed": null
+}

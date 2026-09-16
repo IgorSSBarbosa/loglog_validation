@@ -820,42 +820,6 @@ signature parity and ignored — batching is exactly what would break bit-identi
 `cost_unit_ratio` carry over and the two are comparable at equal budget. The int32 label
 ceiling now applies to the **frontier**, $i^{\texttt{dim}-1}$, not the box.
 
-### `percolation2d_gpu.py` — `percolation2d` on a CUDA GPU
-
-`percolation2d_gpu(i, n=1, p=p_c, anchor="south", geometry="box", rng=None)`. The same
-observable, parameters and `cost_hint` as `percolation2d`, with draw, label, merge and
-count run on the device (CuPy; `cupyx.scipy.ndimage.label` for the labelling). A
-separate `MODELS` entry rather than a flag, because the random stream differs: each
-call seeds cuRAND with one `rng.integers(0, 2**63)` from the driver's generator.
-
-Two deliberate departures from the rules above, both for `*_gpu` models only (user,
-2026-09-16):
-
-- **It imports declarations from its CPU sibling** — p_c, the structure, the anchor and
-  geometry names, `cost_hint`, `zero_rate` — so the declared cost is the same function
-  object and cannot drift. The algorithm itself is not imported, only ported.
-- **Not bit-identical at any block size.** cuRAND fills a block at once, so the block
-  size is part of what a seed means. It is a fixed function of `i`
-  (`block_rows`, a constant byte budget), never of free VRAM. What holds instead is
-  equality *in distribution* with `percolation2d`: two-sample KS and a mean check,
-  in `tools/tests/test_percolation2d_gpu.py`.
-
-Importing it never imports cupy. `simulate` raises `RuntimeError` naming
-`percolation2d` when cupy or a CUDA device is missing, and never falls back silently.
-See `experiments/07_percolation2d_gpu/README.md`.
-
-### `percolation_zd_gpu.py` — `percolation_zd` on a CUDA GPU
-
-`percolation_zd_gpu(i, n=1, dim=2, p=None, anchor="face", anchor_dim=None,
-geometry="box", rng=None)`, plus `crossing_fraction_gpu`. Everything above about
-`percolation2d_gpu` applies: separate model, cuRAND seeded from the driver's rng, block
-size fixed by `block_rows(i, dim)`, equal in distribution rather than bit for bit, and
-cupy imported only inside `simulate`. It imports from `percolation_zd` the declarations
-plus the three pure indexing helpers (`_periodic_axes`, `_wrap_faces`, `_seed_slab`), so
-the geometry cannot disagree. The "origin" count uses the k = 0 seed-slab gather, the
-same number without cupy's memory-hungry `bincount`. See
-`experiments/08_percolation_zd_gpu/README.md`.
-
 ### `percolation_susceptibility.py` — the first off-critical model, and the first ladder in $\varepsilon$
 
 Everything above is at $p = p_c$ and indexes its ladder by a LENGTH (a box side $i$, a
@@ -931,3 +895,49 @@ low-density lattice-animal series $S = p^{-1}\sum_A s^2p^s(1-p)^{t(A)}$ (animals
 7), which is the infinite-lattice quantity the model actually claims; $p\to0$, $p=1$
 ($Y = L^{\dim}$ exactly), `block_n` invariance, the $\dim\ge3$ ladder refusal, cost-hint
 exactness, and the $L/\xi$ growth law above.
+
+### `percolation2d_gpu.py` — `percolation2d` on a CUDA GPU
+
+`percolation2d_gpu(i, n=1, p=p_c, anchor="south", geometry="box", rng=None)`. The same
+observable, parameters and `cost_hint` as `percolation2d`, with draw, label, merge and
+count run on the device (CuPy; `cupyx.scipy.ndimage.label` for the labelling). A
+separate `MODELS` entry rather than a flag, because the random stream differs: each
+call seeds cuRAND with one `rng.integers(0, 2**63)` from the driver's generator.
+
+Two deliberate departures from the rules above, both for `*_gpu` models only (user,
+2026-09-16):
+
+- **It imports declarations from its CPU sibling** — p_c, the structure, the anchor and
+  geometry names, `cost_hint`, `zero_rate` — so the declared cost is the same function
+  object and cannot drift. The algorithm itself is not imported, only ported.
+- **Not bit-identical at any block size.** cuRAND fills a block at once, so the block
+  size is part of what a seed means. It is a fixed function of `i`
+  (`block_rows`, a constant byte budget), never of free VRAM. What holds instead is
+  equality *in distribution* with `percolation2d`: two-sample KS and a mean check,
+  in `tools/tests/test_percolation2d_gpu.py`.
+
+Importing it never imports cupy. `simulate` raises `RuntimeError` naming
+`percolation2d` when cupy or a CUDA device is missing, and never falls back silently.
+See `experiments/07_percolation2d_gpu/README.md`.
+
+### `percolation_zd_gpu.py` — `percolation_zd` on a CUDA GPU
+
+`percolation_zd_gpu(i, n=1, dim=2, p=None, anchor="face", anchor_dim=None,
+geometry="box", rng=None)`, plus `crossing_fraction_gpu`. Everything above about
+`percolation2d_gpu` applies: separate model, cuRAND seeded from the driver's rng, block
+size fixed by `block_rows(i, dim)`, equal in distribution rather than bit for bit, and
+cupy imported only inside `simulate`. It imports from `percolation_zd` the declarations
+plus the three pure indexing helpers (`_periodic_axes`, `_wrap_faces`, `_seed_slab`), so
+the geometry cannot disagree. The "origin" count uses the k = 0 seed-slab gather, the
+same number without cupy's memory-hungry `bincount`. See
+`experiments/08_percolation_zd_gpu/README.md`.
+
+### `percolation_susceptibility_gpu.py` — `percolation_susceptibility` on a CUDA GPU
+
+Same signature minus `block_n`, same observable, box rule and `cost_hint` (imported from
+the CPU sibling). Like the CPU module, which borrows `percolation_zd`'s draw, label and
+merge, it borrows `percolation_zd_gpu`'s. The one change of method: the per-sample
+Σ s^(k+1) over clusters is computed as Σ |C(x)|^k over sites, with sizes from
+`cupy.add.at`, because cupy's `bincount` needs ~184 extra device bytes per site.
+Equal in distribution to the CPU model, not bit for bit. See
+`experiments/09_percolation_susceptibility_gpu/README.md`.
