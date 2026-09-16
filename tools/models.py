@@ -24,6 +24,7 @@ from typing import Callable
 import numpy as np
 
 from models import percolation2d as model_percolation2d
+from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_tau_zd as model_percolation_tau_zd
@@ -131,6 +132,18 @@ MODELS: dict[str, ModelSpec] = {
         # the code path so no estimator is handed the answer it is measuring.
         # It lives as a written acceptance criterion in
         # experiments/03_percolation_zd/README.md. See models/percolation2d.py.
+    ),
+    "percolation2d_gpu": ModelSpec(
+        simulate=model_percolation2d_gpu.simulate,
+        # The SAME function object as percolation2d's: the GPU module imports
+        # it, so the declared i**2 cannot drift -- a device changes the wall
+        # clock, not the work. Same observable and parameters; a different
+        # random stream (cuRAND, seeded from the driver's rng), so a seed
+        # recorded for one model does not reproduce the other. Equal in
+        # DISTRIBUTION, which is what its tests check. Importing it never
+        # imports cupy; simulate() raises without a GPU. See
+        # models/percolation2d_gpu.py, experiments/07_percolation2d_gpu.
+        cost_hint=model_percolation2d_gpu.cost_hint,
     ),
     "percolation_tau": ModelSpec(
         simulate=model_percolation_tau.simulate,

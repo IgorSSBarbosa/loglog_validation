@@ -18,5 +18,10 @@ matplotlib==3.9.4
 psutil==7.2.2
 tqdm==4.67.1
 
+# GPU models (models/*_gpu.py). Imported lazily: installing needs no GPU, and
+# nothing else in the repo imports it. A cuRAND stream is only reproducible on
+# the same cupy/CUDA version, so this pin is part of what a *_gpu seed means.
+cupy-cuda12x==14.2.0
+
 # test-only
 pytest==8.4.2
