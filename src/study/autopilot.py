@@ -102,6 +102,8 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
 from tools.artifacts import (  # noqa: E402
     default_out_dir, load_recipe, read_artifact, write_artifact)
 from tools.constants import format_table  # noqa: E402
+from tools.models import get_model  # noqa: E402
+from tools import progress as P  # noqa: E402
 from tools.rng import seed_record, spawn  # noqa: E402
 from tools.loglog import gamma_all_points  # noqa: E402
 from tools.wilson import finite_size_bias  # noqa: E402
@@ -299,13 +301,31 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
     # draw, never a continuation of the one it replaces (ground rule 2).
     round_seeds = spawn(seed, max_rounds)
 
+    log(f"  pilot budget: {human_time(seconds_budget)} over at most "
+        f"{max_rounds} doubling round(s)")
     for k in range(max_rounds):
-        if rounds and (time.perf_counter() - t_start) >= seconds_budget:
+        spent_before = time.perf_counter() - t_start
+        if rounds and spent_before >= seconds_budget:
+            log(f"  pilot: {human_time(spent_before)} spent of "
+                f"{human_time(seconds_budget)} -- stopping after "
+                f"{len(rounds)} round(s)")
             break
         factor = 2 ** k
         this = scale_draws(recipe, factor) if factor > 1 else recipe
         log(f"  pilot round {k + 1}: {replicates} replicate(s) at "
             f"{factor}x the recipe's draws")
+        # The budget is checked BETWEEN rounds and never inside one, and round
+        # 1 is not checked at all (`rounds` is empty). So a recipe whose own n
+        # is large runs to completion no matter what --time said, and the
+        # overrun can be arbitrary: measured on srw's samples_pilot.json
+        # (budget 5e10) under --time 5m, round 1 alone ran past 609 s -- 8x
+        # the pilot's 75 s slice and 2x the whole study's budget -- and was
+        # still drawing when it was killed. Whether that SHOULD be bounded is
+        # a modelling decision (a half-drawn round has no usable constants);
+        # what is not defensible is it happening silently, so it is said here.
+        if k == 0:
+            log(f"    (round 1 always runs to completion -- the recipe's own "
+                f"n decides how long, not the budget)")
         t = time.perf_counter()
         # The cost probe is measured once and handed to every later round.
         # d belongs to the model and the machine, not to the draws, and the
@@ -339,6 +359,12 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
                        "omega1": consts["omega1"].value,
                        "omega1_se": consts["omega1"].se})
 
+        took = time.perf_counter() - t
+        cum = time.perf_counter() - t_start
+        log(f"    round {k + 1} took {human_time(took)}; "
+            f"{human_time(cum)} of the pilot's {human_time(seconds_budget)} used"
+            + ("  <-- OVER BUDGET" if cum > seconds_budget else ""))
+
         flat = lc["p"] > LADDER_P_MAX
         if flat:
             log(f"    a pure power law still fits (chi2/dof = "
@@ -365,27 +391,12 @@ def _bar(total_steps: int, enabled: bool):
     check on the prediction rather than a decoration. A run that comes in at
     0.82x predicted shows that at thirty seconds instead of twelve minutes.
 
-    Disabled off a TTY -- a piped or logged run would otherwise fill with
-    carriage returns -- and degrades to a silent object if tqdm is absent, so
-    a missing optional dependency never costs someone a two-hour draw.
+    The mechanics (TTY detection, the missing-tqdm fallback) moved to
+    tools/progress.py in 2026-09 so the pilot and the probe could draw bars on
+    the same terms; what stays here is the choice of UNIT, which is this
+    phase's own.
     """
-    class _Null:
-        def update(self, _n): pass
-        def write(self, msg): print(msg, file=sys.stderr)
-        def close(self): pass
-        def __enter__(self): return self
-        def __exit__(self, *a): self.close()
-
-    if not enabled or not sys.stderr.isatty():
-        return _Null()
-    try:
-        from tqdm import tqdm
-    except ImportError:
-        return _Null()
-    return tqdm(total=total_steps, unit="step", unit_scale=True,
-                dynamic_ncols=True, file=sys.stderr,
-                bar_format="  {l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-                desc="drawing")
+    return P.bar(total_steps, "drawing", unit="step", enabled=enabled)
 
 
 def resume_command(sd: Path, *, replicates, target_se, seed, reuse_from) -> str:
@@ -697,7 +708,12 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     argv = (["--study", sd.name, "--data-root", str(sd.parent)] + constraint +
             ["--replicates", str(replicates), "--rho", str(rho), "--m", str(m)]
             + (["--accept"] if draw else []))
-    plan_mod._main(argv)
+    # plan.py prints its own tables, but the bisection that precedes them
+    # (plan.budget_for_seconds: up to 200 allocations) prints nothing, so on a
+    # wide ladder the step opens with a silent pause.
+    P.say("")
+    with P.phase("planning: searching for the allocation that fits the budget"):
+        plan_mod._main(argv)
     if not draw:
         log(f"\n  --target-se answers a question and stops. To draw it:"
             f"\n      {resume} --yes")
@@ -718,11 +734,37 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     log(f"\ndrawing {plan['replicates']} replicate(s) "
         f"x {plan['n']:,} per scale, predicted {human_time(plan['total_seconds'])}")
     t = time.perf_counter()
+    scales_plan = list(plan["scales"])
+    n_scales = len(scales_plan)
+    R_plan = int(plan.get("replicates", 1))
+    spec_hint = get_model(final_recipe["model"]).cost_hint
     with _bar(int(total_steps), progress) as bar:
-        def tick(i, n_i, _secs):
+        # The bar advances once per SCALE, and a scale is a single atomic
+        # `simulate` call -- so between two ticks it does not move at all, and
+        # the LAST rung is most of the work. Measured on a 248 s srw study:
+        # i=8192 alone was 51% of the total and i=4096 a further 25%, so a
+        # completion-fed bar sat at 24% through three quarters of the run.
+        # Naming the rung on the way IN is what tells the two apart --
+        # "drawing the big one" against "it has stopped".
+        rep = [0]
+        nar = P.ScaleNarrator(scales_plan, [plan["n"]] * n_scales,
+                              spec_hint, final_recipe.get("params", {}),
+                              predicted_seconds=plan["total_seconds"] / R_plan)
+
+        def begin(i, n_i, idx, _n):
+            if idx == 1:
+                rep[0] += 1
+            bar.set_postfix_str(f"rep {rep[0]}/{R_plan}, scale {idx}/{n_scales} "
+                                f"i={int(i)}")
+            nar.start(i, n_i, idx)
+
+        def tick(i, n_i, secs):
             bar.update(int(n_i * float(i) ** d))
+            nar.done(i, n_i, secs)
+
         final = run_mod.execute(plan, final_recipe, sd, seed=seed,
-                                on_scale=tick, quiet=bool(progress))
+                                on_scale=tick, on_scale_start=begin,
+                                quiet=bool(progress))
     final["plan"] = plan
     write_artifact(sd, "final", final, produced_by="src/study/autopilot.py")
     log(f"drew {plan['replicates']} replicate(s) in "
@@ -730,10 +772,17 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
         f"(predicted {plan['total_seconds']:.1f} s, "
         f"ratio {(time.perf_counter() - t) / plan['total_seconds']:.2f}x)")
 
-    res = report_mod.analyse(final)
-    report_mod.write_report(sd, res, final, consts, plan)
-    report_mod.write_details(sd, res, final, consts, plan)
-    fig = report_mod._plot(sd, res, final)
+    # Four steps that print nothing between them, the last of which imports
+    # matplotlib on first use -- seconds of silence arriving directly after
+    # the run's bar has filled and closed, which is the worst possible moment
+    # for the console to look finished when it is not.
+    with P.phase("analysing the run (eq. (526) refit + the eq. (720) bound)"):
+        res = report_mod.analyse(final)
+    with P.phase("writing report.md and details.md"):
+        report_mod.write_report(sd, res, final, consts, plan)
+        report_mod.write_details(sd, res, final, consts, plan)
+    with P.phase("rendering plot.png (first matplotlib import is the slow part)"):
+        fig = report_mod._plot(sd, res, final)
     write_artifact(sd, "answer", res, produced_by="src/study/autopilot.py")
 
     log("")
@@ -805,7 +854,13 @@ def _main(argv=None) -> None:
                         "it rests on constants known to be undetermined")
     p.add_argument("--no-progress", action="store_false", dest="progress",
                    help="no progress bar (also off automatically when not a TTY)")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="per-rung probe timings and per-scale draw sizes as "
+                        "well as the phase lines. The phase lines themselves "
+                        "are never opt-in -- a silent run is the bug this "
+                        "flag's default behaviour exists to avoid")
     a = p.parse_args(argv)
+    P.set_verbose(a.verbose)
 
     if not 0 < a.pilot_cap < 1:
         raise SystemExit(f"--pilot-cap must be in (0, 1); got {a.pilot_cap}")

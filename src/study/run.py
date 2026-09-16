@@ -40,6 +40,7 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
 from tools.artifacts import artifact_path, load_recipe, write_artifact  # noqa: E402
+from tools import progress as P  # noqa: E402
 from tools.rng import seed_record, spawn  # noqa: E402
 from tools.summary import replicate_summary, summarize_scale  # noqa: E402
 
@@ -48,7 +49,8 @@ from src.generate.generate import generate  # noqa: E402
 
 
 def execute(plan: dict, recipe: dict, sd: Path, *,
-            seed=None, keep_samples=False, on_scale=None, quiet=False) -> dict:
+            seed=None, keep_samples=False, on_scale=None, on_scale_start=None,
+            quiet=False) -> dict:
     """Draw the plan's replicates; return the per-replicate summaries.
 
     The recipe says WHAT to draw (model, params) and the plan says HOW MUCH
@@ -62,23 +64,25 @@ def execute(plan: dict, recipe: dict, sd: Path, *,
     t0 = time.perf_counter()
     for k, ss in enumerate(spawn(seed, R)):
         if not quiet:
-            print(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...",
-                  end="", flush=True, file=sys.stderr)
+            P.say(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...")
         t = time.perf_counter()
         if keep_samples:
             out = generate(model, scales, n, params, seed=ss,
-                           out_dir=sd, tag=f"samples/rep{k}", on_scale=on_scale)
+                           out_dir=sd, tag=f"samples/rep{k}", on_scale=on_scale,
+                           on_scale_start=on_scale_start)
             stats = {i: summarize_scale(out[i]) for i in scales}
         else:
             # reduce= collapses each scale inside generate() and frees the
             # draws immediately: a planned run is routinely hundreds of MB per
             # replicate, and nothing downstream reads the samples themselves.
             stats = generate(model, scales, n, params, seed=ss,
-                             reduce=summarize_scale, on_scale=on_scale)
+                             reduce=summarize_scale, on_scale=on_scale,
+                             on_scale_start=on_scale_start)
         reps.append(replicate_summary(stats, scales))
         seeds.append(seed_record(ss))
         if not quiet:
-            print(f" {time.perf_counter() - t:.1f}s", file=sys.stderr)
+            P.say(f"    replicate {k + 1}/{R} drawn in "
+                  f"{time.perf_counter() - t:.1f}s")
     return {"replicates": R, "scales": scales, "n": n, "m0": plan["m0"],
             "rho": plan["rho"], "m": plan["m"], "model": model,
             "params": params, "per_replicate": reps, "seeds": seeds,
@@ -128,7 +132,10 @@ def _main(argv=None) -> None:
                         "and nothing downstream reads them")
     p.add_argument("--dry-run", action="store_true",
                    help="print what would be drawn and stop")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="per-rung probe timings and per-scale draw sizes as well as the phase lines")
     a = p.parse_args(argv)
+    P.set_verbose(a.verbose)
 
     sd = Path(a.data_root) / a.study
     pj = artifact_path(sd, "plan")

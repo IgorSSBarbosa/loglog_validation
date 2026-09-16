@@ -22,3 +22,7 @@ plans/saverepo.md
 
 # Local scratch: rescued uncommitted work, never part of the record.
 local/
+
+
+# Prompts
+prompts/

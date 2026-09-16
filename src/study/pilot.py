@@ -54,6 +54,7 @@ from tools.cost_model import (  # noqa: E402
     PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
     estimate_cost_affine, fit_cost_probe, probe_window)
 from tools.models import get_model  # noqa: E402
+from tools import progress as P  # noqa: E402
 from tools.rng import spawn  # noqa: E402
 from tools.summary import replicate_summary, summarize_scale  # noqa: E402
 
@@ -125,7 +126,8 @@ def _refuse_starved_scales(scales, n) -> None:
         f'    - set "min_n": 2, accepting that it overspends the stated budget')
 
 
-def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
+def _pilot_replicate(model, params, scales, n, seed_seq, on_scale=None,
+                     on_scale_start=None) -> dict:
     """One replicate, summarized: y_bar, sigma_log and cv per scale.
 
     `reduce=` collapses each scale's draws inside generate() and frees them
@@ -133,7 +135,9 @@ def _pilot_replicate(model, params, scales, n, seed_seq) -> dict:
     summaries are tools/summary.py's -- the same ones run.py records, so a
     pilot replicate and a final replicate are interchangeable downstream.
     """
-    stats = generate(model, scales, n, params, seed=seed_seq, reduce=summarize_scale)
+    stats = generate(model, scales, n, params, seed=seed_seq,
+                     reduce=summarize_scale, on_scale=on_scale,
+                     on_scale_start=on_scale_start)
     return replicate_summary(stats, scales)
 
 
@@ -182,14 +186,34 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     alongside it so the record still shows one complete window.
     """
     spec = get_model(model)
+    n_probes = max(1, probes)
+    # The probe is the phase this repo has caught being slowest and quietest:
+    # 280 s with nothing on the console, on the run that prompted probe_window
+    # (see that function). It is announced BEFORE the first rung is timed,
+    # because the whole point is to be visible while it is still running.
+    P.say(f"  cost probe: measuring d over up to {n_probes} independent "
+          f"windows ({model}, budget {seconds_budget:g}s each)")
     fits, t0 = [], time.perf_counter()
-    for j in range(max(1, probes)):
-        fits.append(fit_cost_probe(
-            probe_window(spec, params, np.random.default_rng(COST_PROBE_SEED + j),
-                         scales, repeats=repeats, seconds_budget=seconds_budget),
-            spec.cost_hint, params))
-        if len(fits) >= 2 and time.perf_counter() - t0 > D_PROBE_TIME_BUDGET:
-            break
+    with P.bar(n_probes, "cost probe", unit="probe", unit_scale=False) as pb:
+        for j in range(n_probes):
+            win = probe_window(spec, params,
+                               np.random.default_rng(COST_PROBE_SEED + j),
+                               scales, repeats=repeats,
+                               seconds_budget=seconds_budget)
+            fits.append(fit_cost_probe(win, spec.cost_hint, params))
+            d_j = (fits[-1].get("affine") or {}).get("d")
+            pb.update(1)
+            pb.set_postfix_str(f"window {win.get('scales')}"
+                               + (f"  d={d_j:.3f}" if d_j is not None else ""))
+            P.detail(f"    probe {j + 1}/{n_probes}: window {win.get('scales')}"
+                     f"  elapsed {[round(t, 4) for t in win.get('elapsed', [])]}"
+                     + (f"  d={d_j:.4f}" if d_j is not None else "  (no fit)"))
+            if len(fits) >= 2 and time.perf_counter() - t0 > D_PROBE_TIME_BUDGET:
+                P.say(f"  cost probe: stopping at {len(fits)} probes -- "
+                      f"D_PROBE_TIME_BUDGET ({D_PROBE_TIME_BUDGET:g}s) reached")
+                break
+    P.say(f"  cost probe: {len(fits)} window(s) timed in "
+          f"{time.perf_counter() - t0:.1f}s")
     out = fits[-1]
     ds = [float(f["affine"]["d"]) for f in fits
           if (f.get("affine") or {}).get("d") is not None]
@@ -229,11 +253,11 @@ def resolve_cost(model, params, scales, *, reuse_cache: bool = False) -> dict:
                                     "machine": entry.get("machine"),
                                     "describe": cost_cache.describe(entry),
                                     "throughput": entry.get("throughput")}
-            print(f"  cost probe: {cost_cache.describe(entry)}, "
-                  f"window {cached.get('scales')}", file=sys.stderr)
+            P.say(f"  cost probe: reusing {cost_cache.describe(entry)}, "
+                  f"window {cached.get('scales')} (nothing re-timed)")
             return cached
-        print("  --reuse-cost: nothing cached for this model on this machine "
-              "yet; measuring", file=sys.stderr)
+        P.say("  --reuse-cost: nothing cached for this model on this machine "
+              "yet; measuring")
     return measure_cost_exponent(model, params, scales)
 
 
@@ -650,13 +674,22 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     spec = get_model(model)
     drawn_seconds, drawn_steps = 0.0, 0.0
     counts_now = n if isinstance(n, (list, tuple)) else [n] * len(scales)
+    # ONE narrator for all `replicates`, not one each: every replicate walks
+    # the same ladder at the same n, so the pace replicate 1 measures is the
+    # pace replicate 2 will run at. Per-replicate narrators would re-announce
+    # "no timing yet" on every first rung and never predict anything.
+    nar = P.ScaleNarrator(scales, counts_now, spec.cost_hint, params)
     # skip=have: these streams EXTEND the pool, they do not restart it. Without
     # it --more redraws the replicates already on disk (see tools/rng.py:spawn).
     for k, ss in enumerate(spawn(base, replicates, skip=have)):
-        print(f"  replicate {have + k + 1}/{want} ...",
-              end="", flush=True, file=sys.stderr)
+        P.say(f"  replicate {have + k + 1}/{want}: {len(scales)} scales, "
+              f"{sum(int(c) for c in counts_now):,} draws")
         t0 = time.perf_counter()
-        reps.append(_pilot_replicate(model, params, scales, n, ss))
+        # on_scale is what makes a long replicate visible from outside. Without
+        # it the whole ladder is one silent call: on percolation_zd the top
+        # rung alone can be minutes, and nothing said so.
+        reps.append(_pilot_replicate(model, params, scales, n, ss,
+                                     on_scale=nar.done, on_scale_start=nar.start))
         dt = time.perf_counter() - t0
         drawn_seconds += dt
         # Steps, not seconds, is the budget unit (see CATALOG / the cost-model
@@ -665,7 +698,7 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         drawn_steps += sum(c * (spec.cost_hint(i, params) if spec.cost_hint
                                 else 1.0)
                            for i, c in zip(scales, counts_now))
-        print(f" {dt:.1f}s", file=sys.stderr)
+        P.say(f"    replicate {have + k + 1}/{want} drawn in {dt:.1f}s")
 
     R = len(reps)
     y = np.array([r["y_bar"] for r in reps], float)
@@ -678,13 +711,22 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     nn = np.broadcast_to(counts, y.shape)
     y_pool = (y * nn).sum(axis=0) / nn.sum(axis=0)
     sig_pool = 1.0 / np.sqrt((1.0 / sig ** 2).sum(axis=0))
-    fit = fit_correction(scales, y_pool, sigma_log=sig_pool)
+    # 1 + R nonlinear four-parameter fits, each restarted from five omega1
+    # seeds (tools/correction.py). Flat in n, so on a cheap model this is a
+    # blink and on an expensive one it is still seconds -- but it sits between
+    # the draw and the verdict, which is exactly where a silent pause reads as
+    # a hang. See this module's docstring for why the pooled fit is refitted
+    # rather than averaged.
+    with P.phase(f"fitting eq. (232): 1 pooled + {R if R > 1 else 0} "
+                 f"per-replicate correction fit(s)"):
+        fit = fit_correction(scales, y_pool, sigma_log=sig_pool)
+        # The stated errors come from the SPREAD of the per-replicate fits,
+        # which needs R >= 2. With one replicate every se is None and plan.py
+        # says so.
+        per = [fit_correction(scales, np.array(r["y_bar"]),
+                              sigma_log=np.array(r["sigma_log"])) for r in reps] \
+            if R > 1 else []
 
-    # The stated errors come from the SPREAD of the per-replicate fits, which
-    # needs R >= 2. With one replicate every se is None and plan.py says so.
-    per = [fit_correction(scales, np.array(r["y_bar"]),
-                          sigma_log=np.array(r["sigma_log"])) for r in reps] \
-        if R > 1 else []
     def spread(key):
         return float(np.std([p[key] for p in per], ddof=1) / np.sqrt(R)) if R > 1 else None
 
@@ -786,7 +828,10 @@ def _main(argv=None) -> None:
                         "machine whose timings are unusable (shared load, "
                         "throttling). Stamped as a user override and printed as "
                         "`<-- NOT MEASURED` wherever it appears")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="per-rung probe timings and per-scale draw sizes as well as the phase lines")
     a = p.parse_args(argv)
+    P.set_verbose(a.verbose)
 
     existing = None
     if a.more:

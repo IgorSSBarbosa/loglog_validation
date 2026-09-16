@@ -86,6 +86,7 @@ def generate(
     tag: str | None = None,
     progress: bool = False,
     on_scale=None,
+    on_scale_start=None,
     reduce=None,
     max_chunk_bytes: int = 1_000_000_000,
     mem_flush_pct: float = 90.0,
@@ -126,6 +127,14 @@ def generate(
         Called as each scale finishes, with the scale, the count drawn there
         and how long it took. For an external progress display; independent of
         `progress`, which is this function's own stderr line.
+    on_scale_start : callable(i, n_i, index, total), optional
+        Called just BEFORE each scale is drawn. `on_scale` alone cannot drive
+        an honest progress display, because one `spec.simulate` call is
+        atomic from out here: on a 6-rung ladder the top rung is routinely
+        half the run (measured: 51% of a 248 s srw study was the single
+        i=8192 call), so a display fed only by completions sits motionless
+        through the longest wait and then jumps. Announcing the rung on the
+        way IN is what turns that silence into "drawing the big one now".
     progress : bool, optional
         Print a one-line-per-scale progress update to stderr as sampling
         proceeds. Off by default so library callers (e.g. a Monte Carlo loop
@@ -217,6 +226,8 @@ def generate(
     samples: dict = {}
     timings: dict[int, float] = {}
     for idx, (i, n_i) in enumerate(zip(scales_list, n_list), start=1):
+        if on_scale_start is not None:
+            on_scale_start(i, n_i, idx, len(scales_list))
         t0 = time.perf_counter()
         drawn = _generate_scale_chunked(i, n_i) if chunked else spec.simulate(i, n_i, params, rng)
         samples[i] = drawn if reduce is None else reduce(drawn)
