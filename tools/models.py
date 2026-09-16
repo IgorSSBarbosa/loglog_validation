@@ -29,6 +29,7 @@ from models import percolation_susceptibility as model_percolation_susceptibilit
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_stream as model_percolation_zd_stream
+from models import rwre as model_rwre
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -100,6 +101,27 @@ MODELS: dict[str, ModelSpec] = {
         # driver, just the absence of a target_fn here. The gamma-hat
         # estimators themselves still run (comparing estimators against each
         # other doesn't need a known truth), flagged as exploratory instead.
+    ),
+    "rwre": ModelSpec(
+        simulate=model_rwre.simulate,
+        cost_hint=model_rwre.cost_hint,
+        # srw's observable Y_k = |X_k| on a DYNAMIC disordered environment: a
+        # 1-D SSEP at density params["alpha"], with the walker's drift
+        # depending on whether it stands on a particle or a hole. At p = 1/2
+        # the environment is invisible and this IS srw, which makes
+        # experiments/01_srw a literal control arm.
+        #
+        # cost_hint(i) = i * W(i) = window_c * i**1.5, so Assumption 7 holds
+        # with d = 3/2 exactly -- the third model whose d is known rather than
+        # fitted, and the first non-integer one.
+        #
+        # No target_fn/true_gamma_key, as everywhere else -- but here for a
+        # different reason. Elsewhere the truth is known and deliberately kept
+        # out of the code path; at alpha = 1/2 there IS no known gamma. The
+        # proven CLT for this model (Hilario-Kious-Teixeira, arXiv:1906.03167)
+        # covers only the densities where the speed is non-zero, and alpha =
+        # 1/2 with symmetric drifts is exactly the zero-speed case they leave
+        # open. See experiments/02_rwre/README.md.
     ),
     "percolation2d": ModelSpec(
         simulate=model_percolation2d.simulate,

@@ -1,0 +1,23 @@
+{
+  "kind": "samples",
+  "model": "rwre",
+  "params": {"p": 0.3333333333333333, "alpha": 0.5},
+  "scales": [32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "n": {"rule": "snr", "budget": 1.5e10},
+  "seed": null,
+  "_note": [
+    "THE HEADLINE, criterion A5. p = 1/3 is Avena-Thomann's p = 2/3 (their p is",
+    "P(right | particle)); alpha = 1/2 is their rho = 1/2, and the default",
+    "env_sweeps = 4 with swap_prob = 1/2 is their gamma = 1.",
+    "",
+    "The question is gamma = 1/2 (diffusive) against gamma > 1/2",
+    "(superdiffusive), NOT the third decimal of D: D is an amplitude and every",
+    "estimator in the article targets the exponent. At alpha = 1/2 the walk has",
+    "zero speed by particle-hole symmetry (proved: Hilario-Kious-Teixeira,",
+    "arXiv:1906.03167), and that same paper's CLT covers only the densities",
+    "where the speed is non-zero -- so what this recipe measures is open.",
+    "",
+    "The ladder and the budget are set from our own pilot, not from anyone",
+    "else's grid: their numbers are read only after ours exist."
+  ]
+}

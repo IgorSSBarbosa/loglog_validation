@@ -1,0 +1,39 @@
+{
+  "kind": "samples",
+  "model": "rwre",
+  "params": {
+    "p": 0.0,
+    "alpha": 0.5
+  },
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 3000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "SIEVE POINT, criterion A6. One independent study per grid point: ground rule",
+    "2 holds ACROSS cells, so no sample, stream or constant is shared between",
+    "them. The grid is uniform on [0, 1/2] and was fixed before reading anyone",
+    "else's phase diagram.",
+    "",
+    "[0, 1/2] is the whole sieve: |X_k| has the SAME LAW at p and 1 - p",
+    "(particle-hole symmetry composed with reflection -- see",
+    "tools/tests/test_rwre.py::test_abs_displacement_has_the_same_law_at_p_and_one_minus_p),",
+    "so the other half of the interval carries no new information.",
+    "",
+    "p = 1/2 (the srw point) and p = 1/3 (the headline) have their own recipes.",
+    "The budget here is deliberately smaller: the sieve asks where gamma_hat(p)",
+    "LEAVES 1/2, which a coarser error bar can answer, and the point that moves",
+    "is then re-run at the headline budget."
+  ]
+}

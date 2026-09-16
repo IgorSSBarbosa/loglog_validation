@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "rwre",
+  "params": {"p": 0.5, "alpha": 0.5},
+  "scales": [32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "n": {"rule": "snr", "budget": 1.5e10},
+  "seed": null,
+  "_note": [
+    "CALIBRATION ARM, criterion A2. At p = 1/2 the walker's drift is 1/2 whether",
+    "it stands on a particle or a hole, so the environment is invisible and this",
+    "recipe must reproduce experiments/01_srw's four exactly known constants:",
+    "gamma = 1/2, a0 = sqrt(2/pi) = 0.797885, omega1 = 1, a1 = -1/4. It will not",
+    "be bit-for-bit -- the environment consumes its own randomness -- so the",
+    "test is distributional plus agreement of the fitted constants inside their",
+    "standard errors. This is what catches a wrong update order, a drift, or a",
+    "broken window boundary before any of it is blamed on physics.",
+    "",
+    "The \"snr\" rule with NO omega1 states no design constant at all: the",
+    "uninformed default 0 makes n_i flat, which was measured on srw to be the",
+    "best of five arms for identifying omega1 (see",
+    "experiments/01_srw/recipes/samples_pilot.json). d is not stated either --",
+    "models/rwre.py's cost_hint supplies it, and the pilot measures it from the",
+    "clock and only scores the declaration against it."
+  ]
+}
