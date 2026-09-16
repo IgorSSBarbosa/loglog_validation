@@ -1,0 +1,48 @@
+{
+  "kind": "samples",
+  "model": "rwre",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5,
+    "window_c": 12.0
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 250000000.0
+  },
+  "seed": 20260915,
+  "_note": [
+    "CRITERION A4 -- the window bound, tested rather than trusted.",
+    "",
+    "The periodic window is W(k) = window_c * ceil(sqrt k) and the claim is that",
+    "its wrap error is at most 2 exp(-window_c^2/8) ~ 1.5e-8 at the default 12 --",
+    "small enough that the walker never feels the boundary and the SSEP's",
+    "correlations never come round the back. A bound is worth what its test is",
+    "worth, so this pair runs the SAME p, ladder, budget and seed at window_c 12",
+    "and 24, and A4 passes when gamma_hat moves by less than one standard error.",
+    "",
+    "window_c = 24 costs exactly twice the wall clock for the same stated budget:",
+    "the budget is priced in i**d units, which do not see window_c (see the",
+    "headline recipe's note).",
+    "",
+    "Extended down to k = 4 on the pilot's own advice (2026-09-15): on 8..1024 it",
+    "refused, reporting 'a pure power law still fits (chi2/dof = 2.67, p = 0.014):",
+    "no correction visible' with the departure at the bottom rung 0.0116 against",
+    "noise 0.0064, and said so in its own words -- 'more samples buy precision as",
+    "sqrt(n); a smaller rung buys it as a power of the scale'. At k = 4 the",
+    "one-correction truncation of eq. (232) still describes srw to 0.2% (exact",
+    "E|S_4| = 1.5 against a0*2*exp(a1/4) = 1.4967), so the rung is inside the",
+    "regime the model is allowed to be fitted on."
+  ]
+}

@@ -6,18 +6,19 @@
     "alpha": 0.5
   },
   "scales": [
+    4,
+    8,
+    16,
     32,
     64,
     128,
     256,
     512,
-    1024,
-    2048,
-    4096
+    1024
   ],
   "n": {
     "rule": "snr",
-    "budget": 810000000.0
+    "budget": 1000000000.0
   },
   "seed": null,
   "_note": [
@@ -41,6 +42,30 @@
     "the wall clock. Measured on this machine (2026-09-15): one sample at every",
     "rung of 32..4096 costs 161 ms in total, so a flat replicate is n * 0.161 s.",
     "This budget is the PILOT's starting point; autopilot doubles it until both",
-    "gates pass, and plan.py sizes the final run from what the pilot measured."
+    "gates pass, and plan.py sizes the final run from what the pilot measured.",
+    "",
+    "LADDER 8..1024, NOT 32..4096 -- measured, 2026-09-15. A first pilot on",
+    "32..4096 reported 'a pure power law still fits (chi2/dof = 0.77, p = 0.60):",
+    "no correction visible yet for omega1 to be fitted to', and returned",
+    "omega1 = 0.033 +/- 0.012 against srw's exact 1. That is the pilot being",
+    "right: with a1 = -1/4 the correction to log E Y is a1/k = -0.8% at k = 32 and",
+    "-0.006% at k = 4096, while the per-scale noise at that budget was 1.6%. The",
+    "correction was below the noise at EVERY rung, so there was nothing to fit.",
+    "",
+    "Starting at k = 8 puts the correction at -3.1% on the bottom rung, above the",
+    "noise, which is where experiments/01_srw measured omega1 = 1 in the first",
+    "place (its own pilot ladder is 8..256). The ladder is also 8x cheaper per",
+    "sample-column, so the same wall clock buys ~10x the samples. Powers of two",
+    "throughout: a grid that mixes parities fits the |X_k| staircase as curvature",
+    "and returns nonsense (tools/correction.py's CAUTION).",
+    "",
+    "Extended down to k = 4 on the pilot's own advice (2026-09-15): on 8..1024 it",
+    "refused, reporting 'a pure power law still fits (chi2/dof = 2.67, p = 0.014):",
+    "no correction visible' with the departure at the bottom rung 0.0116 against",
+    "noise 0.0064, and said so in its own words -- 'more samples buy precision as",
+    "sqrt(n); a smaller rung buys it as a power of the scale'. At k = 4 the",
+    "one-correction truncation of eq. (232) still describes srw to 0.2% (exact",
+    "E|S_4| = 1.5 against a0*2*exp(a1/4) = 1.4967), so the rung is inside the",
+    "regime the model is allowed to be fitted on."
   ]
 }

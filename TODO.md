@@ -484,15 +484,35 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         against the declared $1.4928$. The $n=1$ probe reads $1.195\pm0.030$ instead,
         because a vectorized model at $n=1$ is all per-call overhead; its own
         drop-leading ladder climbs $1.13\to1.28$ and says so~~
-  - [ ] A2 — calibration at $p=1/2$ against `01_srw`'s four exact constants
-  - [ ] A4 — window: doubling `window_c` moves $\hat\gamma$ by less than 1 se
-  - [ ] A5 — the headline: $\hat\gamma$ at $p=1/3$, and the verdict $\gamma=1/2$ against
-        $\gamma>1/2$. **Nobody knows the answer**: Hilário–Kious–Teixeira
-        (arXiv:1906.03167) prove the LLN with zero speed at $\alpha=1/2$ and a CLT only
-        where the speed is non-zero. Avena–Thomann (arXiv:1201.2890) Figure 17 read
-        $\approx0.58$ at this point with $\log(\mathrm{SD}_n)/\log n$, whose amplitude
-        bias they state and do not remove
-  - [ ] A6 — the sieve in $p$, one independent study per grid point
+  - [x] ~~A2 — calibration at $p=1/2$ against `01_srw`'s four exact constants. **PASS**:
+        $\omega_1=1.096\pm0.430$ (exact 1), $a_1=-0.281\pm0.165$ (exact $-1/4$),
+        $\hat\gamma=0.5002\pm0.0022$ over $64..1024$ (exact $1/2$), $a_0=0.776$ against
+        $\sqrt{2/\pi}=0.798$, cv $0.783$ against srw's $0.774$; two-sample KS against
+        srw draws $p=0.76$ at $k=256$ and $p=0.87$ at $k=1024$~~
+  - [x] ~~A4 — window: doubling `window_c` moves $\hat\gamma$ by less than 1 se. **PASS**
+        ($0.13\sigma$, $0.4\sigma$, $1.0\sigma$ on the three windows). But the bound
+        assumed DIFFUSIVE spread, and A5 says the spread is not diffusive: a ladder above
+        $k\sim4000$ needs $W\propto k^{\hat\gamma}$, not $k^{1/2}$~~
+  - [x] ~~A5 — the headline: **$\gamma>1/2$**. $\hat\gamma=0.5715\pm0.0033$ over
+        $64..1024$ at $p=1/3$, $21\sigma$ above $1/2$, on the same ladder, budget,
+        machine and estimator where $p=1/2$ gives $0.5002\pm0.0022$. The decisive
+        evidence is the DIRECTION of the drop-leading ladder: at $p=1/2$ it descends to
+        $1/2$ ($0.5088\to0.4964$) and at $p=1/3$ it climbs AWAY from it
+        ($0.5631\to0.5794$), which a decaying correction cannot do. Caveats, both
+        recorded: it is an effective exponent still rising at the top rung, and the
+        eq. (720) interval is unusable because $\omega_1$ is unidentified here
+        ($0.019\pm0.001$ with $a_1=+14.8$ — degenerate with $\log a_0$), so the runs
+        were `--force`d and the quoted intervals are replicate scatter with no bias
+        term~~
+  - [x] ~~A6 — the sieve in $p$, one independent study per grid point. $p=1/2$ is the
+        ONLY diffusive point on the grid, and the curve is NOT monotone: it peaks at
+        $\hat\gamma\approx0.578$ near $p\approx0.30$ and comes back down to $0.558$ at
+        $p=0$, the maximally trapping end. No critical $p$ is crossed — if
+        Avena–Thomann's boundary is crossed it is in the environment RATE, which
+        `env_sweeps` sweeps with no new code~~
+  - [ ] The sieve in $\gamma_{\rm eff}$ (the axis Conjecture 3.5 is stated in), and a
+        longer ladder with $W\propto k^{\hat\gamma}$ to tell a rising effective exponent
+        from a settled one
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact

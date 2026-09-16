@@ -1,0 +1,27 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "calib_p0.5",
+  "kind": "samples",
+  "model": "rwre",
+  "n": 12066,
+  "params": {
+    "alpha": 0.5,
+    "p": 0.5
+  },
+  "replicates": 3,
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "seed": null
+}
