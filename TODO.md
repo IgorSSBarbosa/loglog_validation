@@ -468,6 +468,34 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `experiments/01_srw/README.md` (article deliberately left untouched — user's D1)
 - [ ] Phase 1 — SRW
 - [ ] Phase 2 — RWRE (cross-check against `critical_exponents/estimators/log_log_plot.py`)
+  - [x] ~~Model: `models/rwre.py`, `MODELS["rwre"]`. $Y_k=\lvert X_k\rvert$ for a walker
+        on a 1-D SSEP at density $\alpha$, $P(\text{left}\mid\text{particle})=p$. The
+        environment is a brick-wall parity sweep applied to *sites* (the stirring
+        construction), so product Bernoulli$(\alpha)$ is **exactly** invariant at every
+        time and the count is conserved per sample. Read, jump, then stir;
+        $\gamma_{\rm eff} = $ `env_sweeps`$\cdot$`swap_prob`$/2 = 1$ by default;
+        periodic window $W = 12\sqrt k$ with wrap error $\le1.5\times10^{-8}$.
+        Verified: `tools/tests/test_rwre.py`, 34 cases — the frozen-lattice closed forms
+        at $\alpha\in\{0,1\}$, a KS against `srw` at $p=1/2$, both exact symmetries
+        ($\mathbb E X_k=0$; $\lvert X_k\rvert$ equal in law at $p$ and $1-p$),
+        stirring's invariant measure and conservation law~~
+  - [x] ~~Cost model: $\mathrm{cost}(i)=i\,W(i)$, $d=3/2$ **exactly** — the first
+        non-integer $d$ here. Measured amortized ($n=64$, $k=512..4096$): $\hat d=1.4926$
+        against the declared $1.4928$. The $n=1$ probe reads $1.195\pm0.030$ instead,
+        because a vectorized model at $n=1$ is all per-call overhead; its own
+        drop-leading ladder climbs $1.13\to1.28$ and says so~~
+  - [ ] A2 — calibration at $p=1/2$ against `01_srw`'s four exact constants
+  - [ ] A4 — window: doubling `window_c` moves $\hat\gamma$ by less than 1 se
+  - [ ] A5 — the headline: $\hat\gamma$ at $p=1/3$, and the verdict $\gamma=1/2$ against
+        $\gamma>1/2$. **Nobody knows the answer**: Hilário–Kious–Teixeira
+        (arXiv:1906.03167) prove the LLN with zero speed at $\alpha=1/2$ and a CLT only
+        where the speed is non-zero. Avena–Thomann (arXiv:1201.2890) Figure 17 read
+        $\approx0.58$ at this point with $\log(\mathrm{SD}_n)/\log n$, whose amplitude
+        bias they state and do not remove
+  - [ ] A6 — the sieve in $p$, one independent study per grid point
+  - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
+        a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
+        fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact
 - [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster
   - [x] ~~$d=2$ model: `models/percolation2d.py`, `MODELS["percolation2d"]`. $Y_i$ =
         open sites of an $i\times i$ box connected to the SOUTH side, at

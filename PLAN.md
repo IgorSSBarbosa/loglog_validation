@@ -218,6 +218,24 @@ loglog_validation/
                                   E|S_k| is known exactly but is deliberately kept out
                                   of the code path (user, 2026-08-20), stated as a
                                   README acceptance criterion instead
+    rwre.py                       srw's observable on a DYNAMIC disordered
+                                  environment: a 1-D SSEP at density alpha, with the
+                                  walker's drift depending on whether it stands on a
+                                  particle (P(left) = p) or a hole (P(left) = 1 - p).
+                                  At p = 1/2 the environment is unreadable and the walk
+                                  IS srw, which makes experiments/01_srw a literal
+                                  control arm. The environment is a brick-wall parity
+                                  sweep applied to SITES -- the stirring construction --
+                                  so product Bernoulli(alpha) is EXACTLY invariant at
+                                  every time and the particle count is conserved per
+                                  sample. cost_hint(i) = i * W(i) over a periodic
+                                  window W = window_c * sqrt(i), so Assumption 7's d is
+                                  3/2 exactly, the first non-integer one here. No
+                                  target_fn -- and here, unlike everywhere else, not
+                                  because the truth is being withheld but because at
+                                  alpha = 1/2 no gamma is known: the proven CLT
+                                  (arXiv:1906.03167) covers only the non-zero-speed
+                                  densities. Experiments in experiments/02_rwre/
     percolation2d.py              critical site percolation on the square lattice,
                                   p_c = 0.59274605079210, 4-connected. Y_i = open
                                   sites of an i x i box connected to the SOUTH SIDE
@@ -335,6 +353,17 @@ expansion, are the moment assumptions plausible) and **computational** (is $cost
    model uncertainty (the relevant exponent isn't classical) and connects to
    `critical_exponents/` (whose `estimators/log_log_plot.py` implements the same
    estimator this project validates — worth cross-checking against, not importing).
+   **Model built 2026-09-15** (`models/rwre.py`): the environment is a 1-D SSEP at
+   density $\alpha=1/2$ and the walker's drift depends on whether it stands on a
+   particle or a hole, so at $p=1/2$ the environment is unreadable and the walk *is*
+   SRW — rung 2 becomes a literal control arm. This is the first rung where the answer
+   is genuinely unknown rather than merely kept out of the code path: at $\alpha=1/2$
+   the proven CLT (Hilário–Kious–Teixeira, arXiv:1906.03167) does not apply, because
+   that is exactly the zero-speed case. It is also the first $\mathrm{cost}(i)=i^d$
+   with $d$ non-integer ($3/2$: $i$ steps over a $\sqrt i$ window), and the first
+   model that does **not** satisfy `models/README.md`'s bit-identity-under-
+   re-partition clause — a $k$-step loop cannot, and the deviation is stated where the
+   contract is. See `experiments/02_rwre/README.md`.
 4. **Percolation, $\mathbb Z^d$** — first rung where $cost(i)=i^d$ is a real geometric
    fact to verify (BFS/union-find over $i^d$ sites), not an assumption. $d=2$ has known
    $d_f = 91/48$; higher $d$ up to the mean-field threshold ($d\ge 6$) are progressively

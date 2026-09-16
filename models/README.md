@@ -199,6 +199,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 |---|---|---|---|---|---|
 | `synthetic` | planted eq. (232) | `cost_scale·i**cost_d`, else 1 | any, else 0 | recovers the planted $d$ | **yes** |
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
+| `rwre` | $\lvert X_k\rvert$ on an SSEP | $i\,W(i)$ | 3/2 | $1.4926$ (amortized; see below) | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
 | `percolation_zd` | face-connected sites on $\mathbb Z^{\texttt{dim}}$ | $i^{\texttt{dim}}$ | `dim` (2–6) | see `experiments/05_percolation_highd` | no |
@@ -253,6 +254,52 @@ No `target_fn`, deliberately:
 $\mathbb{E}|S_k| = \sqrt{2/\pi}\,k^{1/2}\exp(-\tfrac14 k^{-1}+\cdots)$ is known exactly,
 giving $\gamma=1/2$, $\omega_1=1$, $a_1=-1/4$, $\omega_2=3$ — recorded as acceptance
 criteria in `experiments/01_srw/README.md`. Verified: `tools/tests/test_srw.py`.
+
+### `rwre.py` — the same observable, on a dynamic disordered environment
+
+`simulate(i, n, params, rng)` returns $\lvert X_i\rvert$ for a walker on a 1-D SSEP at
+density `alpha`, with $P(\text{left}\mid\text{particle}) = $ `p` and
+$P(\text{left}\mid\text{hole}) = 1-$ `p`. Params: `p`, `alpha` (0.5), `env_sweeps` (4),
+`swap_prob` (0.5), `window_c` (12.0). At `p = 0.5` the environment is unreadable and the
+walk *is* `srw`, which makes `experiments/01_srw` a literal control arm — the calibration
+criterion in `experiments/02_rwre/README.md` is that this reproduces its four exactly
+known constants.
+
+The environment is a brick-wall parity sweep applied to **sites**, i.e. the stirring
+construction, which buys two closed forms a test can assert: product Bernoulli(`alpha`)
+is *exactly* invariant at every time, and the particle count is conserved per sample.
+The parity is drawn per sample — sharing it across a block would correlate rows that
+ground rule 2 requires to be i.i.d.
+
+`cost_hint(i) = i * W(i)` with $W(i)=$ `window_c` $\lceil\sqrt i\rceil$, so
+$\mathrm{cost}(i) = $ `window_c` $\cdot i^{3/2}$ and Assumption 7's $d$ is **3/2 exactly**
+— the first non-integer $d$ here. The periodic window's wrap error is
+$2e^{-\texttt{window\_c}^2/8}\approx1.5\times10^{-8}$ at the default, which is what lets
+the width be $\sqrt i$ with no $\sqrt{\log i}$ factor and hence the cost an exact power.
+
+No `target_fn`, as for every model since `srw` — but for a different reason. Elsewhere
+the truth is known and deliberately kept out of the code path; at `alpha = 0.5` there is
+no known $\gamma$ to keep out. The proven CLT for this model
+(Hilário–Kious–Teixeira, arXiv:1906.03167) covers only the densities where the speed is
+non-zero, and this is exactly the zero-speed case it leaves open.
+
+**It does not satisfy the blocking clause above, and says so.** One sample is a $k$-step
+loop, so the RNG stream is interleaved across steps and row-blocking necessarily reorders
+it; neither `srw`'s one-big-draw trick nor `percolation_zd_stream`'s one-sample-at-a-time
+order is available. What holds instead, and what `tools/tests/test_rwre.py` checks, is
+that the output is a pure function of `(seed, i, n, params)` — the block size is derived
+from a fixed byte budget and $W(i)$, so there is no hidden knob — and that two very
+different byte budgets agree *distributionally*. Keeping the clause verbatim would cost
+about 3× at the top rung, where the budget goes; that was weighed and declined
+(user, 2026-09-15). `generate.py`'s chunked path would need $>1.25\times10^8$ samples at
+one scale to trigger here.
+
+One measurement trap, recorded because it looks like a failure and is not: the cost probe
+times `simulate(i, n=1)`, where this model runs *un-amortized* — every numpy call on a
+$(1,W)$ array — so the affine fit returns $\hat d\approx1.20$, 20% below the declaration,
+and `measure_cost.py` warns at 9.9σ. At $n=64$, the regime a run actually uses, the same
+fit gives $1.4926$ against the declared $1.4928$. The probe's own drop-leading ladder is
+the tell: $\hat d$ climbs monotonically with $m_0$ instead of sitting still.
 
 ### `percolation2d.py` — critical site percolation, the first real geometry
 

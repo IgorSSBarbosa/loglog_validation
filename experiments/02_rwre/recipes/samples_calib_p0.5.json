@@ -1,9 +1,24 @@
 {
   "kind": "samples",
   "model": "rwre",
-  "params": {"p": 0.5, "alpha": 0.5},
-  "scales": [32, 64, 128, 256, 512, 1024, 2048, 4096],
-  "n": {"rule": "snr", "budget": 1.5e10},
+  "params": {
+    "p": 0.5,
+    "alpha": 0.5
+  },
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 810000000.0
+  },
   "seed": null,
   "_note": [
     "CALIBRATION ARM, criterion A2. At p = 1/2 the walker's drift is 1/2 whether",
@@ -20,6 +35,14 @@
     "best of five arms for identifying omega1 (see",
     "experiments/01_srw/recipes/samples_pilot.json). d is not stated either --",
     "models/rwre.py's cost_hint supplies it, and the pilot measures it from the",
-    "clock and only scores the declaration against it."
+    "clock and only scores the declaration against it.",
+    "",
+    "BUDGET UNITS. tools/allocation.py prices a sample at scale i as i**d with d",
+    "from the model's cost_hint exponent -- NOT as cost_hint(i) itself, so the",
+    "window_c = 12 prefactor is absent from the budget arithmetic and present in",
+    "the wall clock. Measured on this machine (2026-09-15): one sample at every",
+    "rung of 32..4096 costs 161 ms in total, so a flat replicate is n * 0.161 s.",
+    "This budget is the PILOT's starting point; autopilot doubles it until both",
+    "gates pass, and plan.py sizes the final run from what the pilot measured."
   ]
 }

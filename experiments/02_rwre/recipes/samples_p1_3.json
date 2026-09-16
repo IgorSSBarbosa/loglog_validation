@@ -1,9 +1,24 @@
 {
   "kind": "samples",
   "model": "rwre",
-  "params": {"p": 0.3333333333333333, "alpha": 0.5},
-  "scales": [32, 64, 128, 256, 512, 1024, 2048, 4096],
-  "n": {"rule": "snr", "budget": 1.5e10},
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5
+  },
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 810000000.0
+  },
   "seed": null,
   "_note": [
     "THE HEADLINE, criterion A5. p = 1/3 is Avena-Thomann's p = 2/3 (their p is",
@@ -18,6 +33,14 @@
     "where the speed is non-zero -- so what this recipe measures is open.",
     "",
     "The ladder and the budget are set from our own pilot, not from anyone",
-    "else's grid: their numbers are read only after ours exist."
+    "else's grid: their numbers are read only after ours exist.",
+    "",
+    "BUDGET UNITS. tools/allocation.py prices a sample at scale i as i**d with d",
+    "from the model's cost_hint exponent -- NOT as cost_hint(i) itself, so the",
+    "window_c = 12 prefactor is absent from the budget arithmetic and present in",
+    "the wall clock. Measured on this machine (2026-09-15): one sample at every",
+    "rung of 32..4096 costs 161 ms in total, so a flat replicate is n * 0.161 s.",
+    "This budget is the PILOT's starting point; autopilot doubles it until both",
+    "gates pass, and plan.py sizes the final run from what the pilot measured."
   ]
 }

@@ -132,7 +132,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
-| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `synthetic`, `percolation2d`, `percolation_tau`, `percolation_zd`, `percolation_tau_zd` |
+| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. | `srw`, `rwre`, `synthetic`, `percolation2d`, `percolation_tau`, `percolation_zd`, `percolation_tau_zd` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
 
 ### `src/` — the scripts a human runs
@@ -167,6 +167,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | module | L | tags | purpose |
 |---|---|---|---|
 | `srw.py` | 143 | `model` | $\lvert S_k\rvert$ for a $\pm1$ random walk. Deliberately $\Theta(k)$: integer-style stepping, **not** `binomial`, so it stays a percolation stand-in with real cost. |
+| `rwre.py` | 246 | `model` | $\lvert X_k\rvert$ for a walker whose drift depends on whether it stands on a particle or a hole of a 1-D SSEP. Stirring environment (product Bernoulli exactly invariant), periodic $\sqrt k$ window, so $\mathrm{cost}(i)=i\,W(i)$ and $d=3/2$ exactly. At $p=1/2$ it **is** `srw`. The first model here whose $\gamma$ nobody knows. |
 | `synthetic.py` | 136 | `model` | Planted eq. (232) generator with arbitrary $(a_j,\omega_j)$ and pluggable noise. The only model with a `target_fn`. |
 | `percolation2d.py` | 390 | `model` | Critical site percolation, $Y_i$ = sites connected to the south side of an $i\times i$ box. Switches: `anchor` (south/origin), `geometry` (box/cylinder). $\gamma=d_f$, $d=2$. |
 | `percolation_zd.py` | 700 | `model` | `percolation2d.py` with the **spatial dimension as a parameter** — bit-identical to it at `dim=2`, and $\mathrm{cost}(i)=i^{\texttt{dim}}$, so the article's $d$ *is* the dimension. Anchors: `face` (ground rule 7, measures $\max(d_f,\texttt{dim}-1)$), `face_far` (measures $d_f$ in every dimension), `origin` (measures $\gamma/\nu$, **not** $d_f$), `slab` with `anchor_dim` $=k$ (the seed set's dimension as a knob; the plateau in $k$ is $d_f$). Geometries: box/cylinder/torus. `crossing_fraction` guards the per-dimension $p_c$ table. |

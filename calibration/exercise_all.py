@@ -1549,6 +1549,73 @@ def sec_srw(a: Audit) -> None:
             lambda: srw_mod.cost_hint(4096), 4096.0, 0)
 
 
+def sec_rwre(a: Audit) -> None:
+    """models/rwre -- |X_k| on an SSEP -- srw when the environment is unreadable"""
+    from models import rwre as rwre_mod
+
+    a.begin("models/rwre", "|X_k| on an SSEP -- srw when p = 1/2")
+
+    rng = np.random.default_rng(0)
+    x = rwre_mod.simulate(16, 20_000, {"p": 1.0 / 3.0}, rng)
+    a.check("simulate returns n non-negative integers",
+            lambda: x.shape == (20_000,) and x.min() >= 0)
+    a.check("|X_k| has the parity of k and never exceeds k",
+            lambda: bool(np.all(x % 2 == 16 % 2)) and int(x.max()) <= 16)
+
+    # The frozen lattice: alpha in {0, 1} leaves SSEP nothing to move, so the
+    # walk is an ordinary biased SRW and both moments are exact.
+    holes = rwre_mod.walk(100, 4000, {"p": 1.0 / 3.0, "alpha": 0.0},
+                          np.random.default_rng(1))
+    a.close("alpha = 0 freezes the lattice: E X_k = k(2p-1) exactly",
+            lambda: float(holes.mean()), 100 * (2 / 3.0 - 1),
+            4 * float(holes.std(ddof=1)) / math.sqrt(4000))
+    a.check("p = 0 on an all-hole lattice is deterministic",
+            lambda: set(np.unique(rwre_mod.walk(20, 8, {"p": 0.0, "alpha": 0.0},
+                                                rng))), expect={-20})
+
+    # The two exact symmetries (particle-hole composed with reflection).
+    signed = rwre_mod.walk(64, 20_000, {"p": 0.2}, np.random.default_rng(2))
+    a.close("E X_k = 0 for every p -- the environment's zero-check",
+            lambda: float(signed.mean()), 0.0,
+            3 * float(signed.std(ddof=1)) / math.sqrt(20_000))
+    lo = rwre_mod.simulate(32, 8000, {"p": 0.2}, np.random.default_rng(4))
+    hi = rwre_mod.simulate(32, 8000, {"p": 0.8}, np.random.default_rng(5))
+    a.close("|X_k| has the same law at p and 1 - p", lambda: float(lo.mean()),
+            float(hi.mean()),
+            4 * float(lo.std(ddof=1)) / math.sqrt(8000))
+
+    # p = 1/2: the environment cannot be read, so this IS srw.
+    half = rwre_mod.simulate(64, 20_000, {"p": 0.5}, np.random.default_rng(6))
+    a.close("p = 1/2 reproduces E|S_64| = 6.3582 (srw's exact mean)",
+            lambda: float(half.mean()), 6.358209,
+            3 * float(half.std(ddof=1)) / math.sqrt(20_000))
+
+    a.check("env_sweeps = 0 (a frozen environment) still runs",
+            lambda: rwre_mod.simulate(32, 16, {"p": 0.2, "env_sweeps": 0},
+                                      rng).shape, expect=(16,))
+    a.check("n = 1 works (what the cost probe calls)",
+            lambda: rwre_mod.simulate(64, 1, {"p": 0.3}, rng).shape, expect=(1,))
+    a.check("n = 0 returns an empty array rather than raising",
+            lambda: rwre_mod.simulate(8, 0, {"p": 0.3}, rng).shape, expect=(0,))
+    a.check("an unseeded call still works (fresh entropy)",
+            lambda: rwre_mod.walk(8, 3, {"p": 0.3}).shape, expect=(3,))
+    a.raises("an unknown param is rejected by name", ValueError,
+             lambda: rwre_mod.simulate(8, 1, {"rho": 0.5}, rng))
+    a.raises("p outside [0, 1] is rejected", ValueError,
+             lambda: rwre_mod.simulate(8, 1, {"p": 1.5}, rng))
+    a.raises("a fractional env_sweeps is rejected", ValueError,
+             lambda: rwre_mod.simulate(8, 1, {"env_sweeps": 1.5}, rng))
+    a.raises("k = 0 is rejected", ValueError,
+             lambda: rwre_mod.simulate(0, 1, {}, rng))
+    a.check("the window is even -- both parities must be matchings",
+            lambda: rwre_mod.window_width(1000) % 2, expect=0)
+    a.close("cost_hint is exactly i * W(i) -- declared, not fitted",
+            lambda: rwre_mod.cost_hint(4096),
+            4096.0 * rwre_mod.window_width(4096), 0)
+    a.close("gamma_eff = env_sweeps * swap_prob / 2 = 1 by default",
+            lambda: rwre_mod.gamma_eff({}), 1.0, 0)
+
+
 def sec_percolation2d(a: Audit) -> None:
     """models/percolation2d -- the south-connected cluster at p_c, cost i**2"""
     import itertools
@@ -3600,7 +3667,7 @@ STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_cost_cache, sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
-    "models": [sec_srw, sec_percolation2d, sec_percolation_tau,
+    "models": [sec_srw, sec_rwre, sec_percolation2d, sec_percolation_tau,
                sec_percolation_zd, sec_percolation_tau_zd, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
     "calibration": [sec_calibration],
