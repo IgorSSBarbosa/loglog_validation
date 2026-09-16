@@ -26,3 +26,6 @@ local/
 
 # Prompts
 prompts/
+# Local GPU working plan, not part of the record (user request, 2026-09-16).
+plan/
+CLAUDE.md
