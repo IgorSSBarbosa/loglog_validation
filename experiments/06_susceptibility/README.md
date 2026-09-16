@@ -245,6 +245,73 @@ estimator on this ladder even if $\omega_1$ is not the textbook exponent.
 
 ![log-log, article-faithful run](images/loglog_article_faithful.png)
 
+### Why $\hat\omega_1 = 0.59$ and not $\Delta_1 = 1.055$ (resolved, `diagnostics/why_omega1.py`)
+
+**$0.59$ is an effective exponent, not $\Delta_1$.** The ladder $x = 4\dots128$
+($\varepsilon = 0.125\dots0.0039$) still carries a *second* correction of the opposite
+sign, and a one-term truncation of eq. (232) fitted over that window compromises — it
+pushes $\omega_1$ down and $\gamma$ up together. Four lines of evidence:
+
+**1. Remove the $\gamma$–$\omega$ trade-off and the exponent moves.** With $\gamma$
+fixed at $43/18$, the differences $D(x) = \log\bar Y_{2x}-\log\bar Y_x-\gamma\log2
+= a_1x^{-\omega}(2^{-\omega}-1)$ have $-\omega$ as the slope of $\log|D|$ vs $\log x$,
+with no $a_0$ and no fitted $\gamma$ anywhere. That gives $\omega = 0.81 \pm 0.10$, not
+$0.59$ — so roughly half the shortfall is the fit trading $\gamma$ against $\omega$.
+
+**2. The effective exponent climbs as the window's bottom rises.**
+
+| window | $x\ge4$ | $x\ge8$ | $\gamma$ fixed, $x\ge4$ | $D$-diagnostic |
+|---|---|---|---|---|
+| $\hat\omega_1$ | 0.605 | 0.769 | 0.905 | 0.811 |
+
+A genuine asymptotic exponent does not do this.
+
+**3. Two terms at the *theoretical* exponents fit as well as one at a free exponent.**
+
+| model | $\hat\gamma$ | $\chi^2/\mathrm{dof}$ |
+|---|---|---|
+| $\gamma$ free, 1 corr, $\omega$ free | 2.4241 ($\omega=0.605$) | 1.51 |
+| $\gamma$ free, 1 corr, $\omega \equiv 1.055$ | 2.3812 | 3.68 |
+| **$\gamma$ free, 2 corr, $\omega \equiv 1.055$ and $2.110$** | **2.3963** | **1.54** |
+
+with amplitudes $a_1 = +1.72$ and $a_2 = -1.91$ — **opposite signs**. The second term is
+$26\%$ of the first at $x=4$, $12\%$ at $x=8$, $6\%$ at $x=16$ and $0.7\%$ at $x=128$, so
+the *total* correction decays more slowly than its leading term exactly where the
+correction signal is largest. Its local exponent runs
+$0.82 \to 0.95 \to 1.01 \to 1.03 \to 1.04$ up the ladder, converging on $1.055$.
+
+**4. It reproduces on noiseless data.** Build $\bar Y$ *exactly* from $\gamma = 43/18$
+with those two corrections, add no noise, and fit the article's one-term truncation:
+
+| window | $\hat\gamma$ | $\hat\omega_1$ | observed $\hat\omega_1$ |
+|---|---|---|---|
+| $x\ge4$ | 2.4147 | 0.6119 | 0.6051 |
+| $x\ge8$ | 2.3945 | 0.8484 | 0.7690 |
+
+Both pathologies — $\gamma$ overshooting by $1.5\%$ and $\omega_1$ undershooting to
+$0.6$ — come out of pure arithmetic, with no noise and nothing tuned to produce them.
+
+**Not a finite-box artifact.** The same two-term fit at `box_factor` 4 and 8 gives
+$\hat\gamma = 2.410$ and $2.393$ with amplitudes differing no more between boxes than
+between two runs at the same box.
+
+**Correction to the earlier write-up:** this README and commit `0ee1c98` attributed an
+$x^{-1}$ term to "the analytic background of $\chi(p)$". That is wrong — an additive
+analytic background gives a *relative* correction $\varepsilon^{\gamma}\approx x^{-2.39}$,
+far too fast to matter. The $\varepsilon^1$ term comes from the **nonlinear scaling
+field**, $u(\varepsilon)=\varepsilon(1+b\varepsilon+\dots)$, giving
+$\chi\sim u^{-\gamma}=\varepsilon^{-\gamma}(1-\gamma b\varepsilon+\dots)$. It is
+nearly degenerate with $\Delta_1 = 1.055$ and the data cannot separate them.
+
+**What this does and does not cost.** It does *not* invalidate the Arm A result: the
+effective $(\omega_1, a_1)$ predicted the run's bias to $4\%$, so for the one job
+eq. (720) asks of them — sizing $B_{\mathrm{fs}}$ on a given window — they are
+fit for purpose. What it does mean is that **$\hat\omega_1$ from this ladder must not be
+quoted as the correction-to-scaling exponent**, and that a future high-accuracy run should
+start at $x\gtrsim32$ ($\varepsilon\lesssim0.016$), where the second term is under $3\%$
+of the first and the one-term truncation is safe. That is the expensive end of the ladder,
+which is the same wall everything else here runs into.
+
 ### Verdict for the test case
 
 The model can be driven end to end by the repo's unmodified statistical tools, and the

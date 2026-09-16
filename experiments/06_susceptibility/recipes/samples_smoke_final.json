@@ -1,0 +1,31 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "smoke",
+  "kind": "samples",
+  "model": "percolation_susceptibility",
+  "n": 5,
+  "params": {
+    "box_factor": 4.0,
+    "dim": 2,
+    "eps0": 0.5,
+    "geometry": "torus",
+    "moment": 1,
+    "nu_box": 1.3333333333333333
+  },
+  "replicates": 3,
+  "scales": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "seed": null
+}

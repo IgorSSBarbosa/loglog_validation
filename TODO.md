@@ -697,11 +697,27 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         bias-limited -- 2 h gives $0.0350$, 10 h gives $0.0324$. Machine wall measured:
         one sample at $x=1024$ is $1.7\times10^9$ sites, 35.7 s, **19.6 GiB** peak, and the
         allocation's preferred $x=2048,4096$ rungs are out of reach~~
-  - [ ] $\hat\omega_1=0.59\pm0.11$ vs the theoretical $\Delta_1=\Omega\nu\approx1.05$
-        ($4.2\sigma$). The bias it predicts is right, so the one-correction truncation
-        describes the estimator even if $\omega_1$ is not the textbook exponent -- is it
-        absorbing the analytic background of $\chi(p)$ (also $x^{-1}$), or a second
-        correction?
+  - [x] ~~**$\hat\omega_1=0.59$ vs $\Delta_1=1.055$: resolved** (`diagnostics/why_omega1.py`).
+        It is an EFFECTIVE exponent. The ladder $x=4..128$ carries a second correction of
+        the OPPOSITE sign ($a_1=+1.72$ at $x^{-1.055}$, $a_2=-1.91$ at $x^{-2.110}$), 26%
+        of the first at $x=4$ and 0.7% at $x=128$, so the total correction decays more
+        slowly than its leading term exactly where the signal is largest. Evidence: with
+        $\gamma$ fixed the $a_0$-free difference diagnostic gives $0.81\pm0.10$, not
+        $0.59$; the effective exponent climbs $0.605\to0.769$ as the window's bottom
+        rises; two terms at the THEORETICAL exponents fit as well as one at a free
+        exponent ($\chi^2/$dof $1.54$ vs $1.51$) and give $\hat\gamma=2.3963$ against
+        $2.4241$; and **noiseless data built from $43/18$ plus those two corrections,
+        fitted with the one-term truncation, returns $\hat\gamma=2.4147$,
+        $\hat\omega_1=0.6119$** -- both pathologies from pure arithmetic. Not a box
+        artifact (same fit at `box_factor` 4 and 8 agrees)~~
+  - [x] ~~**Correction to `0ee1c98`**: the $x^{-1}$ term is NOT "the analytic background of
+        $\chi(p)$" (that gives a relative $\varepsilon^\gamma\approx x^{-2.39}$). It is the
+        NONLINEAR SCALING FIELD, $u=\varepsilon(1+b\varepsilon)$, giving
+        $\varepsilon^{-\gamma}(1-\gamma b\varepsilon)$ -- nearly degenerate with
+        $\Delta_1=1.055$ and not separable by this data~~
+  - [ ] A high-accuracy ladder must start at $x\gtrsim32$ ($\varepsilon\lesssim0.016$),
+        where the second correction is under 3% of the first and the one-term truncation
+        of eq. (232) is safe. That is the expensive end -- the same wall as everything else
   - [ ] Arm B's $\omega_1$ was DECLARED, not measured: free, it runs to $20$–$50$ with a diverging
         covariance and `src/estimate/estimate_omega1.py` fails on this run. Identifying it
         needs $\varepsilon_0\approx1/16$ (the rungs below $x=8$ are not in the scaling
