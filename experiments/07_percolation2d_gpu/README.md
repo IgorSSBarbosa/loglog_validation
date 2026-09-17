@@ -241,8 +241,11 @@ What each change fixed:
 **Still flagged: D MISMATCH.** The five batched probes agree to ±0.0008, so the 1.3% gap
 between the clock's 2.026 and the declared 2 is z = +34. The pilot's gate has no relative
 floor, while `compare_cost_models` has one (5%). The error budget prices se(d) at 1.0000×
-RMSE and moves m₀ by 0.00. The gate is the pilot's statistical rule, so it is recorded
-here and left unchanged.
+RMSE and moves m₀ by 0.00. Re-planning the same pilot with d set to exactly 2 gives an
+identical plan (m₀ = 4, 32…1024, n = 150 002, se(γ) = 0.0003629). The gap is real: time
+per site falls from 13.8·10⁻¹¹ s at i = 8 to 9.1·10⁻¹¹ s at i = 64, then rises about 5% to
+i = 512, so the clock is not exactly i². **Left as is (user, 2026-09-16):** no relative
+floor was added, for GPU or CPU models, so every GPU pilot will show this warning.
 
 ## What this unlocks, not yet run
 
