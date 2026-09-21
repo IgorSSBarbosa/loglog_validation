@@ -352,7 +352,7 @@ is not the estimator's answer.
 
 The grid was 2^k, so the √2 fallback was not needed.
 
-### T3.3 — the planner does not know the ladder has a top (2026-09-21, FINDING, unresolved)
+### T3.3 — the planner does not know the ladder has a top (2026-09-21, FOUND, then FIXED the same day)
 
 `plan.py` dry-run (a copy of the pilot study, nothing written) at `--m 5`, `--replicates 5`:
 **every budget from 30 to 210 min proposes m₀ = 3, scales [16, 32, 64, 128, 256]**. L = 256
@@ -367,3 +367,24 @@ with this pilot's constants: |B_fs| ≈ 0.03 in γ_L, ≈ 0.02 in γ_susc, 3–4
 0.006, against ≈ 0.008 for the impossible [16 … 256]. More compute does not help: the plan
 is bias-limited. That is the plan's own warning ("if B_fs dominates because the window
 stops at L = 128, record that and see T6").
+
+**Fix (commit `c604d5a`, decided by taking the recommended option; Igor said "continue the
+plan" without choosing).** `plan.py --max-scale L` and `autopilot.py --max-scale L`: you
+say the largest scale the model can draw and the plan is the deepest ladder under it, with
+the whole budget spent on samples. Nothing model-specific entered the tools:
+`tuned_allocation` gained an optional `m0_max` (absent: 960 cases byte-identical),
+`max_m0_for_scale` inverts `ladder`, and the plan prints `CAPPED` with what it would have
+chosen. `run.py` also pre-flights one sample at the smallest and largest planned scale
+through `generate()`, so a scale the model refuses stops the run in seconds with the
+model's own message. The dry run that broke, with `--max-scale 128 --m 5 --replicates 5`:
+
+| budget (total) | m₀ | scales | n per scale | \|bias\| | sd per replicate | se(γ_L) on the answer |
+|---|---|---|---|---|---|---|
+| 26 min | 2 | 8 … 128 | 801 | 3.034·10⁻² | 2.9·10⁻³ | 3.05·10⁻² |
+| 60 min | 2 | 8 … 128 | 1 831 | 3.034·10⁻² | 1.9·10⁻³ | 3.04·10⁻² |
+| 210 min | 2 | 8 … 128 | 6 411 | 3.034·10⁻² | 1.0·10⁻³ | 3.04·10⁻² |
+
+**Bias-limited, as the plan feared.** The bias of the closed-form γ̂_L on this ladder is
+0.030, and a 3.5× larger budget moves the error on the answer in the fourth digit. So T4.2
+runs at 60 min, not the plan's 210 (a departure, made because 210 buys nothing here).
+
