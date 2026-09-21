@@ -56,6 +56,9 @@ ARTIFACTS: dict[str, str] = {
                                                   # -- two observables, one budget
     "no_leakage":       "no_leakage.json",        # calibration/check_no_leakage.py
                                                   # -- planted truth vs recovered
+    "box_calibration":  "box_calibration.json",   # experiments/09_percolation_susceptibility_gpu/
+                                                  # calibrate_box.py -- S(p, L) vs the
+                                                  # box side at fixed p, per (x, L) cell
     "criticality":      "criticality.json",       # src/estimate/check_criticality.py
                                                   # -- is the tabulated p_c the
                                                   # critical point? spanning
