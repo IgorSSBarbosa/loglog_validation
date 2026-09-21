@@ -236,3 +236,73 @@ with 1.430(6) only at reporting time.
 *Not a test of the ladder:* the plan's "budget 1.2·10⁹ sites" is the x-ladder recipe's
 budget in x^d units (d = 2.68), which is 4.35·10¹¹ actual sites per replicate. The L recipe
 states its budget in L⁴ units, so 4.35·10¹¹ reproduces the old pilot's compute.
+
+### T2 — calibration in d = 4 (2026-09-21, gate PASS, two criteria FAIL as findings)
+
+```bash
+python3 experiments/09_percolation_susceptibility_gpu/calibrate_box.py --tag calibration_d4   # seed 2026092201, 48.4 min of draws
+python3 experiments/09_percolation_susceptibility_gpu/analyse_box.py  --tag calibration_d4
+```
+
+17 cells, seed 2026092201, each its own spawned stream; n fixed before the draw from the
+noise already measured (target se/S 0.5%, realized 0.42–0.53%). S(p, L) relative to the
+same rung's c ≈ 8 value (each entry ± ≈ 0.7%):
+
+| x (p) | c ≈ 3 | c ≈ 4 | c ≈ 5 | c ≈ 6 | c ≈ 8 |
+|---|---|---|---|---|---|
+| 16 (0.19126) | 0.881 | 0.964 | 1.003 | 1.002 | 1 (S = 198.3) |
+| 32 (0.19407) | 0.893 | 0.959 | 0.988 | 0.995 | 1 (S = 534.0) |
+| 64 (0.19548) | 0.891 | 0.989 | 0.996 | 1.000 | 1 (S = 1437.4) |
+
+The finite-torus deficit is ≈ 11% at c = 3, 1–4% at c = 4 and gone by c ≈ 6.
+
+**1. Gate — PASS.** G at c = 4, pooled over x, from the pre-specified quadratic in log c:
+**0.2021 ± 0.0056** against 0.162 ± 0.023, z = +1.69 (≤ 2). The plan's explanation of the
+zig-zag survives an independent measurement: at fixed p, S(p, L) does grow with L at the c
+the x-ladder sat at.
+
+**2. Finite-size scaling — PASS as specified** (G_x(4) − pooled: +1.39, −1.75, +0.24 se),
+but see the caveat below.
+
+**3. Compute neutrality — FAIL, a finding.** cv²·L⁴ is not flat in c: within-x spread
+56–57% (band ±25%), rising ≈ ∝ c. It is the cost of a fixed relative precision, so **going
+from c = 4 to c = 8 costs 1.5×, 1.8× and 1.5× more (x = 16, 32, 64) per unit of relative
+error**, not the ≈ 1× that d = 2 showed (5.7, 6.7, 7.3·10⁴). cv itself falls as c^−1.5
+(0.52 → 0.16 from c = 4 to 8), not c^−2.
+
+**4. Parity — FAIL by the pre-specified 2σ, marginal.** At x = 32, S(43) = 517.4,
+S(44) = 512.1, S(45) = 522.5 (each ± 0.5%): the even side sits below both odd neighbours.
+Second difference +0.0304 ± 0.0122 (z = +2.50); residuals from the sweep's fit +0.018 and
++0.020 (z = +3.1, +3.3; those two use the quadratic, which misfits, see below). One even
+cell in the trio, so a fluctuation is not excluded. **Consequence, as written in the plan:
+a √2 grid must use even L only** (8, 12, 16, 22, 32, 46, 64, 90, 128). The 2^k grid is all
+even, so it is unaffected.
+
+**Caveats the pre-specified analysis missed (post-hoc, model-free; the verdicts above are
+unchanged).** S saturates in c, which a quadratic in log c cannot follow: x = 64's fit has
+χ² = 23.7 / 2 dof and the fitted G(c = 8) is **negative** (−0.10), so that number is not
+used. The secants between neighbouring c, pooled over x:
+
+| c | 3 → 4 | 4 → 5 | 5 → 6 | 6 → 8 |
+|---|---|---|---|---|
+| pooled G | +0.301 ± 0.013 | +0.116 ± 0.019 | +0.018 ± 0.023 | **+0.005 ± 0.014** |
+| spread across x (χ² / 2) | 10.8 | 9.6 | 0.7 | 0.5 |
+
+Two things follow. (i) Between c = 4 and 5, where the x-ladder's c_x lived, G is
+0.12–0.30 and its interpolation at c ≈ 4.15 is ≈ 0.17, which is the plan's 0.162: the
+gate is not a fluke of the quadratic. (ii) Below c = 5 the secants differ across x
+(3σ-level, χ² ≈ 10 on 2 dof), so there the deficit is not purely a function of c: noise,
+or a correction to scaling of its own; not resolved. **Above c = 5 the spread is nil and
+G is consistent with zero, which is what the chosen c = 8 needs.**
+
+**T2.3 — the box factor is already chosen (c = 8, Igor).** The rule's quantity from the
+top secant: G(c ≈ 7) = +0.0046 ± 0.0141, drift bound (|G| + 2 se)·(ν_box − ν_low) =
+0.0328 × 0.0101 = **0.00033**. A quarter of the literature's target se (0.006) is 0.0015:
+PASS. A quarter of "one more decimal" (0.0006) is 0.00015: the calibration cannot resolve
+that (FAIL of resolution, not evidence of a bias). Reach at c = 8: x_top = (128/8)^(1/0.69)
+= 55.6.
+
+Verified against planted data before use: `tools/tests/test_box_calibration_analysis.py`
+recovers a planted quadratic and its elasticity exactly, gates a wrong G, sees a planted
+parity zig-zag at z ≈ 8, refuses a run in progress, and recovers planted secants where the
+quadratic misfits.

@@ -29,6 +29,13 @@ It also records the number T2.3 needs for the box factor already chosen: the dri
 bound G(c) * (nu_box - nu_low) on gamma_hat if nu_box is above nu, with nu_low the
 low end of the literature's 2 sigma, next to a quarter of the target se.
 
+The quadratic above was written before any data existed, and the first real run
+showed S(p, L) SATURATING in c: a quadratic in log c cannot follow that (one rung's
+fit is rejected, and G(c = 8) comes out negative). So a POST-HOC block follows the
+pre-specified verdicts, unchanged: the secant elasticities between neighbouring c,
+which need no functional form, pooled over x with their spread. T2.3 is read from the
+top secant, not from the quadratic's G(c = 8).
+
     python3 experiments/09_percolation_susceptibility_gpu/analyse_box.py --tag calibration_d4
 """
 
@@ -190,12 +197,42 @@ def main(argv=None) -> int:
                   f"{np.log(c['mean']) - pred:+.4f}, z = {zb:+.2f}  "
                   f"{verdict(abs(zb) <= Z_MAX)}")
 
-    # T2.3
+    # POST-HOC, added after the first real run: the quadratic above is the
+    # pre-specified reading, but S(p, L) SATURATES in c, which a quadratic in
+    # log c cannot follow (x = 64: chi2 23.7 / 2; G(c = 8) came out negative).
+    # The secants between neighbouring c need no functional form. They share
+    # cells, so adjacent secants are anticorrelated; each is a plain ratio.
+    print("\nPOST-HOC  secant elasticities, model-free (pre-specified criteria above "
+          "are unchanged)")
+    n_int = min(len([c for c in sweep if c["x"] == x]) for x in xs) - 1
+    top = None
+    for j in range(n_int):
+        vals, ses, edge = [], [], None
+        for x in xs:
+            cs = sorted((c for c in sweep if c["x"] == x), key=lambda c: c["c"])
+            lo, hi = cs[j], cs[j + 1]
+            d = np.log(hi["c"] / lo["c"])
+            vals.append(np.log(hi["mean"] / lo["mean"]) / d)
+            ses.append(np.hypot(lo["se"] / lo["mean"], hi["se"] / hi["mean"]) / d)
+            edge = (lo["c"], hi["c"]) if edge is None else edge
+        g, s = pool(vals, ses)
+        chi2 = sum(((v - g) / e) ** 2 for v, e in zip(vals, ses))
+        print(f"  c ~ {edge[0]:.1f} -> {edge[1]:.1f}: "
+              + "  ".join(f"x={x}: {v:+.3f}+-{e:.3f}" for x, v, e in zip(xs, vals, ses))
+              + f"   pooled {g:+.3f} +- {s:.3f}  (spread across x: chi2 {chi2:.1f} / "
+              f"{len(xs) - 1})")
+        top = (g, s)
+
+    # T2.3, from the top secant: the plan's rule asks for G at the c already chosen
     nu_low = NU_LITERATURE[0] - 2 * NU_LITERATURE[1]
-    bound = g8 * (nu_box - nu_low)
-    print(f"\nT2.3      drift bound G(c=8) * (nu_box - nu_low) = {g8:.4f} * "
-          f"({nu_box} - {nu_low:.4f}) = {bound:.5f}  vs a quarter of the target se: "
-          + ", ".join(f"{k} {v / 4:.5f}" for k, v in TARGET_SE.items()))
+    gt, st = top
+    bound = (abs(gt) + 2 * st) * (nu_box - nu_low)
+    print(f"\nT2.3      G at the top of the sweep (secant, c ~ {edge[0]:.0f} -> "
+          f"{edge[1]:.0f}) = {gt:+.4f} +- {st:.4f}; drift bound "
+          f"(|G| + 2 se) * (nu_box - nu_low) = ({abs(gt):.4f} + {2 * st:.4f}) * "
+          f"({nu_box} - {nu_low:.4f}) = {bound:.5f}\n          against a quarter of "
+          f"the target se: " + ", ".join(f"{k} {v / 4:.5f}: {verdict(bound <= v / 4)}"
+                                         for k, v in TARGET_SE.items()))
     return 0 if gate else 1
 
 
