@@ -777,3 +777,25 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $+0.0050$ uncorrected. `box_factor` is a cost knob, not an accuracy knob~~
   - [ ] $\dim=3$ / $\dim\ge6$ (where $\gamma_{\text{susc}}=1$, $1/\sigma=2$,
         $\tau=5/2$ are exact)
+  - [x] ~~Exact box ladder for the susceptibility in d = 4 (`plans/exact_box_ladder.md`,
+        2026-09-21). The x-ladder's $\lceil c\,x^{\nu_{\rm box}}\rceil$ gave each rung its own
+        $c_x$, shifting rung $x$ by $G\log(c_x/c)$ (70$\sigma$ at $x=2$) and zig-zagging the
+        $\omega_1$ pilot. `MODELS["percolation_susceptibility_L_gpu"]` indexes the ladder by
+        the box side $L$ (GPU only, integer $L$, $L=2^k$): $L/x^{\nu_{\rm box}}=c$ exactly on
+        every rung, cost $L^{\rm dim}$ exactly. Chosen: $c=8$, $\nu_{\rm box}=0.69$. No
+        `ModelSpec` field: the tools report $\gamma_L$, $\omega_L$ and never learn $\nu_{\rm
+        box}$. Verified: extraction bit-identical (38 digests), 63 model tests, audit section
+        12/12; calibration (`calibrate_box.py`) gate PASS ($G(c{=}4)=0.202\pm0.006$ vs
+        $0.162\pm0.023$) and $G(c\approx7)=0.005\pm0.014$; **pilot** ($L=8..128$): local
+        slopes monotone, all 8 fits converge, $\omega_L=2.04\pm0.07$ ($3.3\%$)~~
+  - [ ] Calibration findings not resolved: cost neutrality FAILS (c = 8 costs 1.5–1.8×
+        c = 4 per unit precision); parity flagged at $2.5$–$3.3\sigma$ (2^k grid is all
+        even; a $\sqrt2$ grid must use even $L$); below $c=5$ the secants differ across $x$
+        ($\chi^2\approx10/2$)
+  - [ ] $\omega_x=\nu_{\rm box}\omega_L=1.41\pm0.05$ vs the expected $\Delta_1\approx0.77$:
+        not explained (an analytic $\varepsilon^1$ term would move a one-term fit; not tested)
+  - [ ] **T3.3, blocked on a decision:** `plan.py` proposes $L=256$ (and 512 at the default
+        `--m 6`) at every budget, which the model refuses; no flag reaches the only legal
+        ladder $8..128$. That ladder is bias-limited ($|B_{fs}|\approx0.03$ in $\gamma_L$).
+        Needs a ceiling in the planner (form to be chosen) or T6 (reach past $L=128$)
+  - [ ] T4.2 $\gamma$ production run (`autopilot.py`, seed 2026092203): waits on T3.3

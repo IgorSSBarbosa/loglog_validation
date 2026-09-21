@@ -342,12 +342,13 @@ rungs, all in L units:
 | d | 4.0964 ± 0.0073 | declared 4; verdict **pass**, no D MISMATCH as on the x-ladder (2.725 vs 2.678, z = 30) |
 
 **Written up, in x units (reporting only, ground rule 4):** ω_x = ν_box·ω_L =
-**1.408 ± 0.047**, against the expected Δ₁ ≈ 0.77. **They do not agree.** The single
-correction fitted here is an effective one: 5 rungs and 1 dof cannot separate an analytic
-term (ω_x = 1) from the confluent one, and an unresolved second correction pushes a
-one-term fit's ω up. So ω_x = 1.41 is *what the ladder shows*, not a measurement of Δ₁.
-γ_susc = ν_box·γ_L = 0.69 × 2.0693 = **1.4278** from this fit alone, next to 1.430(6);
-that number rests on the one-correction model and is not the estimator's answer.
+**1.408 ± 0.047**, against the expected Δ₁ ≈ 0.77. **They do not agree, and this
+experiment does not say why.** The one-term fit is an effective description of a 5-rung
+ladder with 1 dof; a second correction in the data (an analytic ε¹ term, say) would move
+a one-term ω, but nothing here tests that. So ω_x = 1.41 is what this ladder shows as its
+leading decay, not a measurement of Δ₁. γ_susc = ν_box·γ_L = 0.69 × 2.0693 =
+**1.4278** from this fit alone, next to 1.430(6); it rests on the one-correction model and
+is not the estimator's answer.
 
 The grid was 2^k, so the √2 fallback was not needed.
 
