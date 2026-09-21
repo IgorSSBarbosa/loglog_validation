@@ -54,6 +54,34 @@ from src.budget.allocation_table import human_time  # noqa: E402
 from src.generate.generate import generate  # noqa: E402
 
 
+#: The pre-flight's draws are thrown away, so their stream is a fixed one that
+#: nothing else uses: it never touches a replicate's spawned seeds.
+_PREFLIGHT_SEED = 0
+
+
+def preflight(model: str, scales, params: dict) -> None:
+    """One sample at the smallest and at the largest planned scale, before anything else.
+
+    A plan can name a scale the model will not draw: a box past a label type's
+    range, an allocation that slid the ladder up with the budget. The run draws
+    the scales in ascending order, so without this the refusal comes at the top
+    rung of the FIRST replicate, after every smaller rung was paid for, and on a
+    long run that is hours in. Here it costs one sample, through the same
+    `generate()` every draw uses, and the samples are discarded. It reads
+    nothing about WHY a model refuses: whatever `simulate` raises is quoted.
+    """
+    for i in sorted({int(min(scales)), int(max(scales))}):
+        try:
+            generate(model, [i], 1, params, seed=_PREFLIGHT_SEED,
+                     reduce=lambda y: None)
+        except ValueError as err:
+            raise SystemExit(
+                f"the plan names scale {i}, and {model!r} refuses it:\n  {err}\n"
+                f"nothing was drawn. If the ladder cannot go that high on this "
+                f"machine, tell the planner: plan.py / autopilot.py --max-scale "
+                f"<the largest scale the model can draw>.") from err
+
+
 def execute(plan: dict, recipe: dict, sd: Path, *,
             seed=None, keep_samples=False, on_scale=None, on_scale_start=None,
             quiet=False) -> dict:
@@ -66,6 +94,7 @@ def execute(plan: dict, recipe: dict, sd: Path, *,
     """
     model, params = recipe["model"], recipe.get("params", {})
     scales, n, R = plan["scales"], plan["n"], plan.get("replicates", 1)
+    preflight(model, scales, params)
     reps, seeds = [], []
     t0 = time.perf_counter()
 

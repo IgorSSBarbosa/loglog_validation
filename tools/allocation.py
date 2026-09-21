@@ -140,7 +140,7 @@ def predict_error(n: float, m0: float, d: float, omega1: float, rho: float,
 
 
 def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
-                     *, a1: float, cv: float) -> dict:
+                     *, a1: float, cv: float, m0_max: int | None = None) -> dict:
     """prop:opt's allocation with its dropped multiplicative constant restored.
 
     Same rate as `optimal_allocation` -- this only shifts m0 by the constant
@@ -159,6 +159,16 @@ def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
     resulting n, the realized cost, and the predicted error decomposition.
     `integer_feasible` is False when n floors below 1 -- check it, as with
     `optimal_allocation`.
+
+    `m0_max` is a CEILING handed in from outside, for a ladder that cannot climb
+    as far as the budget would like (a model that refuses a large scale: memory,
+    a label type). The rule slides m0 up with the budget, so past some budget it
+    asks for scales that do not exist. With a ceiling the m0 is min(m0, m0_max)
+    and n is recomputed for it, so the whole budget is still spent, on more
+    samples at the deepest ladder that exists. The bias is then whatever that
+    ladder gives; `m0_uncapped` and `capped` in the result say it was chosen
+    for the ceiling, not for the optimum. Absent, nothing changes and neither
+    key is returned. Nothing here knows why the ceiling is there.
     """
     if B < 1:
         raise ValueError(f"B must be >= 1; got {B}")
@@ -175,6 +185,11 @@ def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
     # measured argmins (3, 5, 6 at B = 1e7, 1e8, 1e9), rounding gives
     # (4, 5, 6) and flooring gives (3, 4, 5).
     m0 = max(0, int(round(m0_exact)))
+    m0_uncapped = m0
+    if m0_max is not None:
+        if m0_max < 0:
+            raise ValueError(f"m0_max must be >= 0; got {m0_max}")
+        m0 = min(m0, m0_max)
     n = math.floor(B / (c["G"] * rho ** (d * m0)))
     feasible = n >= 1
     out = {
@@ -187,6 +202,8 @@ def tuned_allocation(B: float, d: float, omega1: float, rho: float, m: int,
         "integer_feasible": feasible,
         "constants": c,
     }
+    if m0_max is not None:
+        out.update({"m0_uncapped": m0_uncapped, "capped": m0 < m0_uncapped})
     if feasible:
         out.update(predict_error(n, m0, d, omega1, rho, m, a1, cv))
     return out
@@ -501,6 +518,29 @@ def ladder(m0: int, m: int, rho: float) -> list[int]:
             f"scales {scales}; use an integer rho (or a larger m0) so that "
             f"rho**k are distinct integers")
     return scales
+
+
+def max_m0_for_scale(max_scale: float, m: int, rho: float) -> int:
+    """The largest m0 whose `ladder(m0, m, rho)` still ends at or below `max_scale`.
+
+    `ladder` ends at round(rho**(m0 + m)), so this is that inverted, for the
+    `m0_max` of `tuned_allocation`. Raises when even m0 = 0 ends above it: no
+    ladder of m rungs of this ratio exists under the ceiling, and saying so
+    here beats a plan that quietly exceeds it.
+    """
+    if m < 2:
+        raise ValueError(f"m must be >= 2 for the weights to exist; got {m}")
+    if rho <= 1:
+        raise ValueError(f"rho must be > 1; got {rho}")
+    if round(rho ** m) > max_scale:
+        raise ValueError(
+            f"no ladder of m = {m} rungs with rho = {rho:g} ends at or below "
+            f"the ceiling {max_scale:g}: the smallest, m0 = 0, ends at "
+            f"{round(rho ** m)}")
+    m0 = 0
+    while round(rho ** (m0 + 1 + m)) <= max_scale:
+        m0 += 1
+    return m0
 
 
 def n_for_budget(budget: float, m0: int, m: int, rho: float, d: float) -> int:

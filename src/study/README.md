@@ -256,6 +256,25 @@ enough that the correction is resolved, and buy precision with the *budget*
 rather than with ladder width. The final run's ladder is chosen for you —
 `plan.py` picks $m_0$ and hands `run.py` a ladder of $m$ scales from it.
 
+**When the model cannot draw the ladder the budget asks for, say so: `--max-scale`.**
+The allocation slides $m_0$ up with the budget (the bias term $\rho^{-\omega_1 m_0}$
+is what the extra budget buys down), and it knows nothing about a model that refuses a
+large scale: a box past a label type's range, a working set past the card's memory.
+Found 2026-09-21 on the $d=4$ exact box ladder, where at `--m 5` every budget from
+30 to 210 min proposed $L = 16..256$ and $L = 256$ needs $4.3\cdot10^9$ sites, past
+int32 labels. `plan.py --max-scale L` and `autopilot.py --max-scale L` state the largest
+scale the ladder may end at; the plan is then the deepest ladder under it with the whole
+budget spent on samples, the output says `CAPPED` and what it would have chosen, and
+the gate is judged at the capped $m_0$. A capped plan is usually **bias-limited**:
+read `|bias|` against the precision you need, because a bigger budget then buys
+samples and not depth. The tools do not learn *why* the ceiling is there, and nothing
+model-specific was added to them.
+
+`run.py` also **pre-flights** the plan before its first replicate: one sample at the
+smallest and at the largest planned scale through `generate()`, discarded, so a scale
+the model refuses stops the run in seconds, quoting the model's own message, instead of
+at the top rung of replicate 1. It uses its own fixed stream and changes no replicate.
+
 ## The pilot cannot determine $\omega_1$, and says so
 
 This is the single most important thing to know about the workflow.

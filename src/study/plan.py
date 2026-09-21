@@ -37,7 +37,12 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.allocation import ladder, predict_error, tuned_allocation  # noqa: E402
+from tools.allocation import (  # noqa: E402
+    ladder,
+    max_m0_for_scale,
+    predict_error,
+    tuned_allocation,
+)
 from tools.artifacts import (  # noqa: E402
     artifact_path,
     recipe_name,
@@ -79,7 +84,7 @@ def parse_duration(text: str) -> float:
 
 
 def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
-                    cost_ratio=1.0) -> dict:
+                    cost_ratio=1.0, max_scale=None) -> dict:
     """The tuned allocation at budget B, with the error it should deliver.
 
     `cost_ratio` converts the allocation's cost unit (Assumption 7's i**d)
@@ -88,18 +93,28 @@ def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
     whose ratio depends on the ladder. It is 1.0 exactly for srw and
     percolation2d, and 256 for percolation_tau: see
     tools/cost_model.cost_unit_ratio for what leaving it out cost.
+
+    `max_scale` is the largest scale the ladder may end at, stated by the user:
+    the allocation slides the ladder up with the budget and a model can refuse
+    the scales it would reach. The plan is then the deepest ladder under the
+    ceiling, and says `capped` when that is not the one it would have chosen.
     """
-    t = tuned_allocation(B, d, omega1, rho, m, a1=a1, cv=cv)
+    m0_max = None if max_scale is None else max_m0_for_scale(max_scale, m, rho)
+    t = tuned_allocation(B, d, omega1, rho, m, a1=a1, cv=cv, m0_max=m0_max)
     if t.get("n") is None:
         return {"feasible": False, "budget": B,
                 "why": "budget too small for even one sample per scale"}
     err = predict_error(t["n"], t["m0"], d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv)
     scales = ladder(t["m0"], m, rho)
     ratio = float(cost_ratio(scales) if callable(cost_ratio) else cost_ratio)
-    return {"feasible": True, "budget": B, "n": t["n"], "m0": t["m0"],
-            "scales": scales, "cost": t["cost"], "cost_ratio": ratio,
-            "work": t["cost"] * ratio,
-            "seconds": t["cost"] * ratio / throughput, **err}
+    out = {"feasible": True, "budget": B, "n": t["n"], "m0": t["m0"],
+           "scales": scales, "cost": t["cost"], "cost_ratio": ratio,
+           "work": t["cost"] * ratio,
+           "seconds": t["cost"] * ratio / throughput, **err}
+    if max_scale is not None:
+        out.update({"max_scale": max_scale, "capped": t["capped"],
+                    "m0_uncapped": t["m0_uncapped"]})
+    return out
 
 
 def total_error(plan: dict, replicates: int) -> float:
@@ -124,7 +139,7 @@ def total_error(plan: dict, replicates: int) -> float:
 
 def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput,
                       cost_ratio=1.0, replicates: int = 1,
-                      lo=1e3, hi=1e18) -> dict:
+                      lo=1e3, hi=1e18, max_scale=None) -> dict:
     """Smallest budget whose predicted error meets `target_se`, by bisection.
 
     `target_se` is the error on the FINAL answer -- the mean of `replicates`
@@ -138,11 +153,14 @@ def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput
     to integers, so predicted RMSE is a staircase in B, not a smooth power law.
     """
     kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv, throughput=throughput,
-              cost_ratio=cost_ratio)
+              cost_ratio=cost_ratio, max_scale=max_scale)
     top = plan_for_budget(hi, **kw)
     if not top["feasible"] or total_error(top, replicates) > target_se:
-        floor = (f"; the finite-size bias alone is {top['bias']:.3g} at the "
-                 f"deepest affordable m0, and no number of replicates reduces it"
+        deepest = ("the deepest ladder under --max-scale "
+                   f"{max_scale:g}" if max_scale is not None
+                   else "the deepest affordable m0")
+        floor = (f"; the finite-size bias alone is {top['bias']:.3g} at "
+                 f"{deepest}, and no number of replicates reduces it"
                  if top.get("feasible") and top["bias"] > target_se else "")
         return {"feasible": False,
                 "why": f"target {target_se:g} unreachable below B={hi:g}{floor}"}
@@ -159,7 +177,8 @@ def budget_for_target(target_se: float, *, d, omega1, rho, m, a1, cv, throughput
 
 
 def budget_for_seconds(target_seconds: float, *, d, omega1, rho, m, a1, cv,
-                       throughput, cost_ratio=1.0, lo=1.0, hi=1e20) -> dict:
+                       throughput, cost_ratio=1.0, lo=1.0, hi=1e20,
+                       max_scale=None) -> dict:
     """The largest plan whose PREDICTED wall clock fits `target_seconds`.
 
     Why a bisection rather than `B = seconds * throughput`: that identity holds
@@ -177,7 +196,7 @@ def budget_for_seconds(target_seconds: float, *, d, omega1, rho, m, a1, cv,
     even one sample per scale and that is what comes back.
     """
     kw = dict(d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv,
-              throughput=throughput, cost_ratio=cost_ratio)
+              throughput=throughput, cost_ratio=cost_ratio, max_scale=max_scale)
 
     def fits(B):
         p = plan_for_budget(B, **kw)
@@ -310,6 +329,14 @@ def _main(argv=None) -> None:
                         "spread at all, and t(R-1) widens fast below 5")
     p.add_argument("--rho", type=float, default=2.0)
     p.add_argument("--m", type=int, default=6)
+    p.add_argument("--max-scale", type=float, default=None, dest="max_scale",
+                   help="the largest scale the ladder may end at, when the model "
+                        "cannot go higher (memory, a label type). The allocation "
+                        "slides the ladder up with the budget and does not know "
+                        "that; this is where you tell it. The plan is then the "
+                        "deepest ladder under the ceiling, its bias is what that "
+                        "ladder gives, and the output says so. Nothing else in "
+                        "the plan changes")
     p.add_argument("--throughput", type=float, default=None,
                    help="steps/second; the pilot's measured one when absent (its "
                         "own clock, or for a batched_cost model its cost probe)")
@@ -328,6 +355,11 @@ def _main(argv=None) -> None:
             f"report.py runs on it\n  needs at least 5 (four free parameters). "
             f"The run would draw in full and then fail\n  at the report. Use "
             f"--m 5 or more; the default is 6.")
+    if a.max_scale is not None:
+        try:
+            max_m0_for_scale(a.max_scale, a.m, a.rho)
+        except ValueError as err:
+            raise SystemExit(f"--max-scale {a.max_scale:g}: {err}")
 
     sd = Path(a.data_root) / a.study
     consts = load(sd)
@@ -357,6 +389,9 @@ def _main(argv=None) -> None:
     print(format_table(consts))
     print(f"  {'rho':<11}{a.rho:>10.4f}              (design choice)")
     print(f"  {'m':<11}{a.m:>10d}              (design choice)")
+    if a.max_scale is not None:
+        print(f"  {'max scale':<11}{a.max_scale:>10g}              (--max-scale: "
+              f"the ladder may not end above this)")
     if ratio_note:
         print(ratio_note)
     print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s"
@@ -387,7 +422,7 @@ def _main(argv=None) -> None:
         print(advice)
 
     kw = dict(d=d, omega1=omega1, rho=a.rho, m=a.m, a1=a1, cv=cv, throughput=tp,
-              cost_ratio=ratio_fn)
+              cost_ratio=ratio_fn, max_scale=a.max_scale)
     R = max(1, a.replicates)
     # Resolved once, so the accept hint below quotes the duration actually
     # planned on. It used to interpolate `a.time` itself, which is None
@@ -418,6 +453,13 @@ def _main(argv=None) -> None:
 
     print(f"\nproposed allocation, {head}")
     print(f"  m0     = {pl['m0']}          scales {pl['scales']}")
+    if pl.get("capped"):
+        top_free = ladder(pl["m0_uncapped"], a.m, a.rho)[-1]
+        print(f"  CAPPED by --max-scale {a.max_scale:g}: the allocation alone would "
+              f"choose m0 = {pl['m0_uncapped']}, ending at {top_free}. This is the "
+              f"deepest ladder that fits, so its bias is what it is and more budget "
+              f"buys samples, not depth: read |bias| below against the precision "
+              f"you need.")
     print(f"  n      = {pl['n']:,} per scale, x{R} replicate(s)")
     print(f"  cost   = {pl['total_cost']:.4g} steps total  "
           f"({human_time(pl['total_seconds'])}; {human_time(pl['seconds'])} per replicate)")
@@ -446,6 +488,7 @@ def _main(argv=None) -> None:
                 f"  Re-run the pilot with -meta <recipe> to record it.")
         pl["constants_at_plan_time"] = {k: vars(v) for k, v in consts.items()}
         pl["rho"], pl["m"], pl["throughput"] = a.rho, a.m, tp
+        pl["max_scale"] = a.max_scale
         rp = write_final_recipe(a.data_root, a.study, pilot["recipe"], pl)
         pl["recipe_path"] = str(rp)
         write_artifact(sd, "plan", pl, produced_by="src/study/plan.py")

@@ -2901,6 +2901,20 @@ def sec_study(a: Audit, sc: Scratch) -> None:
         cli_ok(a, "--time and --target-se are mutually exclusive",
                ["src/study/plan.py", "--study", study, "--data-root", str(sc.data),
                 "--time", "20s", "--target-se", "1e-2"], expect_code=2)
+        p = cli_ok(a, "--max-scale keeps the proposed ladder under a ceiling",
+                   ["src/study/plan.py", "--study", study, "--data-root", str(sc.data),
+                    "--time", "20s", "--m", "5", "--max-scale", "64"],
+                   stdout_has="proposed allocation")
+        if p:
+            a.check("...the top rung being at or below it, and the ceiling echoed "
+                    "beside the other design choices",
+                    lambda: int(p.stdout.split("scales [")[1].split("]")[0]
+                                .split(",")[-1]) <= 64 and "max scale" in p.stdout)
+        cli_ok(a, "...and a ceiling no ladder of m rungs fits under is refused "
+                  "before anything is planned",
+               ["src/study/plan.py", "--study", study, "--data-root", str(sc.data),
+                "--time", "20s", "--m", "5", "--max-scale", "8"],
+               expect_code=1, stderr_has="--max-scale 8")
         p = cli_ok(a, "--accept writes plan.json AND the final recipe",
                    ["src/study/plan.py", "--study", study, "--data-root", str(sc.data),
                     "--time", "20s", "--replicates", "3", "--accept"],
@@ -2914,6 +2928,10 @@ def sec_study(a: Audit, sc: Scratch) -> None:
                     expect=["a1", "cv", "d", "omega1"])
             a.check("--time is the TOTAL: the per-replicate budget is time/R",
                     lambda: abs(plan["total_seconds"] - 3 * plan["seconds"]) < 1e-6)
+    cli_ok(a, "autopilot.py refuses an impossible --max-scale before drawing a pilot",
+           ["src/study/autopilot.py", "-meta", sc.recipe("samples_pilot.json"),
+            "--study", "audit_cap", "--time", "20s", "--m", "5", "--max-scale", "8"],
+           expect_code=1, stderr_has="--max-scale 8")
     cli_ok(a, "plan.py without a pilot names the command that makes one",
            ["src/study/plan.py", "--study", "nosuch", "--data-root", str(sc.data),
             "--time", "10s"], expect_code=1, stderr_has="pilot.py")
@@ -2942,6 +2960,16 @@ def sec_study(a: Audit, sc: Scratch) -> None:
     cli_ok(a, "run.py without an accepted plan names the command that accepts one",
            ["src/study/run.py", "--study", "nosuch", "--data-root", str(sc.data)],
            expect_code=1, stderr_has="plan.py")
+    from src.study.run import preflight
+    a.raises("run.py's pre-flight stops a scale the model refuses, quoting the "
+             "model, before any replicate is drawn", SystemExit,
+             lambda: preflight("percolation_zd", [8, 400], {"dim": 4}),
+             contains="refuses it")
+    a.raises("...and says what to do about it", SystemExit,
+             lambda: preflight("percolation_zd", [8, 400], {"dim": 4}),
+             contains="--max-scale")
+    a.check("...and lets a ladder the model draws through, drawing nothing it keeps",
+            lambda: preflight("srw", [8, 16, 32], {}) is None)
 
     if (sd / "final.json").exists():
         p = cli_ok(a, "report.py answers with gamma and its interval",

@@ -99,6 +99,7 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
+from tools.allocation import max_m0_for_scale  # noqa: E402
 from tools.artifacts import (  # noqa: E402
     default_out_dir, load_recipe, read_artifact, write_artifact)
 from tools.constants import format_table  # noqa: E402
@@ -207,7 +208,7 @@ def bfs_span(consts: dict, m0: int, m: int, rho: float) -> dict | None:
 
 
 def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput,
-                    cost_ratio=1.0, target_se=None):
+                    cost_ratio=1.0, target_se=None, max_scale=None):
     """The m0 the plan would choose right now, for evaluating the gate at.
 
     The gate has to be checked at the m0 the answer will be computed at, and
@@ -226,7 +227,7 @@ def _provisional_m0(consts, seconds_left, *, rho, m, replicates, throughput,
     """
     kw = dict(d=consts["d"].value, omega1=consts["omega1"].value, rho=rho, m=m,
               a1=consts["a1"].value, cv=consts["cv"].value,
-              throughput=throughput, cost_ratio=cost_ratio)
+              throughput=throughput, cost_ratio=cost_ratio, max_scale=max_scale)
     try:
         pl = (plan_mod.budget_for_target(target_se, replicates=replicates, **kw)
               if target_se else
@@ -270,7 +271,7 @@ def scale_draws(recipe: dict, factor: int) -> dict:
 def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
                            replicates, seed, rho, m, throughput_guess,
                            max_rounds=MAX_ROUNDS, target_se=None,
-                           reuse_cache=False,
+                           reuse_cache=False, max_scale=None,
                            span_limit=report_mod._BFS_SPAN_LIMIT, log=print):
     """The doubling loop: draw, fit, judge; double the DRAWS and repeat if not.
 
@@ -350,7 +351,8 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
             consts["d"].value if consts.get("d") else 1.0)
         m0 = _provisional_m0(consts, max(1e-9, total_seconds - spent),
                              rho=rho, m=m, replicates=replicates, throughput=tp,
-                             cost_ratio=ratio_fn, target_se=target_se)
+                             cost_ratio=ratio_fn, target_se=target_se,
+                             max_scale=max_scale)
         span = bfs_span(consts, m0, m, rho) if m0 is not None else None
         rounds.append({"round": k + 1, "factor": factor,
                        "replicates": len(reps),
@@ -399,7 +401,8 @@ def _bar(total_steps: int, enabled: bool):
     return P.bar(total_steps, "drawing", unit="step", enabled=enabled)
 
 
-def resume_command(sd: Path, *, replicates, target_se, seed, reuse_from) -> str:
+def resume_command(sd: Path, *, replicates, target_se, seed, reuse_from,
+                   max_scale=None) -> str:
     """The invocation that draws what --target-se just priced.
 
     Built here rather than in `_plan_run_report` because only the caller knows
@@ -415,11 +418,13 @@ def resume_command(sd: Path, *, replicates, target_se, seed, reuse_from) -> str:
     parts += ["--target-se", f"{target_se:g}", "--replicates", str(replicates)]
     if seed is not None:
         parts += ["--seed", str(seed)]
+    if max_scale is not None:
+        parts += ["--max-scale", f"{max_scale:g}"]
     return " ".join(parts)
 
 
 def _reused_round(source: dict, consts, scales, *, rho, m, replicates,
-                  seconds, target_se, ratio_fn, throughput):
+                  seconds, target_se, ratio_fn, throughput, max_scale=None):
     """The gate, evaluated on a pilot that was measured somewhere else.
 
     Reusing a pilot must not mean skipping the check on it. Both gates read
@@ -435,7 +440,8 @@ def _reused_round(source: dict, consts, scales, *, rho, m, replicates,
     lc = ladder_check(reps, scales)
     m0 = _provisional_m0(consts, max(1e-9, seconds), rho=rho, m=m,
                          replicates=replicates, throughput=throughput,
-                         cost_ratio=ratio_fn, target_se=target_se)
+                         cost_ratio=ratio_fn, target_se=target_se,
+                         max_scale=max_scale)
     span = bfs_span(consts, m0, m, rho) if m0 is not None else None
     rnd = {"round": 0, "factor": None, "replicates": len(reps),
            "seconds": 0.0, "m0": m0, "span": span, "ladder": lc,
@@ -481,7 +487,8 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
               max_rounds=MAX_ROUNDS, force=False, progress=True,
               target_se: float | None = None, pilot_seconds_cap: float | None = None,
               reuse_from: Path | None = None, reuse_cache: bool = False,
-              yes: bool = False, log=print) -> dict:
+              yes: bool = False, max_scale: float | None = None,
+              log=print) -> dict:
     """pilot -> plan -> run -> report, deciding in between. Returns the record.
 
     Two ways to say how big the study is, and exactly one of them is required.
@@ -496,6 +503,11 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
     t0 = time.perf_counter()
     if (seconds is None) == (target_se is None):
         raise SystemExit("autopilot needs exactly one of --time or --target-se")
+    if max_scale is not None:
+        try:
+            max_m0_for_scale(max_scale, m, rho)
+        except ValueError as err:
+            raise SystemExit(f"--max-scale {max_scale:g}: {err}")
 
     # Read and validate the reused pilot, but write nothing yet: the seed
     # collision below is a refusal too, and a study directory holding the
@@ -542,14 +554,14 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
         consts, rounds, ok = _reused_round(
             reused["pilot"], reused["constants"], scales, rho=rho, m=m,
             replicates=replicates, seconds=(seconds or 0.0), target_se=target_se,
-            ratio_fn=ratio_fn, throughput=tp)
+            ratio_fn=ratio_fn, throughput=tp, max_scale=max_scale)
     else:
         consts, rounds, ok = pilot_until_determined(
             recipe, sd, seconds_budget=pilot_budget,
             total_seconds=seconds if seconds is not None else pilot_budget,
             replicates=replicates, seed=pilot_seed, rho=rho, m=m,
             throughput_guess=1e8, max_rounds=max_rounds, target_se=target_se,
-            reuse_cache=reuse_cache, log=log)
+            reuse_cache=reuse_cache, max_scale=max_scale, log=log)
     pilot_seconds = time.perf_counter() - t0
 
     if reused:
@@ -590,12 +602,14 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
             f"({human_time(pilot_seconds)} went to the pilot)")
     rec = _plan_run_report(recipe, sd, consts, rounds, lc, seconds=left,
                            replicates=replicates, seed=run_seed, rho=rho, m=m,
+                           max_scale=max_scale,
                            progress=progress, pilot_seconds=pilot_seconds,
                            log=log, forced=not ok, target_se=target_se,
                            draw=yes or not target_se,
                            resume=resume_command(
                                sd, replicates=replicates, target_se=target_se,
-                               seed=seed, reuse_from=reuse_from)
+                               seed=seed, reuse_from=reuse_from,
+                               max_scale=max_scale)
                            if target_se else "")
     if not ok:
         log("\n  !! --force: the constants above were NOT determined, and the "
@@ -690,7 +704,7 @@ def _record_give_up(consts, rounds, sd, pilot_seconds, lc) -> dict:
 def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
                      seed, rho, m, progress, pilot_seconds, log,
                      forced=False, target_se=None, draw=True,
-                     resume="") -> dict:
+                     resume="", max_scale=None) -> dict:
     """Steps 2-4, with the plan accepted automatically and a bar over the run.
 
     `forced` means the gate failed and --force overrode it. It changes nothing
@@ -707,6 +721,7 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
                   else ["--time", f"{seconds:.0f}s"])
     argv = (["--study", sd.name, "--data-root", str(sd.parent)] + constraint +
             ["--replicates", str(replicates), "--rho", str(rho), "--m", str(m)]
+            + (["--max-scale", repr(float(max_scale))] if max_scale is not None else [])
             + (["--accept"] if draw else []))
     # plan.py prints its own tables, but the bisection that precedes them
     # (plan.budget_for_seconds: up to 200 allocations) prints nothing, so on a
@@ -842,6 +857,10 @@ def _main(argv=None) -> None:
                    help="one seed; pilot and run get independent streams of it")
     p.add_argument("--rho", type=float, default=2.0)
     p.add_argument("--m", type=int, default=6)
+    p.add_argument("--max-scale", type=float, default=None, dest="max_scale",
+                   help="the largest scale the final ladder may end at, when the "
+                        "model cannot draw higher. Passed to plan.py, and to the "
+                        "gate, which is judged at the m0 the CAPPED plan uses")
     p.add_argument("--pilot-cap", type=float, default=PILOT_CAP, dest="pilot_cap",
                    help=f"fraction of --time the pilot may spend (default {PILOT_CAP})")
     p.add_argument("--max-rounds", type=int, default=MAX_ROUNDS, dest="max_rounds",
@@ -887,7 +906,8 @@ def _main(argv=None) -> None:
                     replicates=a.replicates, seed=a.seed, rho=a.rho, m=a.m,
                     pilot_cap=a.pilot_cap, max_rounds=a.max_rounds,
                     force=a.force, progress=a.progress, yes=a.yes,
-                    reuse_from=reuse_from, reuse_cache=a.reuse_cost)
+                    reuse_from=reuse_from, reuse_cache=a.reuse_cost,
+                    max_scale=a.max_scale)
     raise SystemExit(0 if rec["ok"] else 1)
 
 

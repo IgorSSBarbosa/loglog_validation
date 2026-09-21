@@ -198,9 +198,10 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `feasible` | allocation | $\theta_1+d\theta_2=1$ self-check |
 | `optimal_allocation` | allocation | **eq. (945–946)**, as written |
 | `allocation_constants` | allocation | $C_b$, $C_s$, $G$, $\kappa$, offset |
-| `tuned_allocation` | allocation | eq. (946) + restored constant |
+| `tuned_allocation` | allocation | eq. (946) + restored constant; optional `m0_max` ceiling (a ladder that cannot climb as far as the budget would like) |
 | `predict_error` | allocation | bias/sd/RMSE for a given ladder |
 | `ladder` | allocation | **def:alloc**'s scale set; rejects rounding collisions |
+| `max_m0_for_scale` | allocation | `ladder` inverted: the largest $m_0$ whose ladder ends at or below a ceiling; the `m0_max` of `tuned_allocation` |
 | `n_for_budget` | allocation | largest uniform $n$ within $B$ |
 | `rate_exponent`, `rate_exponent_se` | allocation | eq. (941)/(966) decay slope + its own error |
 | `snr_allocation` | allocation | $n_i\propto i^{2\omega_1}$ — right for $\omega_1$ |
