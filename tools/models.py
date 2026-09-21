@@ -29,6 +29,7 @@ from models import percolation_tau as model_percolation_tau
 from models import percolation_tau_gpu as model_percolation_tau_gpu
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
+from models import percolation_susceptibility_L_gpu as model_percolation_susceptibility_L_gpu
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_gpu as model_percolation_zd_gpu
@@ -250,6 +251,18 @@ MODELS: dict[str, ModelSpec] = {
         # models/percolation_susceptibility_gpu.py,
         # experiments/09_percolation_susceptibility_gpu.
         cost_hint=model_percolation_susceptibility_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
+    ),
+    "percolation_susceptibility_L_gpu": ModelSpec(
+        simulate=model_percolation_susceptibility_L_gpu.simulate,
+        # The same observable and stream, with the scale = the BOX SIDE L, not
+        # the distance x: p = p_c - eps0/x(L), x(L) = (L/c)**(1/nu_box). On
+        # L = 2**k nothing is rounded and L/x**nu_box = c on every rung, which
+        # the x-ladder's ceil() broke (plans/exact_box_ladder.md). cost_hint(L)
+        # is L**dim exactly, so the declared d = dim. The exponent it yields is
+        # gamma_L, in L units; gamma_susc = nu_box * gamma_L is written up by
+        # hand, the drivers never learn nu_box. GPU only (user, 2026-09-21).
+        cost_hint=model_percolation_susceptibility_L_gpu.cost_hint,
         batched_cost=True,              # as percolation2d_gpu
     ),
     "percolation_tau_zd": ModelSpec(

@@ -1425,10 +1425,12 @@ def sec_models_registry(a: Audit) -> None:
     # the high-dimensional lattice; it had stood at the original four since,
     # and failed silently in the audit until 2026-09-14. Grown again
     # 2026-09-16 with the four *_gpu models and rwre, which experiments 07-10
-    # registered without updating this list.
+    # registered without updating this list, and 2026-09-21 with
+    # percolation_susceptibility_L_gpu.
     a.check("every registered model is one we meant to register",
             lambda: sorted(MODELS),
             expect=["percolation2d", "percolation2d_gpu", "percolation_susceptibility",
+                    "percolation_susceptibility_L_gpu",
                     "percolation_susceptibility_gpu", "percolation_tau",
                     "percolation_tau_gpu", "percolation_tau_zd", "percolation_zd",
                     "percolation_zd_gpu", "percolation_zd_stream", "rwre", "srw",
@@ -3681,6 +3683,70 @@ def sec_percolation_tau_zd(a: Audit) -> None:
            "H6(a) are the checks that it holds.")
 
 
+def sec_percolation_susceptibility_L_gpu(a: Audit) -> None:
+    """models/percolation_susceptibility_L_gpu -- the susceptibility ladder, scale = box side L"""
+    from models import percolation_susceptibility_gpu as old
+    from models import percolation_susceptibility_L_gpu as pl
+    from tools.cost_model import declared_exponent
+
+    a.begin("models/percolation_susceptibility_L_gpu",
+            "the exact box ladder: scale = L, p = p_c - eps0/x(L), cost L**dim")
+
+    design = {"dim": 4, "eps0": 0.09, "box_factor": 8.0, "nu_box": 0.69}
+    grid = [8, 16, 32, 64, 128]
+    rng = np.random.default_rng(0)
+
+    a.check("L / x(L)**nu_box = c on every rung of the 2^k grid, to 1e-12 "
+            "(the property the x-ladder's ceil() broke)",
+            lambda: max(abs(L / pl.x_of_L(L, 8.0, 0.69) ** 0.69 - 8.0)
+                        for L in grid) <= 1e-12 * 8.0)
+    a.check("cost_hint(L) is L**dim exactly, in dim 2, 3 and 4",
+            lambda: all(pl.cost_hint(L, {"dim": d}) == float(L ** d)
+                        for d in (2, 3, 4) for L in range(2, 60)))
+    a.close("...so the declared d that tools/cost_model reads off it is dim",
+            lambda: declared_exponent(grid, pl.cost_hint, design), 4.0, 1e-12)
+    a.check("smallest_legal_L at c = 8, d = 4 is 5 (p <= 0 below it)",
+            lambda: pl.smallest_legal_L(4, 0.09, 8.0, 0.69), expect=5)
+
+    a.raises("p <= 0 is refused, naming the smallest legal side", ValueError,
+             lambda: pl.simulate(4, 1, design, rng), contains="smallest legal side")
+    a.raises("L = 1 is refused", ValueError,
+             lambda: pl.simulate(1, 1, design, rng), contains="must be >= 2")
+    a.raises("a non-integer L is refused", ValueError,
+             lambda: pl.simulate(8.5, 1, design, rng), contains="must be an integer")
+    a.raises("a side past int32 labels is refused before any draw", ValueError,
+             lambda: pl.simulate(216, 1, design, rng), contains="int32")
+    a.raises("a design constant left out is refused, not defaulted", ValueError,
+             lambda: pl.simulate(16, 1, {"dim": 4, "eps0": 0.09}, rng),
+             contains="no defaults")
+    a.raises("an unknown geometry is refused", ValueError,
+             lambda: pl.simulate(16, 1, {**design, "geometry": "mobius"}, rng),
+             contains="unknown geometry")
+
+    def _cuda() -> bool:
+        try:
+            import cupy
+            return cupy.cuda.runtime.getDeviceCount() > 0
+        except (ImportError, RuntimeError):
+            return False
+
+    if not _cuda():
+        a.note("simulate not exercised", "no usable CUDA device on this host; the "
+               "model is GPU-only by design, so nothing stands in for it")
+        return
+    a.check("simulate returns n positive float64 samples",
+            lambda: (lambda y: bool(y.shape == (50,) and y.dtype == np.float64
+                                    and (y > 0).all()))(
+                pl.simulate(16, 50, design, np.random.default_rng(1))))
+    a.check("at an exactly-integer box it is the x-ladder's rung, bit for bit "
+            "(nu_box = 1, c = 4: L = 8 is x = 2)",
+            lambda: np.array_equal(
+                old.simulate(2, 64, {"dim": 2, "eps0": 0.5, "box_factor": 4.0,
+                                     "nu_box": 1.0}, np.random.default_rng(5)),
+                pl.simulate(8, 64, {"dim": 2, "eps0": 0.5, "box_factor": 4.0,
+                                    "nu_box": 1.0}, np.random.default_rng(5))))
+
+
 # ===========================================================================
 # Stages, and the runner
 # ===========================================================================
@@ -3693,7 +3759,8 @@ STAGES: dict[str, list] = {
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_cost_cache, sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
     "models": [sec_srw, sec_rwre, sec_percolation2d, sec_percolation_tau,
-               sec_percolation_zd, sec_percolation_tau_zd, sec_synthetic],
+               sec_percolation_zd, sec_percolation_tau_zd,
+               sec_percolation_susceptibility_L_gpu, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],
     "calibration": [sec_calibration],
     "static": [sec_static],
