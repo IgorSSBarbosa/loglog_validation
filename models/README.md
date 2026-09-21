@@ -579,11 +579,19 @@ to $L=32$, the exact identity $\#[s,2s) = \#{\ge}s - \#{\ge}2s$ sample by sample
 
 ---
 
-No model file imports another, or anything from `tools/`, `src/` or `experiments/` —
-`tools/models.py` is the only thing that imports these, as `from models import srw`. Note
-the two names that look alike and are not: `models` is this package of simulators,
-`tools.models` is the registry that indexes them. Writing both out in full is what keeps
-them apart.
+No model imports anything from `tools/`, `src/` or `experiments/` —
+`tools/models.py` is the only thing outside `models/` that imports these, as
+`from models import srw`. Note the two names that look alike and are not: `models` is this
+package of simulators, `tools.models` is the registry that indexes them. Writing both out
+in full is what keeps them apart.
+
+*As practised (2026-09-21):* the older rule "no model file imports another" stopped
+holding with the susceptibility models, which take `percolation_zd`'s draw, label and
+merge. What holds is narrower: a model may import from an EARLIER model in `models/`, only
+declarations (a box rule, `cost_hint`, $p_c$, size checks) and shared kernels, never
+`tools/`, `src/` or `experiments/`. Every `*_gpu` model imports its CPU sibling
+(2026-09-16), and `percolation_susceptibility_L_gpu` imports the susceptibility GPU core.
+The chain is one-way, so no import cycle is possible.
 
 
 ### `percolation_zd.py` — the same lattice, with the dimension as a parameter
@@ -948,6 +956,54 @@ merge, it borrows `percolation_zd_gpu`'s. The one change of method: the per-samp
 `cupy.add.at`, because cupy's `bincount` needs ~184 extra device bytes per site.
 Equal in distribution to the CPU model, not bit for bit. See
 `experiments/09_percolation_susceptibility_gpu/README.md`.
+
+### `percolation_susceptibility_L_gpu.py` — the same ladder, indexed by the box side $L$
+
+`percolation_susceptibility_L_gpu(L, n=1, *, dim, eps0, box_factor, nu_box, p_c=None,
+moment=1, geometry="torus", rng=None)`. The same $Y$, torus and stream as
+`percolation_susceptibility_gpu` (both call `_susceptibility_gpu_at(L, p, ...)`, the draw
+at an explicit side and $p$), with a different way to choose the rung. Designed with Igor
+on 2026-09-21 (`plans/exact_box_ladder.md`); GPU only, by his decision.
+
+**Why.** On the $x$-ladder, $L = \lceil c\,x^{\nu_{\text{box}}}\rceil$ gives every rung its
+own $c_x = L/x^{\nu_{\text{box}}}$: in $d=4$ at $c=4$, $x = 2,\dots,256$ are $+8.5\%$,
+$+5.7\%$, $+1.2\%$, $+3.3\%$, $+0.7\%$, $+0.7\%$, $+0.2\%$, $+0.3\%$ above $c$. Where
+$S(p,L)$ still grows with $L$ ($G = \partial\log S/\partial\log L = 0.162\pm0.023$ from the
+pooled pilots) rung $x$ is shifted by $G\log(c_x/c)$ — 70$\sigma$ at $x=2$, not monotone
+in $x$. That is the zig-zag `pilot_gsusc_d4_low` returned (local slopes changing sign at
+5–31$\sigma$), and adding that one term takes the pooled fit of eq. (232) from
+$\chi^2 = 47/4$ to $3.7/3$.
+
+**The scale is $L$.** $x(L) = (L/c)^{1/\nu_{\text{box}}}$, $p(L) = p_c - \varepsilon_0/x(L)$,
+$\mathrm{cost}(L) = L^{\dim}$. On $L = 2^k$ every box is an integer, nothing is rounded and
+$L/x^{\nu_{\text{box}}} = c$ exactly on every rung: same constants, same estimator, only
+the choice of rungs differs. Any integer $L$ is an exact rung, so a non-$2^k$ grid is
+possible — but `gamma_closed_form` weights any grid whose $\mathrm{rint}(\log L/\log\rho)$
+is consecutive as if it were exact, so a *rounded* grid (e.g. $\mathrm{round}(\sqrt2^k)$)
+belongs only to fits on the actual $\log L$ (`gamma_all_points`, the pilot's
+`fit_correction`), never to eq. (720).
+
+**The exponent it yields is $\gamma_L$**, in $L$ units: $\gamma_{\text{susc}} =
+\nu_{\text{box}}\,\gamma_L$ and $\omega_x = \nu_{\text{box}}\,\omega_L$ exactly, since
+$\nu_{\text{box}}$ is the design constant that set $p$, not an estimate. $\gamma_L$ is
+**not** $\gamma/\nu = 2-\eta$, and not the $x$-ladder's $\gamma_{\text{susc}}$. The tools
+report ladder units and never learn $\nu_{\text{box}}$ (no `ModelSpec` field, decided
+2026-09-21); the conversion is made where a result is written up.
+
+`cost_hint(L) = L**dim` in integer arithmetic, so Assumption 7 holds with the declared
+$d = \dim$ and no ceiling to fit around. `dim`, `eps0`, `box_factor` and `nu_box` have no
+defaults: they are the design. Refused, not clipped: $p\le 0$ (the message names the
+smallest legal $L$; at $c=8$, $\varepsilon_0=0.09$, $d=4$ that is $5$, so $L=2,3,4$ are
+refused), $L<2$, a non-integer $L$, and a side past int32 labels ($L\le215$ in $d=4$).
+Without a GPU `simulate` raises and says there is no CPU version.
+
+Verified: `tools/tests/test_percolation_susceptibility_L_gpu.py` — the extraction left the
+old model's output bit-identical (38 digests recorded before it); $L/x^{\nu_{\text{box}}}=c$
+to $10^{-12}$ on the $2^k$ and $\sqrt2$ grids; $p(L)$ against hand-computed values; the
+same rung as the old model bit for bit where the old box is an exact integer
+($\nu_{\text{box}}=1$, $c=4$: $L=8\equiv x=2$; $\nu_{\text{box}}=\tfrac12$, $c=2$:
+$L=8\equiv x=16$); equal in distribution to the CPU model at the same $(L,p)$ over 16
+cells; `cost_hint` exactness; one integer of the driver's rng per call.
 
 ### `percolation_tau_gpu.py` — `percolation_tau` on a CUDA GPU
 

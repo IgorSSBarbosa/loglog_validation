@@ -174,3 +174,65 @@ from x ≈ 16 up. 06's CPU probe measured 2.685 ± 0.022.
 E′, same recipe, idle card: affine d̂ = **2.6905 ± 0.0372** against 2.665, 1.0%, **PASS**.
 n went from 2048 at x = 4 to 1 at x ≥ 64, and the probe took 3.8 s. It no longer depends on
 the ladder reaching boxes big enough to hide the fixed cost.
+
+---
+
+## Step 3 — the exact box ladder (2026-09-21)
+
+Plan: `plans/exact_box_ladder.md`. Model: `MODELS["percolation_susceptibility_L_gpu"]`
+(`models/README.md`). This step is about the *ladder*, not the device: the same
+observable, torus and stream, with the scale changed from the distance x to the box side L.
+
+**Question.** Does the ceiling in L = ⌈c·x^ν_box⌉ explain why the d = 4 ω₁ pilot
+(`pilot_gsusc_d4_low`) returned local slopes that zig-zag at 5–31σ, and does a ladder with
+nothing rounded remove it?
+
+**The evidence, from data already on disk** (`diagnostics/rounding_zigzag.py`,
+`diagnostics/ladder_stability.py`, both rerun 2026-09-21 and reproducing the plan's numbers).
+The ceiling gives rung x its own c_x = L/x^ν_box: +8.47%, +5.66%, +1.22%, +3.34%, +0.66%,
++0.68%, +0.20%, +0.25% above c = 4 at x = 2…256. Where S(p, L) still grows with L, rung x
+is shifted by G·log(c_x/c), G = ∂log S/∂log L at fixed p. Pooling the three runs that
+share the design exactly (8 rungs, inverse variance), eq. (232) with one correction gives
+χ² = 47.0 / 4 dof; adding G·log(c_x/c) gives χ² = 3.7 / 3 with G = 0.1622 ± 0.0228 (7σ from
+0, physical sign). The shift against each rung's noise is 70σ at x = 2, 32σ at 4, 8σ at 16,
+0.6σ at 64, < 0.1σ at 256: an ω₁ pilot lives on the small, precise rungs, which is why it
+failed while the production run at x = 16…256 barely noticed.
+
+**Decisions (Igor, 2026-09-21).**
+
+| | |
+|---|---|
+| model | new, `percolation_susceptibility_L_gpu`; the recipe's scale is the integer L; GPU only |
+| box factor | **c = 8**, twice the x-ladder's 4 (plan §3's table: the drift is 8–20× smaller at 2c) |
+| ν_box | 0.69, unchanged (above ν = 0.6845(23)'s 2σ upper end 0.6891, as the model's upper-bound rule requires) |
+| grid | 2^k first. If the ω₁ pilot fails to converge, the √2 grid; the rounded grid feeds only fits on the actual log L, never `gamma_closed_form` (which was deliberately left as is) |
+| units | the tools report γ_L, ω_L; γ_susc = ν_box·γ_L and ω_x = ν_box·ω_L are written up here, not in a driver (no `ModelSpec` field) |
+| smallest rung | at c = 8, ε₀ = 0.09 in d = 4 the model refuses L = 2, 3, 4 (p ≤ 0; smallest legal L = 5), so the smallest power of 2 is L = 8 (x = 1) and the 2^k ladder is 8, 16, 32, 64, 128 (x = 1…55.6, top set by int32 labels and memory) |
+
+**Acceptance criteria (written before the calibration and the pilot ran).**
+
+*T2, `calibrate_box.py` → `analyse_box.py`* (d = 4, GPU, seed 2026092201; x ∈ {16, 32, 64},
+c ≈ 3, 4, 5, 6, 8, plus L = 43, 45 beside 44 at x = 32; n fixed before each draw from the
+noise already measured, target se/S ≈ 0.5%):
+1. **Gate.** G at c = 4, pooled over x, agrees with 0.162 ± 0.023 within 2σ combined. If
+   not, the zig-zag has another cause and the plan is wrong: STOP.
+2. G_x(4) agrees across the three x within 2σ of the pooled value (finite-size scaling).
+3. cv²·L^dim flat across c within ±25% at each x (d = 2 measured 5.7, 6.7, 7.3·10⁴). It is
+   the cost of a fixed relative precision, so a failure is a finding, not a stop.
+4. Parity: L = 43, 45 as smooth as their neighbour, by the second difference and by
+   residuals from the sweep's quadratic fit, both within 2σ. If not, a √2 grid uses even L.
+
+*T4.1, the ω₁ pilot* (`recipes/samples_pilot_gsusc_L_d4.json`, L = 8…128, neyman
+4.35·10¹¹ sites per replicate, 8 replicates, seed 2026092202):
+- local slopes change sign between successive windows nowhere by more than 2σ (the old
+  pilot did at 5–31σ);
+- the one-correction fit converges with χ²/dof ≲ 2 and se(ω₁) < ω₁/2;
+- ω_x = ν_box·ω_L is reported beside Δ₁ ≈ 0.77 (reporting only, ground rule 4).
+
+*T4.2, γ production* (`autopilot.py`, 2^k grid, seed 2026092203): both gates pass without
+`--force`, and the report gives γ_susc = ν_box·γ_L with its eq. (720) interval, compared
+with 1.430(6) only at reporting time.
+
+*Not a test of the ladder:* the plan's "budget 1.2·10⁹ sites" is the x-ladder recipe's
+budget in x^d units (d = 2.68), which is 4.35·10¹¹ actual sites per replicate. The L recipe
+states its budget in L⁴ units, so 4.35·10¹¹ reproduces the old pilot's compute.
