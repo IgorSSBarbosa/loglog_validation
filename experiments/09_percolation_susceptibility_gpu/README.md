@@ -388,3 +388,64 @@ model's own message. The dry run that broke, with `--max-scale 128 --m 5 --repli
 0.030, and a 3.5× larger budget moves the error on the answer in the fourth digit. So T4.2
 runs at 60 min, not the plan's 210 (a departure, made because 210 buys nothing here).
 
+
+### T4.2 — the γ production run on the exact ladder (2026-09-21, PASS as specified; bias-limited)
+
+```bash
+python3 src/study/autopilot.py --study autopilot_gsusc_L_d4 --reuse-pilot pilot_gsusc_L_d4 \
+  --data-root experiments/09_percolation_susceptibility_gpu/data --time 60m --replicates 5 \
+  --seed 2026092203 --m 5 --max-scale 128      # no --force; 62.3 min, predicted 60.0 min
+```
+
+L = 8, 16, 32, 64, 128 (the only legal ladder, T3.3), 5 replicates × 1 831 per scale, closed
+form eq. (523)–(526).
+
+**The acceptance criteria:**
+- *Both autopilot gates pass without `--force`* — **PASS** (`ok: true`, `forced: false`). The
+  B_fs span across ω₁ ± 1 se is 0.0308…0.0422, a factor **1.37** (limit 10×); the curvature
+  test rejects a pure power law (χ² = 4.3·10⁴ / 3 dof), so the ladder does carry the
+  correction the constants were fitted on.
+- *The report gives γ_susc = ν_box·γ_L with its eq. (720) interval* — **done**, below.
+
+| | γ_L (the tools' units) | γ_susc = 0.69 · γ_L |
+|---|---|---|
+| γ̂, eq. (526) | **2.1007** | **1.4495** |
+| eq. (720) bound, 95% | [2.0604, 2.1410], half-width 0.0403 | **[1.4217, 1.4773]**, half-width 0.0278 |
+| Student t(4), 5 replicates, scatter only | [2.0995, 2.1018] | [1.4486, 1.4503] |
+| eq. (232) refit on this data (dof 1) | 2.0745 | 1.4314 |
+
+**Compared with 1.430(6), at reporting time only.** γ̂ − 1.430 = **+0.0195**, 3.2 × the
+literature error. The eq. (720) interval **covers** 1.430 (its lower end is 0.008 below);
+the replicate interval does **not**, as the report itself warns: a finite-size bias
+shifts every replicate the same way. The realized bias is inside the bound: +0.0195 against
+a B_fs of 0.0249 in γ_susc units (0.0361 in γ_L; the planner had predicted 0.0303).
+
+**B_fs dominates: 0.0361 of a 0.0403 half-width; the random term is 0.0033.** The window
+stops at L = 128, so, as written in the plan, this is **T6** (reach past L = 128), not more
+budget: 60 → 210 min moves the predicted error in the fourth digit.
+
+**Against the x-ladder run** (`autopilot_gsusc_d4_210m`, x = 16…256, c = 4):
+
+| | x-ladder | exact L-ladder |
+|---|---|---|
+| γ̂_susc | 1.4297 | 1.4495 |
+| eq. (720) interval | **±50.0** | [1.4217, 1.4773] |
+| gates | failed, **forced** | passed, not forced |
+| constants the plan was built on | ω₁ = 0.025 ± 1.74, a₁ = 3.2 ± 515 (unidentified; reused from `pilot_gsusc_d4`) | ω_L = 2.04 ± 0.07, a₁ = −6.6 ± 1.0 (ω_x = 1.41) |
+
+The old point estimate is closer to 1.430 and is not evidence of a better estimator: its
+interval was useless, because the constants it rested on were unidentified (se larger
+than the value), and it ran only under `--force`. The new run's point estimate is biased by exactly what the bound
+says, and its interval says so. That is the difference the exact ladder buys: constants
+the plan can rest on, an interval that is finite and covers, and a bias one can read off.
+
+**Caveats, stated as they are.**
+- The eq. (720) interval is **incomplete**: the ω₂ piece of B_fs needs φ₊, which is not
+  measured (the report says "a bound missing a term is not a bound").
+- The production ladder's own eq. (232) refit (5 rungs, 4 parameters, 1 dof) returns
+  ω_L = 2.58 (ω_x = 1.78), 8 pilot-se from the pilot's 2.04 ± 0.07. The one-term ω is an
+  effective exponent, so its se understates how well it is known; B_fs from either is
+  ≈ 0.03 in γ_L. The refit's γ_susc = 1.4314 is a different estimator, and its agreement
+  with 1.430 is not the estimator under test.
+- The budget was 60 min, not the plan's 210, because with the ladder capped nothing more
+  was to be gained (T3.3).

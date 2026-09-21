@@ -794,8 +794,18 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         ($\chi^2\approx10/2$)
   - [ ] $\omega_x=\nu_{\rm box}\omega_L=1.41\pm0.05$ vs the expected $\Delta_1\approx0.77$:
         not explained (an analytic $\varepsilon^1$ term would move a one-term fit; not tested)
-  - [ ] **T3.3, blocked on a decision:** `plan.py` proposes $L=256$ (and 512 at the default
-        `--m 6`) at every budget, which the model refuses; no flag reaches the only legal
-        ladder $8..128$. That ladder is bias-limited ($|B_{fs}|\approx0.03$ in $\gamma_L$).
-        Needs a ceiling in the planner (form to be chosen) or T6 (reach past $L=128$)
-  - [ ] T4.2 $\gamma$ production run (`autopilot.py`, seed 2026092203): waits on T3.3
+  - [x] ~~**T3.3** `plan.py` did not know the ladder has a top: at `--m 5` it proposed
+        $L=256$ at every budget (30–210 min), past int32 labels, and no flag reached the one
+        legal ladder $8..128$. Fixed (`c604d5a`): `--max-scale` on `plan.py` and
+        `autopilot.py` (`tuned_allocation(m0_max=)`, absent = 960 cases byte-identical) and a
+        `run.py` pre-flight that draws one sample at the smallest and largest planned scale~~
+  - [x] ~~**T4.2** $\gamma$ production on the exact ladder ($L=8..128$, 5 replicates,
+        60 min, seed 2026092203): both gates pass without `--force`; $\hat\gamma_{\rm susc}=
+        1.4495$, eq. (720) interval $[1.4217,1.4773]$ covers $1.430(6)$~~
+  - [ ] **T6, reach past $L=128$.** The run is bias-limited: $B_{fs}=0.036$ of a $0.040$
+        half-width in $\gamma_L$ (the realized bias is $+0.0195$ in $\gamma_{\rm susc}$, $3.2\times$
+        the literature error) and a bigger budget buys nothing. Needs the streaming
+        frontier sweep (`plans/streaming_percolation.md` §3) or general OLS weights for a
+        $\sqrt2$ grid up to $L=181$; each its own plan
+  - [ ] eq. (720)'s $\omega_2$ piece is missing (needs $\varphi_+$): the interval is a lower
+        estimate of the true bound
