@@ -306,3 +306,63 @@ Verified against planted data before use: `tools/tests/test_box_calibration_anal
 recovers a planted quadratic and its elasticity exactly, gates a wrong G, sees a planted
 parity zig-zag at z ≈ 8, refuses a run in progress, and recovers planted secants where the
 quadratic misfits.
+
+### T4.1 — the ω₁ pilot on the exact ladder (2026-09-21, PASS on all three criteria)
+
+```bash
+python3 src/study/pilot.py -meta experiments/09_percolation_susceptibility_gpu/recipes/samples_pilot_gsusc_L_d4.json \
+  --study pilot_gsusc_L_d4 --data-root experiments/09_percolation_susceptibility_gpu/data --replicates 8   # seed 2026092202, 8 x ~10 min
+python3 experiments/09_percolation_susceptibility_gpu/diagnostics/pilot_local_slopes.py --study pilot_gsusc_L_d4
+```
+
+L = 8, 16, 32, 64, 128 at c = 8 (x = 1 … 55.6), n per replicate 311 440 / 77 860 / 19 465 /
+4 866 / 1 216, 8 replicates, cv = 0.177. Local slopes d log Y / d log L between successive
+rungs, all in L units:
+
+| rungs | 8→16 | 16→32 | 32→64 | 64→128 |
+|---|---|---|---|---|
+| slope | +2.1726 ± 0.0004 | +2.0945 ± 0.0007 | +2.0750 ± 0.0013 | +2.0717 ± 0.0026 |
+| change vs previous | | −0.0781 ± 0.0009 | −0.0195 ± 0.0017 | −0.0032 ± 0.0034 |
+
+- **No zig-zag: PASS.** The slope falls monotonically toward its limit; it never changes
+  direction, at 2σ or at any σ. The x-ladder pilot did at 5–31σ.
+- **Convergence: PASS.** The pooled fit and all 8 per-replicate fits converge;
+  χ² = 0.17 on 1 dof (5 rungs, 4 parameters: a weak test, stated as such);
+  standardized residuals −0.00, +0.02, −0.13, +0.31, −0.25. **se(ω_L)/ω_L = 3.3%** against
+  the < 50% criterion.
+- **Model-free corroboration.** Each doubling of L shrinks the change of slope by 4.0
+  (0.0781 / 0.0195), which is ω_L = log₂ 4.0 = 2.0, independent of the fit's 2.04. The next
+  ratio, 6 ± ≥ 3, is too noisy to say more.
+
+| | value | |
+|---|---|---|
+| ω_L | **2.040 ± 0.068** | per-replicate fits 1.80 2.05 2.47 2.03 1.94 2.07 2.09 1.96 (sd 0.19) |
+| a₁ (L units) | −6.59 ± 1.04 | |
+| γ_L | 2.0693 ± 0.0011 | |
+| d | 4.0964 ± 0.0073 | declared 4; verdict **pass**, no D MISMATCH as on the x-ladder (2.725 vs 2.678, z = 30) |
+
+**Written up, in x units (reporting only, ground rule 4):** ω_x = ν_box·ω_L =
+**1.408 ± 0.047**, against the expected Δ₁ ≈ 0.77. **They do not agree.** The single
+correction fitted here is an effective one: 5 rungs and 1 dof cannot separate an analytic
+term (ω_x = 1) from the confluent one, and an unresolved second correction pushes a
+one-term fit's ω up. So ω_x = 1.41 is *what the ladder shows*, not a measurement of Δ₁.
+γ_susc = ν_box·γ_L = 0.69 × 2.0693 = **1.4278** from this fit alone, next to 1.430(6);
+that number rests on the one-correction model and is not the estimator's answer.
+
+The grid was 2^k, so the √2 fallback was not needed.
+
+### T3.3 — the planner does not know the ladder has a top (2026-09-21, FINDING, unresolved)
+
+`plan.py` dry-run (a copy of the pilot study, nothing written) at `--m 5`, `--replicates 5`:
+**every budget from 30 to 210 min proposes m₀ = 3, scales [16, 32, 64, 128, 256]**. L = 256
+needs (256+1)·256³ = 4.3·10⁹ sites, past int32 labels (2³¹ − 1), so `simulate` refuses it, and
+the default `--m 6` proposes up to L = 512. `plan.py` does not say so, and `run.py` would draw
+the smaller rungs first and fail at 256. `--m` cannot go below 5 (the report's eq. (232)
+refit needs 5 rungs), so no flag reaches the only legal production ladder,
+**8, 16, 32, 64, 128 (m₀ = 2)**.
+
+What that ladder costs in the article's own terms, from `finite_size_bias` (eq. 720's B_fs)
+with this pilot's constants: |B_fs| ≈ 0.03 in γ_L, ≈ 0.02 in γ_susc, 3–4× the literature's
+0.006, against ≈ 0.008 for the impossible [16 … 256]. More compute does not help: the plan
+is bias-limited. That is the plan's own warning ("if B_fs dominates because the window
+stops at L = 128, record that and see T6").
