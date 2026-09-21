@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_L_gpu",
+  "params": {
+    "dim": 4,
+    "eps0": 0.09,
+    "box_factor": 8.0,
+    "nu_box": 0.69,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 435000000000.0
+  },
+  "seed": 2026092202,
+  "_comment": "omega1 pilot for d = 4 on the exact box ladder (plans/exact_box_ladder.md T4.1): the scale is the box side L, L = 2^k so nothing is rounded and L/x^nu_box = 8 on every rung. box_factor 8 = twice the x-ladder's 4 (user, 2026-09-21; the plan's section 3 table: G log(c_x/c) is 8-20x smaller at 2c). L = 2 and 4 are refused (p <= 0 at c = 8), so 8 is the smallest legal power of 2 (x = 1). The budget is in L^4 units: 4.35e11 sites per replicate, the same compute as pilot_gsusc_d4_low, whose recipe budget 1.2e9 was in x^d units (d = 2.68) -- the plan's '1.2e9 sites' would draw a thousandth of it. The scales are L, so omega_L and gamma_L come out in L units; gamma_susc = nu_box * gamma_L is applied when the result is written up, not here."
+}
