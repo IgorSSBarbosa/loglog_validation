@@ -71,22 +71,26 @@ _GPU_WORKING_SET_BYTES = 2 * 1024 ** 3
 _BYTES_PER_SITE = 24
 
 
-def _cupy():
-    """cupy, or a RuntimeError saying which CPU model to use instead."""
+_NAME = "percolation_susceptibility_gpu"
+_CPU_SIBLING = "percolation_susceptibility"
+
+
+def _cupy(name: str = _NAME, cpu: str | None = _CPU_SIBLING):
+    """cupy, or a RuntimeError saying which CPU model to use instead (if any)."""
+    instead = (f'Without a GPU use MODELS["{cpu}"], the same observable on CPU.'
+               if cpu else "This model has no CPU version.")
     try:
         import cupy
     except ImportError as err:
         raise RuntimeError(
-            'MODELS["percolation_susceptibility_gpu"] needs cupy (pip install '
-            'cupy-cuda12x, see requirements.txt). Without a GPU use '
-            'MODELS["percolation_susceptibility"], the same observable on CPU.') from err
+            f'MODELS["{name}"] needs cupy (pip install cupy-cuda12x, see '
+            f'requirements.txt). {instead}') from err
     try:
         cupy.cuda.runtime.getDeviceCount()
     except cupy.cuda.runtime.CUDARuntimeError as err:
         raise RuntimeError(
-            f'MODELS["percolation_susceptibility_gpu"] found no usable CUDA device '
-            f'({err}). Use MODELS["percolation_susceptibility"], the same '
-            f'observable on CPU.') from err
+            f'MODELS["{name}"] found no usable CUDA device ({err}). '
+            f'{instead}') from err
     return cupy
 
 
@@ -118,6 +122,54 @@ def cluster_moment_sum(cp, lab, L: int, roots, moment: int):
     return weight[sel].sum(axis=tuple(range(1, sel.ndim)))
 
 
+def _check_design(dim: int, moment: int, geometry: str) -> tuple[int, int]:
+    """Validated (dim, moment); the checks every caller of the core needs."""
+    if geometry not in GEOMETRIES:
+        raise ValueError(f"unknown geometry {geometry!r}; known: {list(GEOMETRIES)}")
+    dim = _check_dim(dim)
+    moment = int(moment)
+    if not 1 <= moment <= _MAX_MOMENT:
+        raise ValueError(f"moment must be in 1..{_MAX_MOMENT}; got {moment}")
+    return dim, moment
+
+
+def _susceptibility_gpu_at(L: int, p: float, n: int, dim: int, moment: int,
+                           geometry: str, rng: np.random.Generator | None,
+                           *, name: str = _NAME,
+                           cpu: str | None = _CPU_SIBLING) -> np.ndarray:
+    """n samples of Y at an explicit torus side `L` and occupation `p`.
+
+    The draw, and nothing about how (L, p) were chosen: the ladder that maps a
+    rung to (L, p) belongs to the caller. `percolation_susceptibility_gpu`
+    indexes rungs by the distance to criticality x, and
+    models/percolation_susceptibility_L_gpu.py by the box side L. `dim`,
+    `moment` and `geometry` arrive validated (`_check_design`). Consumes
+    exactly one integer of `rng`, as always. `name` and `cpu` only word the
+    error raised without a GPU (`cpu=None`: the caller has no CPU version).
+    """
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"p must be in [0, 1]; got {p}")
+    _check_size(L, dim)
+
+    cp = _cupy(name, cpu)
+    rng = rng if rng is not None else np.random.default_rng()
+    gen = cp.random.default_rng(int(rng.integers(0, 2 ** 63)))
+    rows_per_block = block_rows(L, dim)
+
+    sites = float(L) ** dim
+    out = np.empty(n, dtype=np.float64)
+    offset = 0
+    while offset < n:
+        rows = min(rows_per_block, n - offset)
+        lab = _label_block(cp, _draw_open(cp, gen, rows, L, dim, p), dim)
+        roots = _roots(cp, lab, L, dim, geometry)
+        out[offset:offset + rows] = (
+            cluster_moment_sum(cp, lab, L, roots, moment) / (p * sites)).get()
+        offset += rows
+        del lab, roots
+    return out
+
+
 def percolation_susceptibility_gpu(
     x: int,
     n: int = 1,
@@ -136,39 +188,14 @@ def percolation_susceptibility_gpu(
     Arguments and validation are models/percolation_susceptibility.py's, minus
     `block_n`, which is not a knob here (see block_rows). float64, shape (n,).
     """
-    if geometry not in GEOMETRIES:
-        raise ValueError(f"unknown geometry {geometry!r}; known: {list(GEOMETRIES)}")
-    dim = _check_dim(dim)
-    moment = int(moment)
-    if not 1 <= moment <= _MAX_MOMENT:
-        raise ValueError(f"moment must be in 1..{_MAX_MOMENT}; got {moment}")
+    dim, moment = _check_design(dim, moment, geometry)
     x = int(x)
     if x < 1:
         raise ValueError(f"ladder position x must be >= 1; got {x}")
 
     p = p_at(x, dim, eps0, p_c) if p is None else float(p)
-    if not 0.0 <= p <= 1.0:
-        raise ValueError(f"p must be in [0, 1]; got {p}")
     L = box_side(x, box_factor, nu_box)
-    _check_size(L, dim)
-
-    cp = _cupy()
-    rng = rng if rng is not None else np.random.default_rng()
-    gen = cp.random.default_rng(int(rng.integers(0, 2 ** 63)))
-    rows_per_block = block_rows(L, dim)
-
-    sites = float(L) ** dim
-    out = np.empty(n, dtype=np.float64)
-    offset = 0
-    while offset < n:
-        rows = min(rows_per_block, n - offset)
-        lab = _label_block(cp, _draw_open(cp, gen, rows, L, dim, p), dim)
-        roots = _roots(cp, lab, L, dim, geometry)
-        out[offset:offset + rows] = (
-            cluster_moment_sum(cp, lab, L, roots, moment) / (p * sites)).get()
-        offset += rows
-        del lab, roots
-    return out
+    return _susceptibility_gpu_at(L, p, n, dim, moment, geometry, rng)
 
 
 def simulate(x: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarray:
