@@ -21,6 +21,12 @@ is half a gigabyte per replicate, and nothing downstream needs the draws
 themselves -- report.py works from the summaries, exactly as
 estimate_omega1.py does. Pass --keep-samples when you want them on disk.
 
+The summaries ARE checkpointed: after every replicate the ones drawn so far are
+rewritten to `final_partial.json`, so a long run can be read before it ends
+(`report.py --partial`) and a crash loses at most the replicate in progress.
+They are a few numbers per scale, so this costs nothing in memory or disk --
+it is the raw draws, not the summaries, that `reduce=` exists to discard.
+
 CLI:
     python3 src/study/run.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/run.py --study mystudy --data-root ... --dry-run
@@ -62,6 +68,14 @@ def execute(plan: dict, recipe: dict, sd: Path, *,
     scales, n, R = plan["scales"], plan["n"], plan.get("replicates", 1)
     reps, seeds = [], []
     t0 = time.perf_counter()
+
+    def result():
+        return {"replicates": len(reps), "scales": scales, "n": n, "m0": plan["m0"],
+                "rho": plan["rho"], "m": plan["m"], "model": model,
+                "params": params, "per_replicate": reps, "seeds": seeds,
+                "elapsed_seconds": time.perf_counter() - t0,
+                "samples_kept": bool(keep_samples)}
+
     for k, ss in enumerate(spawn(seed, R)):
         if not quiet:
             P.say(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...")
@@ -80,14 +94,13 @@ def execute(plan: dict, recipe: dict, sd: Path, *,
                              on_scale_start=on_scale_start)
         reps.append(replicate_summary(stats, scales))
         seeds.append(seed_record(ss))
+        write_artifact(sd, "final_partial",
+                       {**result(), "replicates_planned": R, "plan": plan},
+                       produced_by="src/study/run.py")
         if not quiet:
             P.say(f"    replicate {k + 1}/{R} drawn in "
                   f"{time.perf_counter() - t:.1f}s")
-    return {"replicates": R, "scales": scales, "n": n, "m0": plan["m0"],
-            "rho": plan["rho"], "m": plan["m"], "model": model,
-            "params": params, "per_replicate": reps, "seeds": seeds,
-            "elapsed_seconds": time.perf_counter() - t0,
-            "samples_kept": bool(keep_samples)}
+    return result()
 
 
 def _load_plan_recipe(plan: dict, sd: Path, study: str, data_root) -> dict:

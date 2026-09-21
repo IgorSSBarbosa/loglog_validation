@@ -27,6 +27,7 @@ says so. `python3 tools/artifacts.py --migrate <root>` renames them in place.
 from __future__ import annotations
 
 import json
+import os
 import time
 import warnings
 from pathlib import Path
@@ -43,6 +44,9 @@ ARTIFACTS: dict[str, str] = {
     "pilot":            "pilot.json",             # src/study/pilot.py
     "plan":             "plan.json",              # src/study/plan.py
     "final":            "final.json",             # src/study/run.py
+    "final_partial":    "final_partial.json",     # src/study/run.py -- the replicates
+                                                  # drawn so far, rewritten after each
+                                                  # one; report.py --partial reads it
     "answer":           "answer.json",            # src/study/report.py -- gamma +/- se
     "autopilot":        "autopilot.json",         # src/study/autopilot.py -- the
                                                   # decisions taken between the
@@ -142,7 +146,12 @@ def write_artifact(run_dir, kind: str, payload: dict, *,
         body.setdefault("produced_by", produced_by)
     if recipe is not None:
         body.setdefault("recipe", str(recipe))
-    path.write_text(json.dumps(body, indent=2, sort_keys=True))
+    # Written aside and renamed into place: `final_partial` is read while a run
+    # is still rewriting it (report.py --partial, from another host over NFS),
+    # and a reader must see the old file or the new one, never half of either.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(body, indent=2, sort_keys=True))
+    os.replace(tmp, path)
     return path
 
 

@@ -165,6 +165,7 @@ python3 src/study/run.py --study mystudy --data-root $D
 
 # 4. the deliverable
 python3 src/study/report.py --study mystudy --data-root $D --budget-analysis
+python3 src/study/report.py --study mystudy --data-root $D --partial   # mid-run: prints only
 ```
 
 Each step reads the study directory and writes back to it, so **no constant is
@@ -181,6 +182,7 @@ experiments/01_srw/data/mystudy/
   constants.json   every meta-constant: value, error, provenance
   pilot.json       the pilot's draws, fit, cost probe and throughput
   plan.json        the accepted allocation (and the recipe's path)
+  final_partial.json  the replicates drawn so far, rewritten after each one
   final.json       the long run's per-scale summaries and seeds
   answer.json      gamma-hat and its interval, machine-readable
   report.md        gamma +/- error + the log-log plot     <- the deliverable

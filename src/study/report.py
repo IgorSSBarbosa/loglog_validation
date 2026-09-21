@@ -45,6 +45,12 @@ statement about the pilot, not about gamma.
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/report.py --study mystudy --data-root ... --budget-analysis
+    python3 src/study/report.py --study mystudy --data-root ... --partial
+
+--partial reads `final_partial.json`, the replicates a run still in progress
+has finished, and only PRINTS the answer: report.md, answer.json and plot.png
+are the finished run's and are not written. It is safe while run.py or
+autopilot.py is drawing -- it reads one file and touches nothing else.
 """
 
 from __future__ import annotations
@@ -543,9 +549,29 @@ def _main(argv=None) -> None:
     p.add_argument("--level", type=float, default=LEVEL)
     p.add_argument("--budget-analysis", action="store_true",
                    help="also write budget_analysis.md: predicted vs actual cost")
+    p.add_argument("--partial", action="store_true",
+                   help="a preliminary answer from the replicates a run in progress "
+                        "has finished (final_partial.json); prints only, writes nothing")
     a = p.parse_args(argv)
 
     sd = Path(a.data_root) / a.study
+    if a.partial:
+        pj = artifact_path(sd, "final_partial")
+        if not pj.exists():
+            raise SystemExit(
+                f"no final_partial.json in {sd}\n"
+                f"  It is written when the run's first replicate finishes. A run "
+                f"started\n  before checkpointing existed never writes one.")
+        partial = json.loads(pj.read_text())
+        done, planned = partial["replicates"], partial.get("replicates_planned", "?")
+        print(f"PRELIMINARY -- {done} of {planned} replicate(s), "
+              f"checkpoint written {partial.get('created', '?')}")
+        if done < 2:
+            print("  one replicate has no spread: the replicate interval is "
+                  "unavailable until the second finishes")
+        print_answer(analyse(partial, level=a.level))
+        return
+
     fj = artifact_path(sd, "final")
     if not fj.exists():
         raise SystemExit(
