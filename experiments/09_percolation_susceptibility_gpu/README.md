@@ -203,7 +203,7 @@ failed while the production run at x = 16…256 barely noticed.
 | | |
 |---|---|
 | model | new, `percolation_susceptibility_L_gpu`; the recipe's scale is the integer L; GPU only |
-| box factor | **c = 8**, twice the x-ladder's 4 (plan §3's table: the drift is 8–20× smaller at 2c) |
+| box factor | **c = 8**, twice the x-ladder's 4 (plan §3's noiseless table: on the exact ladder the worst local-slope error falls 3.6–10× from c to 2c, 8.9→0.9, 19.1→5.3, 50.8→6.2 in units of 10⁻⁴) |
 | ν_box | 0.69, unchanged (above ν = 0.6845(23)'s 2σ upper end 0.6891, as the model's upper-bound rule requires) |
 | grid | 2^k first. If the ω₁ pilot fails to converge, the √2 grid; the rounded grid feeds only fits on the actual log L, never `gamma_closed_form` (which was deliberately left as is) |
 | units | the tools report γ_L, ω_L; γ_susc = ν_box·γ_L and ω_x = ν_box·ω_L are written up here, not in a driver (no `ModelSpec` field) |
