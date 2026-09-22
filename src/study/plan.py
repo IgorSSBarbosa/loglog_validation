@@ -51,6 +51,7 @@ from tools.artifacts import (  # noqa: E402
 )
 from tools.constants import format_table, load, require  # noqa: E402
 from tools.cost_model import cost_unit_ratio  # noqa: E402
+from tools.loglog_plot import fit_plot  # noqa: E402
 from tools.models import get_model  # noqa: E402
 
 from src.budget.allocation_table import human_time, input_sensitivity  # noqa: E402
@@ -313,6 +314,30 @@ def write_final_recipe(data_root, study: str, source: dict, plan: dict) -> Path:
     return path
 
 
+def write_plan_fit_plot(sd: Path, pilot: dict, consts, plan: dict, rho: float) -> Path | None:
+    """plan_fit.png: the pilot's eq. (232) fit, extended over the planned ladder.
+
+    The plan is built on omega1 and a1 and draws nowhere near the pilot's own
+    rungs once the budget is large, so what it rests on is an extrapolation of
+    this curve. Drawn, the planned rungs sit on the part of it with no data
+    under it, and how much correction is left there is the bias the plan is
+    predicting. The curve is the pilot's whole fit (gamma and a0 included);
+    the omega1 error bar is the constants' own.
+    """
+    missing = [k for k in ("scales", "y_bar", "sigma_log", "direct_fit") if k not in pilot]
+    if missing:
+        print(f"\nno plan_fit.png: pilot.json has no {', '.join(missing)}")
+        return None
+    fig = fit_plot(pilot["scales"], pilot["y_bar"], pilot["sigma_log"], pilot["direct_fit"],
+                   rho=rho, planned=plan["scales"], omega1_se=consts["omega1"].se,
+                   title=f"{pilot.get('recipe', {}).get('model', sd.name)} plan  --  "
+                         f"m0 = {plan['m0']}, n = {plan['n']:,} per scale, "
+                         f"pilot fit ({pilot.get('replicates', '?')} replicates)")
+    out = sd / "plan_fit.png"
+    fig.savefig(out, dpi=150)
+    return out
+
+
 def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--study", required=True)
@@ -340,6 +365,11 @@ def _main(argv=None) -> None:
     p.add_argument("--throughput", type=float, default=None,
                    help="steps/second; the pilot's measured one when absent (its "
                         "own clock, or for a batched_cost model its cost probe)")
+    p.add_argument("--plot", action="store_true",
+                   help="also write plan_fit.png: the pilot's eq. (232) fit, "
+                        "f(i) = gamma*i + a0 + a1*rho**(-omega1*i), extended over "
+                        "the planned ladder. --accept writes it too; a bare "
+                        "proposal writes nothing unless asked")
     p.add_argument("--accept", action="store_true",
                    help="write plan.json so run.py will execute it")
     a = p.parse_args(argv)
@@ -480,6 +510,11 @@ def _main(argv=None) -> None:
               f"{r['m0']:>4} {r['n']:>14,}{r['rmse']:>12.3e}{r['bias']:>11.3e}"
               f"{r['sd']:>11.3e}   {r['scales'][0]}..{r['scales'][-1]}"
               f"{'   <-- the plan above' if r['chosen'] else ''}")
+
+    if a.plot or a.accept:
+        fig_path = write_plan_fit_plot(sd, pilot, consts, pl, a.rho)
+        if fig_path:
+            print(f"\nthe fit and the planned ladder: {fig_path}")
 
     if a.accept:
         if "recipe" not in pilot:

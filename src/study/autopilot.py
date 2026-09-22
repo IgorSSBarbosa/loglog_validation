@@ -796,13 +796,14 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     with P.phase("writing report.md and details.md"):
         report_mod.write_report(sd, res, final, consts, plan)
         report_mod.write_details(sd, res, final, consts, plan)
-    with P.phase("rendering plot.png (first matplotlib import is the slow part)"):
+    with P.phase("rendering plot.png and fit.png (first matplotlib import is the slow part)"):
         fig = report_mod._plot(sd, res, final)
+        fit_fig = report_mod._plot_fit(sd, res, final)
     write_artifact(sd, "answer", res, produced_by="src/study/autopilot.py")
 
     log("")
     report_mod.print_answer(res, log=log)
-    log(f"\n  {sd / 'report.md'}\n  {sd / 'details.md'}\n  {fig}")
+    log(f"\n  {sd / 'report.md'}\n  {sd / 'details.md'}\n  {fig}\n  {fit_fig}")
 
     rec = {"ok": True, "drawn": True, "forced": bool(forced),
            "rounds": rounds, "ladder": lc,

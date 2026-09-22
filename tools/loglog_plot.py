@@ -123,6 +123,113 @@ def loglog_plot(
     return ax
 
 
+def fit_plot(
+    scales: Sequence[float],
+    y_bar: Sequence[float],
+    sigma_log: Sequence[float],
+    fit: Mapping[str, float],
+    *,
+    rho: float = 2.0,
+    planned: Sequence[float] | None = None,
+    omega1_se: float | None = None,
+    title: str | None = None,
+):
+    """The eq. (232) fit drawn in the rung index, f(i) = g*i + a0 + a1*rho**(-w*i).
+
+    `loglog_plot` shows Y_bar against the scale on log-log axes, where a fit
+    that bends by 1% is indistinguishable from a straight line. This puts the
+    same data on the axes the fit is written in. With i = log_rho(scale) and
+    y = log_rho(Y_bar), eq. (232) -- ln Y = ln a0 + g ln s + a1 s**-w, s = rho**i --
+    is exactly
+
+        y = f(i) = g*i + a0' + a1' * rho**(-w*i),   a0' = ln(a0)/ln(rho),
+                                                    a1' = a1/ln(rho),
+
+    so the slope of the asymptote IS gamma and the correction is a plain
+    geometric decay in i. `fit` is `tools.correction.fit_correction`'s dict
+    (multiplicative a0, natural-log a1); the primes are applied here.
+
+    Two panels, because the correction is a fraction of a percent of the
+    range of y and cannot be seen in one. Top: the data, f, and its asymptote
+    g*i + a0'. Bottom: the same with the asymptote subtracted, so what is left
+    is the correction a1'*rho**(-w*i) against the data's residual from it.
+    A gap between them is misfit; both being flat at zero on the right is a
+    ladder that has reached the asymptote.
+
+    `planned` are scales a plan intends to draw, shaded and the curve extended
+    over them: the fit is extrapolated there, not measured, and the chart says
+    so by having no points on it. `sigma_log` is the standard error of
+    ln(Y_bar), as in `tools.correction.fit_correction`; `omega1_se`, if given,
+    is printed with omega1.
+
+    Returns a matplotlib Figure. Built without pyplot, so no global backend is
+    touched; the caller saves it.
+    """
+    from math import log
+
+    from matplotlib.figure import Figure
+
+    s = np.asarray(scales, dtype=float)
+    ln_rho = log(rho)
+    i = np.log(s) / ln_rho
+    y = np.log(np.asarray(y_bar, dtype=float)) / ln_rho
+    se = np.asarray(sigma_log, dtype=float) / ln_rho
+
+    g, w = float(fit["gamma"]), float(fit["omega1"])
+    a0 = log(float(fit["a0"])) / ln_rho
+    a1 = float(fit["a1"]) / ln_rho
+
+    def asymptote(t):
+        return g * t + a0
+
+    def correction(t):
+        return a1 * rho ** (-w * np.asarray(t, dtype=float))
+
+    rungs = i if planned is None else np.concatenate([i, np.log(np.asarray(planned, float)) / ln_rho])
+    fine = np.linspace(rungs.min() - 0.3, rungs.max() + 0.3, 300)
+
+    fig = Figure(figsize=(6.6, 6.2), layout="constrained")
+    top, bot = fig.subplots(2, 1, sharex=True, height_ratios=(3, 2))
+
+    if planned is not None:
+        p = np.log(np.asarray(planned, dtype=float)) / ln_rho
+        for ax in (top, bot):
+            ax.axvspan(p.min() - 0.15, p.max() + 0.15, color=_GRIDLINE, alpha=0.5, lw=0,
+                       label="planned ladder" if ax is top else None)
+
+    omega_txt = rf"$\omega_1={w:.3f}$" if omega1_se is None else rf"$\omega_1={w:.3f}\pm{omega1_se:.3f}$"
+    top.errorbar(i, y, yerr=se, fmt="o", capsize=3, color=_BLUE, label=r"$\log_\rho\overline{Y}\;\pm$ 1 SE")
+    top.plot(fine, asymptote(fine) + correction(fine), "-", color=_ORANGE, lw=2,
+             label=rf"$f(i)$: $\gamma={g:.4f}$, {omega_txt}")
+    top.plot(fine, asymptote(fine), "--", color=_MUTED, lw=1.5, label=r"asymptote $\gamma i + a_0$")
+    top.set_ylabel(r"$\log_\rho\overline{Y}_i$")
+    top.legend(fontsize=8, loc="upper left")
+
+    bot.errorbar(i, y - asymptote(i), yerr=se, fmt="o", capsize=3, color=_BLUE)
+    bot.plot(fine, correction(fine), "-", color=_ORANGE, lw=2, label=r"$a_1\rho^{-\omega_1 i}$")
+    bot.axhline(0.0, color=_MUTED, lw=1.5, ls="--")
+    bot.set_ylabel(r"$\log_\rho\overline{Y}_i-(\gamma i+a_0)$")
+    bot.legend(fontsize=8, loc="lower right")
+
+    # The rung index and the scale it stands for: an axis of bare i would make
+    # the reader convert back to the L or x the run is actually described in.
+    ticks = np.unique(np.round(rungs, 6))
+    bot.set_xticks(ticks)
+    bot.set_xticklabels([f"{t:.4g}\n{rho ** t:.4g}" for t in ticks])
+    bot.set_xlabel(r"$i=\log_\rho(\mathrm{scale})$   (scale below)")
+    for ax in (top, bot):
+        ax.grid(True, which="both", ls="-", lw=0.6, color=_GRIDLINE, alpha=0.8)
+
+    # Four free parameters: on a five-rung ladder the curve passes near every
+    # point by construction, so say how many degrees of freedom judge it.
+    head = (r"$f(i)=\gamma i+a_0+a_1\rho^{-\omega_1 i}$" + rf",  $\rho={rho:g}$,  "
+            f"{len(s)} points, 4 free parameters")
+    if not fit.get("converged", True):
+        head += "   -- FIT DID NOT CONVERGE"
+    fig.suptitle(f"{title}\n{head}" if title else head, fontsize=10)
+    return fig
+
+
 def estimates_plot(results: dict, *, ax=None):
     """Plot the gamma-hat estimates from `tools.loglog.compare_methods`'s output.
 

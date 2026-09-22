@@ -73,7 +73,7 @@ from tools.constants import format_table, load, measured  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
 from tools.coverage import interval  # noqa: E402
 from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
-from tools.loglog_plot import loglog_plot  # noqa: E402
+from tools.loglog_plot import fit_plot, loglog_plot  # noqa: E402
 from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
 from tools.wilson import (  # noqa: E402
     finite_size_bias, sigma_se, wilson_interval)
@@ -324,6 +324,10 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
 
     lines += [
         "![log-log](plot.png)", "",
+        "The eq. (232) fit behind `omega1` and `a1`, drawn in the rung index. The "
+        "line above is the eq. (526) estimate; this is the four-parameter curve "
+        "the finite-size bias is read from:", "",
+        "![eq. (232) fit](fit.png)", "",
         "## How it was measured", "",
         f"| | |", "|---|---|",
         f"| estimator | article eq. (523)-(526), closed-form weights |",
@@ -512,6 +516,23 @@ def _plot(sd: Path, res: dict, final: dict) -> Path:
     return out
 
 
+def _plot_fit(sd: Path, res: dict, final: dict) -> Path:
+    """The pooled eq. (232) refit, drawn as f(i) = gamma*i + a0 + a1*rho**(-omega1*i).
+
+    `_plot` draws the REPORTED gamma (eq. 526), which does not depend on this
+    fit at all; this is the fit that `omega1`, `a1` and the eq. (720) bias term
+    come from, so the reader can see what those numbers are a fit OF. Its gamma
+    is the fit's, not the reported one, and the two are allowed to differ.
+    """
+    fig = fit_plot(res["scales"], res["y_bar"], res["sigma_log"], res["fit"],
+                   rho=res["rho"],
+                   title=f"{final['model']}  --  {res['replicates']} replicate(s), "
+                         f"n = {res['n']:,} per scale")
+    out = sd / "fit.png"
+    fig.savefig(out, dpi=150)
+    return out
+
+
 def print_answer(res: dict, *, log=print) -> None:
     """The console answer: eq. (720) first, the scatter interval below it.
 
@@ -585,13 +606,14 @@ def _main(argv=None) -> None:
     res = analyse(final, level=a.level)
 
     fig_path = _plot(sd, res, final)
+    fit_path = _plot_fit(sd, res, final)
 
     write_artifact(sd, "answer", res, produced_by="src/study/report.py")
     rp = write_report(sd, res, final, consts, plan)
     dp = write_details(sd, res, final, consts, plan)
 
     print_answer(res)
-    print(f"\n  {rp}\n  {dp}\n  {fig_path}")
+    print(f"\n  {rp}\n  {dp}\n  {fig_path}\n  {fit_path}")
     if a.budget_analysis:
         print(f"  {write_budget_analysis(sd, res, final, plan)}")
 

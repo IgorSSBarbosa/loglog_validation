@@ -50,6 +50,7 @@ from tools.constants import (  # noqa: E402
     Constant, format_table, load as load_constants, measured, override, save)
 from tools import cost_cache  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
+from tools.loglog_plot import fit_plot  # noqa: E402
 from tools.cost_model import (  # noqa: E402
     PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
     estimate_cost_affine, fit_cost_probe, probe_batched, probe_window)
@@ -124,6 +125,20 @@ def _refuse_starved_scales(scales, n) -> None:
         f"    - drop the smallest scales (they cost almost nothing and get almost\n"
         f"      nothing under the snr rule, which spends where the correction is)\n"
         f'    - set "min_n": 2, accepting that it overspends the stated budget')
+
+
+def ladder_ratio(scales) -> float | None:
+    """The common ratio of a geometric ladder, or None when it is not one.
+
+    The pilot is not told rho -- it fits eq. (232) in the scale itself -- but
+    the fit graph is drawn in the rung index i = log_rho(scale), which needs
+    it. Read off the ladder rather than asked for, and refused (None) where the
+    rungs are not evenly spaced in the log, since a rho guessed there would
+    label the axis with rungs that are not the ladder's.
+    """
+    q = np.asarray(scales, float)
+    q = q[1:] / q[:-1]
+    return float(q[0]) if q.size and np.allclose(q, q[0], rtol=1e-3) else None
 
 
 def _pilot_replicate(model, params, scales, n, seed_seq, on_scale=None,
@@ -853,10 +868,34 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         "drawn_seconds": drawn_seconds,
         "drawn_steps": drawn_steps, "d_warnings": d_warnings,
     }, produced_by="src/study/pilot.py")
-    return {"constants": consts, "fit": fit, "cost": cost, "replicates": R,
+    fit_png = write_pilot_fit_plot(sd, model, scales, counts, R, y_pool, sig_pool,
+                                   fit, consts["omega1"].se)
+    return {"fit_plot": fit_png, "constants": consts, "fit": fit, "cost": cost, "replicates": R,
             "reps": reps, "cv_per_scale": cv_per_scale, "throughput": throughput,
             "throughput_source": throughput_source,
             "d_check": d_check, "d_warnings": d_warnings}
+
+
+def write_pilot_fit_plot(sd: Path, model: str, scales, counts, R: int, y_pool,
+                         sig_pool, fit: dict, omega1_se: float | None) -> Path | None:
+    """pilot_fit.png: the pooled eq. (232) fit the pilot's constants come from.
+
+    omega1 and a1 are the two numbers every later step plans on, and until now
+    they were a line in a table. Drawn, a ladder whose correction is not in
+    the data (a flat bottom panel) or whose fit is four parameters through five
+    points is visible before a budget is spent on it.
+    """
+    rho = ladder_ratio(scales)
+    if rho is None:
+        P.say(f"  no pilot_fit.png: scales {list(scales)} are not a geometric ladder")
+        return None
+    n_txt = (f"n = {int(counts[0]):,} per scale" if len(set(counts)) == 1 else
+             f"n = {int(counts[0]):,} .. {int(counts[-1]):,} per scale")
+    fig = fit_plot(scales, y_pool, sig_pool, fit, rho=rho, omega1_se=omega1_se,
+                   title=f"{model} pilot  --  {R} replicate(s), {n_txt}")
+    out = sd / "pilot_fit.png"
+    fig.savefig(out, dpi=150)
+    return out
 
 
 def _main(argv=None) -> None:
@@ -963,6 +1002,8 @@ def _main(argv=None) -> None:
               f"(this machine, from {r['throughput_source']})")
     print(f"\ngamma from the pilot itself: {r['fit']['gamma']:.4f}  "
           f"(indicative -- the plan exists to measure it properly)")
+    if r["fit_plot"]:
+        print(f"the eq. (232) fit, drawn: {r['fit_plot']}")
 
     print(f"\nnext: python3 src/study/plan.py --study {a.study} --data-root {root}")
     # Last, and on stderr, so a mismatch is the final thing on screen rather
