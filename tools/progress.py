@@ -40,6 +40,14 @@ VERBOSE = False
 #: next thing to write can close it first rather than landing mid-line.
 _OPEN = [False]
 
+#: tqdm's class, once `bar` has imported it. A bar leaves its line without a
+#: newline, so a plain print while it is live lands ON that line, commits it
+#: to the scrollback, and the next refresh draws a fresh bar underneath -- one
+#: frozen copy of the bar per message. `tqdm.write` clears the live bars,
+#: prints, and redraws them; with none live it is a plain write, so once
+#: tqdm is loaded every line can go through it.
+_TQDM = [None]
+
 
 def set_verbose(flag: bool) -> None:
     global VERBOSE
@@ -55,7 +63,10 @@ def _close_line() -> None:
 def say(msg: str = "") -> None:
     """One line of progress. Always printed."""
     _close_line()
-    print(msg, file=sys.stderr, flush=True)
+    if _TQDM[0] is not None:
+        _TQDM[0].write(msg, file=sys.stderr)
+    else:
+        print(msg, file=sys.stderr, flush=True)
 
 
 def detail(msg: str) -> None:
@@ -128,6 +139,7 @@ def bar(total, desc: str, *, unit: str = "step", enabled: bool = True,
     except ImportError:
         return _Null()
     _close_line()
+    _TQDM[0] = tqdm
     return tqdm(total=total, unit=unit, unit_scale=unit_scale, leave=leave,
                 dynamic_ncols=True, file=sys.stderr, desc=desc,
                 bar_format="  {l_bar}{bar}| {n_fmt}/{total_fmt} "
