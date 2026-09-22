@@ -23,6 +23,7 @@ from typing import Callable
 
 import numpy as np
 
+from models import erw as model_erw
 from models import percolation2d as model_percolation2d
 from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
@@ -139,6 +140,22 @@ MODELS: dict[str, ModelSpec] = {
         # covers only the densities where the speed is non-zero, and alpha =
         # 1/2 with symmetric drifts is exactly the zero-speed case they leave
         # open. See experiments/02_rwre/README.md.
+    ),
+    "erw": ModelSpec(
+        simulate=model_erw.simulate,
+        cost_hint=model_erw.cost_hint,
+        # srw's observable Y_k = |S_k| for a walk with complete memory: each
+        # step copies (w.p. params["p"]) or flips a uniformly chosen past
+        # step (Bercu, J. Phys. A 51 (2018) 015201, eq. 2.1). At p = 1/2 this
+        # IS srw in law, so experiments/01_srw is again a control arm.
+        #
+        # cost_hint(i) = i, d = 1 -- up to the log log i doubling passes
+        # models/erw.py's docstring measures as flat per step.
+        #
+        # No target_fn/true_gamma_key. gamma IS known here -- 1/2 below
+        # p = 3/4, 2p - 1 above (Bercu eqs. 3.5, 3.11-3.12), with a log at
+        # p = 3/4 that eq. (232) cannot represent -- and, as for srw, it stays
+        # out of the code path and goes in the experiment README instead.
     ),
     "percolation2d": ModelSpec(
         simulate=model_percolation2d.simulate,

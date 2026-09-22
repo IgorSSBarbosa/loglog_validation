@@ -1425,11 +1425,11 @@ def sec_models_registry(a: Audit) -> None:
     # the high-dimensional lattice; it had stood at the original four since,
     # and failed silently in the audit until 2026-09-14. Grown again
     # 2026-09-16 with the four *_gpu models and rwre, which experiments 07-10
-    # registered without updating this list, and 2026-09-21 with
-    # percolation_susceptibility_L_gpu.
+    # registered without updating this list, 2026-09-21 with
+    # percolation_susceptibility_L_gpu, and 2026-09-22 with erw.
     a.check("every registered model is one we meant to register",
             lambda: sorted(MODELS),
-            expect=["percolation2d", "percolation2d_gpu", "percolation_susceptibility",
+            expect=["erw", "percolation2d", "percolation2d_gpu", "percolation_susceptibility",
                     "percolation_susceptibility_L_gpu",
                     "percolation_susceptibility_gpu", "percolation_tau",
                     "percolation_tau_gpu", "percolation_tau_zd", "percolation_zd",
@@ -1641,6 +1641,66 @@ def sec_rwre(a: Audit) -> None:
             4096.0 * rwre_mod.window_width(4096), 0)
     a.close("gamma_eff = env_sweeps * swap_prob / 2 = 1 by default",
             lambda: rwre_mod.gamma_eff({}), 1.0, 0)
+
+
+def sec_erw(a: Audit) -> None:
+    """models/erw -- |S_k| of the elephant random walk -- srw when p = 1/2"""
+    from models import erw as erw_mod
+
+    a.begin("models/erw", "|S_k| of the elephant random walk -- srw when p = 1/2")
+
+    rng = np.random.default_rng(0)
+    y = erw_mod.simulate(16, 20_000, {"p": 0.9}, rng)
+    a.check("simulate returns n non-negative integers",
+            lambda: y.shape == (20_000,) and y.min() >= 0)
+    a.check("|S_k| has the parity of k and never exceeds k",
+            lambda: bool(np.all(y % 2 == 16 % 2)) and int(y.max()) <= 16)
+
+    a.check("p = 1 repeats the first step: |S_k| = k",
+            lambda: set(np.unique(erw_mod.simulate(20, 50, {"p": 1.0}, rng))),
+            expect={20})
+    a.check("p = 0 undoes the first step: S_2 = 0",
+            lambda: set(np.unique(erw_mod.walk(2, 50, 0.0, rng))), expect={0})
+
+    # Bercu eq. (A.3) in expectation: E S_{n+1}^2 = 1 + (1 + 2(2p-1)/n) E S_n^2.
+    second = 1.0
+    for step in range(1, 64):
+        second = 1.0 + (1.0 + 2.0 * (2 * 0.9 - 1) / step) * second
+    sq = erw_mod.walk(64, 20_000, 0.9, np.random.default_rng(1)).astype(float) ** 2
+    a.close("E S_k^2 matches Bercu's eq. (A.3) recursion (p = 0.9, k = 64)",
+            lambda: float(sq.mean()), second,
+            4 * float(sq.std(ddof=1)) / math.sqrt(20_000))
+
+    signed = erw_mod.walk(64, 20_000, 0.8, np.random.default_rng(2))
+    a.close("E S_k = 0 for every p -- the fair first step's zero-check",
+            lambda: float(signed.mean()), 0.0,
+            4 * float(signed.std(ddof=1)) / math.sqrt(20_000))
+
+    half = erw_mod.simulate(64, 20_000, {"p": 0.5}, np.random.default_rng(3))
+    a.close("p = 1/2 reproduces E|S_64| = 6.3582 (srw's exact mean)",
+            lambda: float(half.mean()), 6.358209,
+            4 * float(half.std(ddof=1)) / math.sqrt(20_000))
+
+    a.check("any block_n gives the same draws",
+            lambda: np.array_equal(
+                erw_mod.walk(33, 40, 0.7, np.random.default_rng(4), block_n=40),
+                erw_mod.walk(33, 40, 0.7, np.random.default_rng(4), block_n=3)))
+    a.check("n = 1 works (what the cost probe calls)",
+            lambda: erw_mod.simulate(64, 1, {"p": 0.3}, rng).shape, expect=(1,))
+    a.check("n = 0 returns an empty array rather than raising",
+            lambda: erw_mod.simulate(8, 0, {"p": 0.3}, rng).shape, expect=(0,))
+    a.check("an unseeded call still works (fresh entropy)",
+            lambda: erw_mod.walk(8, 3, 0.3).shape, expect=(3,))
+    a.raises("a missing p is rejected -- there is no default", ValueError,
+             lambda: erw_mod.simulate(8, 1, {}, rng))
+    a.raises("an unknown param is rejected by name", ValueError,
+             lambda: erw_mod.simulate(8, 1, {"p": 0.5, "q": 0.5}, rng))
+    a.raises("p outside [0, 1] is rejected", ValueError,
+             lambda: erw_mod.simulate(8, 1, {"p": 1.5}, rng))
+    a.raises("k = 0 is rejected", ValueError,
+             lambda: erw_mod.simulate(0, 1, {"p": 0.5}, rng))
+    a.close("cost_hint is exactly i -- declared, not fitted",
+            lambda: erw_mod.cost_hint(4096), 4096.0, 0)
 
 
 def sec_percolation2d(a: Audit) -> None:
@@ -3786,7 +3846,7 @@ STAGES: dict[str, list] = {
     "tools": [sec_rng, sec_constants, sec_summary, sec_loglog, sec_correction,
               sec_coverage, sec_wilson, sec_allocation, sec_cost_model,
               sec_cost_cache, sec_artifacts, sec_persistence, sec_models_registry, sec_loglog_plot],
-    "models": [sec_srw, sec_rwre, sec_percolation2d, sec_percolation_tau,
+    "models": [sec_srw, sec_rwre, sec_erw, sec_percolation2d, sec_percolation_tau,
                sec_percolation_zd, sec_percolation_tau_zd,
                sec_percolation_susceptibility_L_gpu, sec_synthetic],
     "src": [sec_generate, sec_estimate, sec_budget, sec_report, sec_study],

@@ -516,6 +516,24 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact
+- [ ] ERW — the elephant random walk (Bercu, J. Phys. A 51 (2018) 015201)
+  - [x] ~~Model: `models/erw.py`, `MODELS["erw"]`. $Y_k=\lvert S_k\rvert$; each step
+        copies (w.p. `p`, **required**) or flips a uniformly chosen past step, first step
+        fair. The literal eq. (2.1) rule, drawn up front as a random recursive tree and
+        resolved by pointer doubling; keeps the blocking clause verbatim.
+        $\mathrm{cost}(i)=i$, $d=1$ up to $\log\log i$. No `target_fn`: $\gamma=1/2$
+        ($p<3/4$, eq. 3.5), $\sqrt{n\log n}$ ($p=3/4$, eq. 3.10), $2p-1$ ($p>3/4$,
+        eqs. 3.11–3.12) are acceptance criteria for the experiment, not inputs. Verified:
+        `tools/tests/test_erw.py`, 92 cases (exhaustive enumeration of eq. 2.1 at
+        $k\le7$, the eq. 2.2 chain's exact law by DP, eq. A.3's second moment, a Markov
+        reimplementation, `srw` at $p=1/2$, the contract), plus three broken samplers
+        that each fail; `exercise_all.py`'s `sec_erw`, 16 checks. $n=1$ cost probe
+        passed twice, $\hat d=1.093\pm0.029$ and $0.924\pm0.031$ — the small-$k$
+        overhead does not reproduce between runs; see `models/README.md`~~
+  - [ ] The experiment: `experiments/11_erw/` — a README whose acceptance criteria are
+        Bercu's per-regime $\gamma$ (and exact $\mathbb E\lvert S_k\rvert$ on the ladder by
+        DP, which separates the estimator's bias from its variance), then the $p$ grid,
+        the ladder, and the autopilot recipes. User, 2026-09-22: model first, these next
 - [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster
   - [x] ~~$d=2$ model: `models/percolation2d.py`, `MODELS["percolation2d"]`. $Y_i$ =
         open sites of an $i\times i$ box connected to the SOUTH side, at

@@ -200,6 +200,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `synthetic` | planted eq. (232) | `cost_scale·i**cost_d`, else 1 | any, else 0 | recovers the planted $d$ | **yes** |
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
 | `rwre` | $\lvert X_k\rvert$ on an SSEP | $i\,W(i)$ | 3/2 | $1.4926$ (amortized; see below) | no |
+| `erw` | $\lvert S_k\rvert$ of the elephant random walk | $i$ | 1 | $1.09\pm0.03$ / $0.92\pm0.03$ (two runs; see below) | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
 | `percolation_zd` | face-connected sites on $\mathbb Z^{\texttt{dim}}$ | $i^{\texttt{dim}}$ | `dim` (2–6) | see `experiments/05_percolation_highd` | no |
@@ -300,6 +301,59 @@ $(1,W)$ array — so the affine fit returns $\hat d\approx1.20$, 20% below the d
 and `measure_cost.py` warns at 9.9σ. At $n=64$, the regime a run actually uses, the same
 fit gives $1.4926$ against the declared $1.4928$. The probe's own drop-leading ladder is
 the tell: $\hat d$ climbs monotonically with $m_0$ instead of sitting still.
+
+### `erw.py` — the same observable, with complete memory
+
+`simulate(i, n, params, rng)` returns $\lvert S_i\rvert$ for the elephant random walk of
+Bercu, *J. Phys. A* **51** (2018) 015201, eq. (2.1): $X_1=\pm1$ with probability $1/2$
+each, then for $n\ge1$ draw $k$ uniformly from $\{1,\dots,n\}$ and set $X_{n+1}=+X_k$
+with probability `p`, $-X_k$ with probability $1-$`p`. One param, `p`, **required** — no
+default, so a recipe that forgets it fails instead of silently running another walk.
+The first step is fair by specification (user, 2026-09-22), not a parameter: Bercu's
+eq. (2.3) then gives $\mathbb E S_k=0$ exactly at every $k$ and $p$, which is the
+model's zero-check. At `p = 0.5` the copied sign is a fair coin independent of the past,
+so the walk **is** `srw` in law and `experiments/01_srw` is again a control arm.
+
+What is known, per regime, and deliberately **not** in the code (no `target_fn`, no
+`true_gamma_key`): $\gamma=1/2$ for $p<3/4$ (eq. 3.5), $\lvert S_n\rvert\sim\sqrt{n\log n}$
+at $p=3/4$ (eq. 3.10) — a logarithm eq. (232) cannot represent, so Assumption 1 fails
+exactly there — and $\gamma=2p-1$ for $p>3/4$, with $S_n/n^{2p-1}\to L$ a.s. and in
+$\mathbb L^4$ (eqs. 3.11–3.12). Those belong in the experiment README as acceptance
+criteria. $\mathbb E S_k^2$ is exact (eq. A.3); $\mathbb E\lvert S_k\rvert$ has no closed
+form, but is exactly computable by dynamic programming over the $(n,S_n)$ chain that
+eq. (2.2) implies — `tools/tests/test_erw.py` does so.
+
+**The sampler is the literal rule.** The parents $\beta_n$ and signs $\alpha_n$ are
+independent of the past (Bercu, after eq. 2.1), so all of them are drawn up front: the
+parents form a random recursive tree rooted at step 1, and pointer doubling resolves
+every $X_t$ in a handful of vectorized passes (4 at $i=2^6$, 5 from $2^{10}$ to $2^{20}$).
+The Markov chain of eq. (2.2), $P(X_{n+1}=1\mid\mathcal F_n)=\tfrac12(1+(2p-1)S_n/n)$,
+is exact too; it vectorizes only across samples and falls to 154 ns/step at $2^{20}$
+against the tree's 44, so it was declined and serves as the tests' independent
+reimplementation instead.
+
+**It keeps the blocking clause verbatim** — unlike `rwre`. Each sample is one row of a
+`(rows, 2k-1)` float64 draw and rows never interact, so any `block_n` gives the same
+numbers. float64 rather than `srw`'s float32, because a parent is $\lfloor u\,n\rfloor$:
+with 24 bits the parents' probabilities are off by up to $n/2^{24}$ relatively — 0.6% at
+$n=10^5$ — and past $n=2^{24}$ some parents cannot be drawn at all. The working set is 16 MiB, not 256:
+cache-resident blocks are $1.4\times$ faster per step at every $k$ and no less flat.
+
+`cost_hint(i) = i`. The doubling adds a $\log\log i$ factor the clock cannot resolve:
+25–31 ns/step from $2^6$ to $2^{17}$, 44 at $2^{20}$, where one sample (~40 MB) leaves
+the cache. `measure_cost.py`'s $n=1$ probe over $2^{10}..2^{18}$ passed twice on the same
+idle host, at $\hat d=1.093\pm0.029$ and $0.924\pm0.031$ — opposite sides of 1, because
+the small-$k$ per-call overhead did not reproduce (45 vs 122 µs) while the top three
+rungs did, to 4%, doubling exactly with $i$.
+
+Verified: `tools/tests/test_erw.py`, 92 cases — the chain's DP law equal to exhaustive
+enumeration of eq. (2.1) for $k\le7$ at six $p$ (to $10^{-12}$); eq. (A.3) equal to the
+DP's second moment and reaching eqs. (3.5)/(3.14)'s limits; the model's law $\chi^2$
+against the enumeration; $\mathbb E\lvert S_k\rvert$ and $\mathbb E S_k^2$ against the
+exact values at $k\in\{64,512\}$ across all three regimes; the zero-check; a KS against
+the Markov reimplementation and against `srw` at $p=1/2$; and the contract. Three
+deliberately broken samplers (signs swapped, parent = previous step, a 60/40 first
+step) each fail the law test with a $\chi^2$ p-value of 0 to printed precision.
 
 ### `percolation2d.py` — critical site percolation, the first real geometry
 
