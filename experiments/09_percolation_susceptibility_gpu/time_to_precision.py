@@ -129,6 +129,22 @@ class Ladder:
         se = sigma_se_per_scale(n, 4, self.rho, cv2)
         return pl["drawn_seconds"] * (se / target_L) ** 2, se
 
+    def omega1_replicate_spread(self) -> np.ndarray:
+        """omega1 refitted on EACH of the pilot's replicates separately, not pooled.
+
+        The constant this class carries (`self.omega1`) is the pooled-then-refitted value,
+        with an se that is spread/sqrt(R) -- the standard error of the MEAN. That is the
+        wrong yardstick for asking where a single new draw (a fresh pilot, or the production
+        run's own pooled fit) will land: the answer to THAT question is the spread across
+        these R individual fits, not the spread divided by sqrt(R). See precision_report.md
+        section 4a, which this method exists to make reproducible rather than hand-computed.
+        """
+        from tools.correction import fit_correction
+
+        reps = self.pilot["per_replicate"]
+        return np.array([fit_correction(self.pilot["scales"], r["y_bar"],
+                                        sigma_log=r["sigma_log"])["omega1"] for r in reps])
+
 
 class Source:
     """Pooled per-scale summaries of one draw (a pilot or a run) on the ladder."""
@@ -253,9 +269,10 @@ def main(argv=None) -> None:
               f"| {fmt_time(stat)} |")
 
     if a.run:
-        # The pilot and the run's own refit disagree on omega_L by 8 pilot se: a
-        # one-term model fitted with different weights gives a different exponent,
-        # which is misspecification, not noise. Price the same targets both ways.
+        # The pilot and the run's own refit disagree on omega_L (2.04 vs 2.59) by far more
+        # than the pilot's stated se of the MEAN (0.068) suggests -- see the section below,
+        # which shows that gap is ordinary sampling noise in a weakly-identified fit, not
+        # model misspecification. Price the same targets both ways regardless.
         print(f"\nSame targets on the run's own refit constants (omega_L = {fit['omega1']:.3f}, "
               f"a1 = {fit['a1']:.2f}):\n")
         print("| target | time |")
@@ -263,6 +280,27 @@ def main(argv=None) -> None:
         for label, t in (("sigma", a.sigma), ("sigma/10", a.sigma / 10), ("sigma/100", a.sigma / 100)):
             pl = L.plan(t / L.nu, omega1=fit["omega1"], a1=fit["a1"])
             print(f"| {label} = {t:g} | {L.describe(pl)} |")
+
+    # The pilot's own R replicates, refitted individually rather than pooled: the honest
+    # single-draw spread, vs. the se-of-the-mean the table above uses. See
+    # omega1_replicate_spread's docstring.
+    spread = L.omega1_replicate_spread()
+    sd = float(spread.std(ddof=1))
+    print(f"\n## Is omega_L actually pinned down? ({len(spread)} pilot replicates refitted "
+          f"individually)\n")
+    print(f"individual omega_L: " + ", ".join(f"{v:.3f}" for v in spread))
+    print(f"mean = {spread.mean():.3f}, sd = {sd:.3f} (vs. the reported se-of-mean {w.se:.3f} "
+          f"= sd/sqrt({len(spread)})); pooled-fit centre = {w.value:.3f}\n")
+    print(f"Same time targets, bracketed by +/-1 REPLICATE sd ({sd:.3f}) instead of +/-1 se-of-mean "
+          f"({w.se:.3f}):\n")
+    print("| target | -1 sd | centre | +1 sd |")
+    print("|---|---|---|---|")
+    for label, t in (("sigma", a.sigma), ("sigma/10", a.sigma / 10), ("sigma/100", a.sigma / 100)):
+        tL = t / L.nu
+        row = [L.describe(L.plan(tL, omega1=max(1e-3, w.value - sd))),
+               L.describe(L.plan(tL)),
+               L.describe(L.plan(tL, omega1=w.value + sd))]
+        print(f"| {label} | " + " | ".join(c.split(" (")[0] for c in row) + " |")
 
     top = int(INT32_SITES ** (1 / L.params["dim"]))
     print(f"\n## Only ladders that fit an int32 label (top rung L <= {top}, i.e. 128), "

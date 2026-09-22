@@ -1,5 +1,16 @@
 # γ_susc in d = 4 on the exact box ladder: the fit graph, and what more precision costs
 
+> **Correction, 2026-09-22.** §1 originally called the pilot/run ω_L disagreement
+> "misspecification, not noise" and quoted it as "8 pilot se". That used the standard error
+> of the MEAN of 8 replicate fits (spread/√8 = 0.068), which is the wrong yardstick for
+> judging a single new draw against. Refitting the pilot's 8 replicates individually gives
+> ω_L = 1.80, 2.05, 2.47, 2.03, 1.94, 2.07, 2.09, 1.96 — sd = **0.193**, not 0.068 — and a
+> 0.1–0.3% change in y_bar (well inside one draw's own sampling noise) moves the fitted ω_L
+> continuously from 2.04 to 2.59 while γ and the fit residual barely move. Under the correct
+> spread the run's 2.585 is a ≈2.8σ event, unusual but ordinary sampling noise in a fit this
+> underdetermined — not evidence of a wrong model. §1 and §4 are corrected below; the
+> headline table's "time to σ/10" range is now 30× wider than first reported.
+
 Compiled 2026-09-21 from `pilot_gsusc_L_d4` (8 replicates, the constants) and
 `autopilot_gsusc_L_d4` (the T4.2 production run, 5 replicates, 62 min). The analysis is
 `time_to_precision.py`; every number below is its output. Same method as
@@ -12,8 +23,8 @@ report's, Wikipedia's γ(d = 4) = 1.430(6), not re-read today.
 | target on γ_susc | one GPU, R = 5 replicates | can it run today? |
 |---|---|---|
 | **±0.006** (the literature's) | **≈ 4 min** on a 3-rung ladder L = 32, 64, 128. The standard 5-rung plan is 32 min but needs L = 256. | 3 rungs: the sampler can (128⁴ = 2.7·10⁸ sites), but `plan.py` and `report.py` refuse fewer than 5 rungs (§5). 5 rungs: **no**, 256⁴ = 4.3·10⁹ sites exceeds the int32 label (2.1·10⁹). |
-| ±0.0006 (one more decimal) | **3 weeks to 7 months** (21 d at m = 2, 40 d at m = 4, 215–222 d at m = 3 and 5; 8.6 yr at m = 6) | **no**, top rung L = 256–2048 (4·10⁹–1.8·10¹³ sites) |
-| ±0.00006 (two more) | **363 yr to 4·10⁴ yr** (m = 2..5) | **no**, top rung L ≥ 1024 |
+| ±0.0006 (one more decimal) | **215 d at the pilot's ω_L**, but honestly **27 yr to 2.1 yr** across ±1 replicate spread — this is a real range, not a rounding artifact (§4a) | **no**, top rung L = 256–2048 (4·10⁹–1.8·10¹³ sites) |
+| ±0.00006 (two more) | **3.8·10⁴ yr**, honestly 900–5·10⁴ yr | **no**, top rung L ≥ 1024 |
 
 - **The literature's precision is already in hand.** The deepest three rungs of the pilot
   (L = 32..128) give γ_susc = **1.4306**, eq. (720) ±0.0057; the same window of the T4.2 run
@@ -43,11 +54,18 @@ correction is visible (about 0.2 at the bottom rung, on a range of 10 in the top
 Reading them:
 - **Five points, four parameters.** One degree of freedom, so the curve passing through every
   point says little (`rel_rmse` 1.4·10⁻⁴). The graph states this in its title.
-- **The two fits disagree on ω_L** by 8 of the pilot's standard errors (2.040 vs 2.585), and on
-  a₁ by a factor 2.8. The pilot's error bar is the spread of per-replicate fits, so it is
-  statistical only; a one-term model fitted with different weights giving a different
-  exponent is misspecification: the effective-exponent effect the earlier report cites from
-  `06_susceptibility`.
+- **The two fits disagree on ω_L** (2.040 vs 2.585) by far more than the printed "±0.068"
+  suggests — see the correction notice above. It is **not** the weighting: refitting the
+  pilot's data with the run's (flatter) weights barely moves it, 2.04 → 2.09. It **is**
+  ordinary sensitivity in a fit this weakly determined: interpolating log(y_bar) from the
+  pilot's draw to the run's, a change of at most 0.22% in any one point, slides ω_L
+  continuously from 2.04 to 2.59 while γ moves only 2.069 → 2.075 and the fit residual stays
+  ~10⁻⁴ throughout — a flat valley in (ω₁, a₁), not two different curves.
+- **What survives the instability.** γ does — all 8 individual pilot replicates give
+  γ ∈ [2.064, 2.075]. So does the fitted CURVE over modest extrapolation: evaluated at
+  L = 4096 (32× past the ladder's top), the pilot's and the run's fitted curves differ by only
+  2.1%, because a₁ and ω_L move together along the same degenerate direction and largely
+  cancel in the curve's VALUE even though they disagree wildly as separate numbers.
 - **The fit asymptotes agree with the windows in §3.** ν_box·γ_L = 1.4314 (run) and 1.4278
   (pilot), against the windows' 1.4326 and 1.4306. No error bar is attached to the fit's γ.
 
@@ -112,21 +130,47 @@ under 2σ. Pilot and run agree with each other at m₀ = 4 to 0.0020 (1.4σ).
 
 ## 4. Time to σ, σ/10, σ/100, one GPU, R = 5, m = 5
 
-| target | on γ_L | time (ω_L ± 1 se) | statistical term only |
+| target | on γ_L | time (ω_L ± 1 se-of-mean) | statistical term only |
 |---|---|---|---|
 | σ = 0.006 | 0.0087 | **32 min** (m₀ = 3, L = 16..256, 4.3·10⁹ sites/sample ✗)<br>ω+1se: 18 min<br>ω−1se: 11.2 h (m₀ = 4, L = 32..512, 6.9·10¹⁰ ✗) | 35 s |
 | σ/10 = 0.0006 | 0.00087 | **215 d** (m₀ = 5, L = 64..1024, 1.1·10¹² ✗)<br>ω+1se: 309 d<br>ω−1se: 290 d | 59 min |
 | σ/100 = 6·10⁻⁵ | 8.7·10⁻⁵ | **3.8·10⁴ yr** (m₀ = 7, L = 256..4096, 2.8·10¹⁴ ✗)<br>ω+1se: 2,934 yr<br>ω−1se: 1.9·10⁴ yr | 4.1 d |
 
+- **This ± bracket understates the real spread — see §4a.** "1 se" here is the standard error
+  of the MEAN of the pilot's 8 replicate fits (spread/√8 = 0.068), not the spread a single new
+  draw is actually pulled from (§1's correction: sd = 0.193).
 - **Non-monotone in ω**, as in the earlier report: m₀ is an integer, and the bisection stops at
   the first budget that meets the target. ω+1se costs 18 min at σ but 309 d at σ/10.
 - **At m = 6** (the earlier report's ladder): 2.4 h (L = 16..512), 8.6 yr (L = 64..2048),
   3.5·10⁴ yr (L = 128..4096), all ✗.
 - **On the run's own refit constants** (ω_L = 2.585, a₁ = −18.13), the same m = 5 plans cost
-  **13 min, 33 d, 2,085 yr**: 2.5×, 6.5× and 18× cheaper. That is the size of the ω_L
-  disagreement in §1, in wall clock.
-- **Last column:** the pilot's own wall clock (84 min) scaled by (se/target)² at its deepest
-  four-rung window, ignoring bias. An optimistic floor, not a plan.
+  **13 min, 33 d, 2,085 yr**: 2.5×, 6.5× and 18× cheaper. ω_L = 2.585 is itself within the
+  honest per-draw spread (§4a), so this is not a special or bad-luck case; it is what an
+  ordinary re-pilot can hand you.
+
+## 4a. How much does the time estimate actually move? (the honest bracket)
+
+Same central ω_L = 2.040, bracketed by **±1 replicate standard deviation (0.193)**, not the
+se of the mean (0.068) — the number that describes where a fresh pilot, or the production
+run itself, actually lands:
+
+| target | −1 sd (ω_L = 1.847) | centre (ω_L = 2.040) | +1 sd (ω_L = 2.233) |
+|---|---|---|---|
+| σ = 0.006 | 5.3 h | 32 min | 12 min |
+| σ/10 = 0.0006 | **27 yr** | 215 d | **2.1 yr** |
+| σ/100 = 6·10⁻⁵ | 4.7·10⁴ yr | 3.8·10⁴ yr | 907 yr |
+
+At σ/10 the range spans **27 years to 2.1 years** — a 130× swing — against the −1se/+1se
+table's 290–309 days (a 1.06× swing). The σ/10 and σ/100 numbers in the Headline table should
+be read as "order of magnitude, and the order of magnitude itself is not pinned down," not as
+a number with a small error bar. σ is the tamest (≈4 min to 5 hours across the bracket at
+m = 5), but not immune: the §5 table's m = 2 row swings 1 min to 32 min under the same ±1 sd
+(m = 3, the recommended one, swings 4–13 min). Bias is the dominant term at every ω_L in the
+bracket, and its rho**(−m0·ω_L) dependence is exactly what makes it move this much.
+
+- **Last column of §4:** the pilot's own wall clock (84 min) scaled by (se/target)² at its
+  deepest four-rung window, ignoring bias. An optimistic floor, not a plan — and it does not
+  depend on ω_L at all, unlike every other number in §4/§4a.
 
 ## 5. Ladders that fit an int32 label (top rung L ≤ 128), σ = 0.006
 
@@ -169,9 +213,10 @@ less bias. Which wins is the m₀ staircase, hence the swings.
   L costs ≈ 7% more (2^0.096) than the plan assumes.
 - **p_c.** A shift δp moves the system off criticality by δp·L^(1/ν); at L ~ 10³ in d = 4 the
   digits of p_c in `P_C_SITE_HYPERCUBIC` would have to improve before ±0.0006 means anything.
-- **One correction term.** Both the plan and eq. (720) use a single ω_L. The ω₂ piece is not
-  measured, and the pilot and refit disagree by 8 se (§1), so the bias floors above carry a
-  model error the stated ranges only partly cover.
+- **One correction term, weakly identified (§1, §4a).** Both the plan and eq. (720) use a
+  single ω_L from a 5-rung fit that a 0.2%-of-data perturbation moves by ±0.3. The ω₂ piece
+  on top of that is not measured at all. Read every time in §4/§6 as an order of magnitude,
+  and the order of magnitude itself as soft at σ/10 and beyond.
 - **The exponent itself is unexplained.** ω_L = 2.04 is ω_x = ν_box·ω_L = 1.41 in ε, against
   Δ₁ ≈ 0.77 expected; `TODO.md` lists that as not understood. It is one more reason not to
   trust ω_L to its stated error.
