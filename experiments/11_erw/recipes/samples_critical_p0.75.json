@@ -1,0 +1,40 @@
+{
+  "kind": "samples",
+  "model": "erw",
+  "params": {
+    "p": 0.75
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "CRITICAL ARM, criterion E5 -- a MISSPECIFICATION PROBE, not a measurement",
+    "of gamma. At p = 3/4 Bercu (2018) eq. (3.10) gives S_k / sqrt(k log k) ->",
+    "N(0, 1), and eq. (A.3) gives E S_k^2 = k H_k exactly (H_k the harmonic",
+    "number). The logarithm is not of the article's eq. (232) form, so",
+    "Assumption 1 is FALSE here: there is no gamma for the fit to converge to",
+    "at finite k, only a local slope of sqrt(k log k) that falls like",
+    "1/2 + 1/(2 ln k) -- 0.56 at k = 4096. What this arm asks is whether the",
+    "pipeline notices: whether the pilot's gate, the omega1 fit and the",
+    "drop-leading ladder flag a fit that should not be trusted, or certify an",
+    "exponent above 1/2 with a confident interval.",
+    "",
+    "Same ladder and budget as samples_calib_p0.5.json, deliberately: only p",
+    "differs between the arms."
+  ]
+}

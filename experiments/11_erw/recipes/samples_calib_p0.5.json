@@ -1,0 +1,50 @@
+{
+  "kind": "samples",
+  "model": "erw",
+  "params": {
+    "p": 0.5
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "CALIBRATION ARM, criterion E2. At p = 1/2 the copied-or-flipped sign is a",
+    "fair coin independent of the past, so the ERW IS srw in law and this recipe",
+    "must reproduce experiments/01_srw's four exactly known constants: gamma =",
+    "1/2, a0 = sqrt(2/pi) = 0.797885, omega1 = 1, a1 = -1/4. Not bit-for-bit --",
+    "the tree sampler consumes 2k - 1 uniforms per walk, srw consumes k -- so the",
+    "comparison is of the fitted constants inside their standard errors. It is",
+    "what licenses reading the other arms, which share its ladder and budget.",
+    "",
+    "The \"snr\" rule with NO omega1 states no design constant at all: the",
+    "uninformed default 0 makes n_i flat, measured on srw to be the best of five",
+    "arms for identifying omega1 (experiments/01_srw/recipes/samples_pilot.json).",
+    "d is not stated either: models/erw.py's cost_hint supplies d = 1.",
+    "",
+    "LADDER 4..4096, powers of two. Down to 4 because that is where",
+    "experiments/02_rwre's pilot, on the same srw law, needed the bottom rung to",
+    "see the a1/k correction above the noise; powers of two because |S_k| is a",
+    "staircase in k and a grid that mixes parities fits it as curvature.",
+    "",
+    "BUDGET UNITS. tools/allocation.py prices a sample at scale i as i**d with d",
+    "from cost_hint, so a flat replicate here is n = 1e9 / (4 + 8 + ... + 4096)",
+    "= 122,129 samples per rung. This budget is the PILOT's starting point;",
+    "autopilot doubles it until both gates pass, and plan.py sizes the final run",
+    "from what the pilot measured."
+  ]
+}

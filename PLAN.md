@@ -236,6 +236,15 @@ loglog_validation/
                                   alpha = 1/2 no gamma is known: the proven CLT
                                   (arXiv:1906.03167) covers only the non-zero-speed
                                   densities. Experiments in experiments/02_rwre/
+    erw.py                        the elephant random walk (Bercu 2018): each step
+                                  copies (w.p. p) or flips a uniformly chosen past
+                                  step, first step fair. Y_k = |S_k|, the same
+                                  observable as srw, and srw in law at p = 1/2.
+                                  gamma is PROVEN on both sides of a transition --
+                                  1/2 below p = 3/4, 2p - 1 above -- with a log at
+                                  3/4 that eq. (232) cannot represent. cost_hint(i)
+                                  = i. No target_fn, same decision as srw.
+                                  Experiments in experiments/11_erw/
     percolation2d.py              critical site percolation on the square lattice,
                                   p_c = 0.59274605079210, 4-connected. Y_i = open
                                   sites of an i x i box connected to the SOUTH SIDE
@@ -281,6 +290,8 @@ loglog_validation/
     03_percolation_zd/           site percolation, Z^d -- the d = 2 rung
     05_percolation_highd/        the same, dim as a model parameter: d = 3..7
     04_percolation_hierarchical/ Bethe lattice / hierarchical graphs
+    11_erw/                      elephant random walk: known gamma != 1/2, and a
+                                  critical point where Assumption 1 fails
     each experiment/:
       README.md                  what this validates + numeric acceptance criteria +
                                   current status (not started / in progress / passing)

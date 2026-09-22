@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "erw",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "n": 4000,
+  "seed": 20260922,
+  "_note": [
+    "DEMO for src/generate/generate.py + src/report/plot_loglog.py -- a few",
+    "seconds, not evidence. p = 0.9 is superdiffusive, where Bercu (2018) eqs.",
+    "(3.11)-(3.12) give gamma = 2p - 1 = 0.8. The seed is fixed so that the",
+    "output quoted in ../README.md reproduces bit for bit."
+  ]
+}

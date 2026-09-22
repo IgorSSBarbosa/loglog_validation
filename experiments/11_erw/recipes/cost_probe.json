@@ -1,0 +1,27 @@
+{
+  "kind": "cost_probe",
+  "model": "erw",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144
+  ],
+  "repeats": 10,
+  "seed": 20260922,
+  "_note": [
+    "Criterion E1: does the clock recover models/erw.py's declared d = 1?",
+    "Reaches well above the sampling ladders, as models/README.md asks: a fixed",
+    "per-call overhead dominates at small i. p does not enter the work -- every",
+    "step is drawn and resolved whatever p is -- so one p stands for all.",
+    "Read the drop-leading ladder, not the headline: see ../README.md, E1."
+  ]
+}

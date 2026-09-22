@@ -530,10 +530,17 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         that each fail; `exercise_all.py`'s `sec_erw`, 16 checks. $n=1$ cost probe
         passed twice, $\hat d=1.093\pm0.029$ and $0.924\pm0.031$ — the small-$k$
         overhead does not reproduce between runs; see `models/README.md`~~
-  - [ ] The experiment: `experiments/11_erw/` — a README whose acceptance criteria are
-        Bercu's per-regime $\gamma$ (and exact $\mathbb E\lvert S_k\rvert$ on the ladder by
-        DP, which separates the estimator's bias from its variance), then the $p$ grid,
-        the ladder, and the autopilot recipes. User, 2026-09-22: model first, these next
+  - [x] ~~`experiments/11_erw/`: README with Bercu's per-regime truths and proposed
+        criteria E1–E6, and example recipes — a demo, the cost probe, and one autopilot
+        pilot per regime ($p=0.5$ control, $0.6$, $0.75$ critical, $0.9$), identical
+        but for $p$ on $4..4096$. Checked: every recipe loads and resolves (122,129
+        samples per rung, $d=1$ from `cost_hint`); one pilot replicate at $p=0.9$ ran
+        in 36.8 s and read $\gamma=0.8011$ (indicative, no se); the demo reproduces
+        $\hat\gamma=0.8024$ bit for bit~~
+  - [ ] Decide the $p$ grid, the ladder and the time per arm (user); run E2 first, then
+        E4–E6; agree E5's criterion
+  - [ ] Exact $\mathbb E\lvert S_k\rvert$ on the ladder by DP → the estimator at
+        $n=\infty$, i.e. its finite-size bias alone (see the README's *Open*)
 - [ ] Phase 3 — Percolation $\mathbb Z^d$, $d=2..6/7$, side-connected cluster
   - [x] ~~$d=2$ model: `models/percolation2d.py`, `MODELS["percolation2d"]`. $Y_i$ =
         open sites of an $i\times i$ box connected to the SOUTH side, at

@@ -1,0 +1,37 @@
+{
+  "kind": "samples",
+  "model": "erw",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "SUPERDIFFUSIVE ARM, criterion E6. p = 0.9 > 3/4, so Bercu (2018) eqs.",
+    "(3.11)-(3.12) give S_k / k^(2p-1) -> L almost surely and in L^4, hence",
+    "E|S_k| / k^(2p-1) -> E|L|: gamma = 2p - 1 = 0.8, the one arm whose answer",
+    "is not 1/2. a0 = E|L| has no closed form; eq. (3.14) gives",
+    "E L^2 = 1/((4p - 3) Gamma(2(2p - 1))) = 1.865, so a0 <= 1.366 (Jensen) is",
+    "the only check on it. L is not Gaussian (Remark 3.2), so the per-sample",
+    "noise is not srw's either.",
+    "",
+    "Same ladder and budget as samples_calib_p0.5.json, deliberately: only p",
+    "differs between the arms."
+  ]
+}
