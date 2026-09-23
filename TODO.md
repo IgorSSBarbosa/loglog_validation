@@ -537,6 +537,14 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         samples per rung, $d=1$ from `cost_hint`); one pilot replicate at $p=0.9$ ran
         in 36.8 s and read $\gamma=0.8011$ (indicative, no se); the demo reproduces
         $\hat\gamma=0.8024$ bit for bit~~
+  - [x] ~~GPU port: `models/erw_gpu.py`, `MODELS["erw_gpu"]` — `_resolve` ported line for
+        line to CuPy (float64 uniforms, int32 ancestors), cuRAND seeded from the
+        driver's rng, `cost_hint`/`_check` imported. 0.5–0.6 ns/step, 52–73× the CPU
+        model. Verified: `tools/tests/test_erw_gpu.py` (KS + mean vs `erw`, and
+        `test_erw.py`'s exact references); E1 batched $\hat d=1.049\pm0.014$, PASS. See
+        `experiments/12_erw_gpu/README.md`~~
+  - [ ] `12_erw_gpu` G3: the E2/E6 arms end to end, GPU against CPU, once the grid below
+        is decided
   - [ ] Decide the $p$ grid, the ladder and the time per arm (user); run E2 first, then
         E4–E6; agree E5's criterion
   - [ ] Exact $\mathbb E\lvert S_k\rvert$ on the ladder by DP → the estimator at

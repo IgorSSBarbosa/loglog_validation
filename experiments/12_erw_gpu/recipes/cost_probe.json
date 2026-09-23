@@ -1,0 +1,29 @@
+{
+  "kind": "cost_probe",
+  "model": "erw_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576
+  ],
+  "repeats": 10,
+  "seed": 20260923,
+  "_note": [
+    "Criterion E1: does the batched probe (tools/cost_model.py's probe_batched,",
+    "selected by batched_cost) recover models/erw.py's declared d = 1 on the GPU?",
+    "11_erw's cost_probe.json with the model changed and the ladder carried up to",
+    "2^20, where one sample is still under a millisecond of device work. p does",
+    "not enter the work, so one p stands for all."
+  ]
+}

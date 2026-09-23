@@ -1,0 +1,31 @@
+{
+  "kind": "samples",
+  "model": "erw_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "11_erw/recipes/samples_super_p0.9.json (criterion E6 there) with only the model",
+    "changed, so the GPU arm and the CPU arm can be compared estimator by",
+    "estimator (G3 in ../README.md). Every word of that recipe's note applies;",
+    "read it there."
+  ]
+}

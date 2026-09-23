@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "erw_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "n": 4000,
+  "seed": 20260923,
+  "_note": [
+    "DEMO for src/generate/generate.py + src/report/plot_loglog.py on the GPU --",
+    "11_erw's samples_example.json with only the model and seed changed. p = 0.9,",
+    "gamma = 2p - 1 = 0.8 (Bercu 2018, eqs. 3.11-3.12). A seed reproduces this",
+    "run only on the cupy/CUDA versions in ../README.md, never an erw run."
+  ]
+}
