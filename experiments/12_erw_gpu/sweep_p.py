@@ -82,7 +82,10 @@ def main() -> int:
         recipe = write_recipe(p)
         DATA.mkdir(exist_ok=True)
         log = DATA / f"{study}.log"
-        cmd = [sys.executable, str(ROOT / "src/study/autopilot.py"), "-meta", str(recipe),
+        # -u: autopilot's phase lines go to stdout and its progress to stderr. Piped,
+        # stdout is block-buffered, so without -u the log shows the final run's draws
+        # before the pilot's header lines, and they read as if the pilot drew them.
+        cmd = [sys.executable, "-u", str(ROOT / "src/study/autopilot.py"), "-meta", str(recipe),
                "--study", study, "--data-root", str(DATA), "--time", args.time,
                "--no-progress", *extra]
         print(f"[sweep] p={p}: {' '.join(cmd)}\n[sweep]   log -> {log}", flush=True)
