@@ -24,6 +24,7 @@ from typing import Callable
 import numpy as np
 
 from models import erw as model_erw
+from models import erw_gpu as model_erw_gpu
 from models import percolation2d as model_percolation2d
 from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
@@ -156,6 +157,16 @@ MODELS: dict[str, ModelSpec] = {
         # p = 3/4, 2p - 1 above (Bercu eqs. 3.5, 3.11-3.12), with a log at
         # p = 3/4 that eq. (232) cannot represent -- and, as for srw, it stays
         # out of the code path and goes in the experiment README instead.
+    ),
+    "erw_gpu": ModelSpec(
+        simulate=model_erw_gpu.simulate,
+        # erw's own cost_hint (i), imported, so it cannot drift. The same
+        # random-recursive-tree sampler, pointer doubling ported one to one
+        # to CuPy, cuRAND seeded from the driver's rng -- equal to erw in
+        # DISTRIBUTION, not bit for bit. See models/erw_gpu.py,
+        # experiments/12_erw_gpu.
+        cost_hint=model_erw_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
     ),
     "percolation2d": ModelSpec(
         simulate=model_percolation2d.simulate,

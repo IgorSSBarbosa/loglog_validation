@@ -1070,3 +1070,26 @@ the CPU. `shared_sampler` returns the CPU sampler's `info`, `shared_lattice` sta
 included. Equal in distribution to the CPU model, not bit for bit; for `shared_sampler`
 that includes the covariance between rungs. See
 `experiments/10_percolation_tau_gpu/README.md`.
+
+### `erw_gpu.py` — `erw` on a CUDA GPU
+
+`walk(k, n, p, rng=None)` and `simulate(i, n, params, rng)`, as in `erw` minus
+`block_n`. The same sampler: `_resolve` is a CuPy port of the CPU function, line for line
+(user, 2026-09-23). It keeps the same sentinel and the same two `take_along_axis` gathers
+per doubling pass, with every row of a block and every node of a row resolved in
+parallel. `_check` and `cost_hint` are imported from `erw`, so the parameter rules and the
+declared $d=1$ can't drift. Everything above about `percolation2d_gpu` applies: separate
+model, cuRAND seeded by one `rng.integers(0, 2**63)`, block size a fixed function of $k$
+(`block_rows`, a 2 GiB budget at 64 bytes per step), equal in distribution rather than
+bit for bit, cupy imported only inside `walk`, `batched_cost=True`.
+
+Two dtypes, neither in the law (user, 2026-09-23). The uniforms stay float64, for
+`erw`'s reason. cupy's `Generator.random` gives float64 on $[0,1)$ with the full 53
+bits, the same interval as numpy's, so the CPU's `u < p` and its clip on
+$\lfloor u\,t\rfloor$ carry over unchanged. The ancestor table is int32, which halves it,
+with $k\le2^{31}-2$ enforced.
+
+Measured 2026-09-23 on the RTX 5090: CuPy pool peak 45.8–46.1 bytes/step at
+$k=2^6..2^{20}$; 0.51–0.62 ns/step, flat in $k$, against the CPU model's 30–43 ns
+(52–73×). Verified in `tools/tests/test_erw_gpu.py` (KS and mean against `erw`, plus
+`test_erw.py`'s exact references). See `experiments/12_erw_gpu/README.md`.
