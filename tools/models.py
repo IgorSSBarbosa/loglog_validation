@@ -101,6 +101,14 @@ class ModelSpec:
     #: the slope in n. This describes how the model's cost is shaped, not what
     #: device it runs on, so the drivers still never learn about hardware.
     batched_cost: bool = False
+    #: True for a batched_cost model whose one sample is a long SERIAL chain
+    #: run in parallel across samples: a call of few samples then takes the
+    #: latency of one, and the time grows with n only once the device is full.
+    #: models/rwre_gpu.py (user, 2026-09-24): 0.2 ms at k = 128 for every n
+    #: from 1 to 256. It makes `probe_batched` walk n on until the device is
+    #: saturated (tools/cost_model.py's `_saturate`); every other model's probe
+    #: is unchanged.
+    latency_bound: bool = False
 
 
 MODELS: dict[str, ModelSpec] = {

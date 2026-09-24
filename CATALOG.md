@@ -126,13 +126,13 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `loglog.py` | 253 | `statistical tool` | Four $\hat\gamma$ estimators + the article's closed-form eq. (526) weights. **The canonical weight definition** — `allocation.py` and `wilson.py` import it. | — |
 | `correction.py` | 215 | `statistical tool` | Two $\omega_1$ estimators: direct fit of eq. (232), and bias-decay fit. Non-convex in $\omega_1$, hence multi-restart. | — |
 | `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
-| `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model. | `loglog` |
+| `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model, walked on to a full device for a `latency_bound` one. | `loglog` |
 | `wilson.py` | 276 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. | `loglog` |
 | `coverage.py` | 356 | `statistical tool` | Calibration harness: do our stated error bars cover? `coverage_test`, `coverage_multi`, `rescore`, `combine_se`, Welch–Satterthwaite dof. | — |
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
 | `persistence.py` | 153 | `tool` | Run directories, `samples.npz` vs chunked `samples/`, metadata sidecars, content hashing. | — |
-| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. `batched_cost` marks the `*_gpu` models, which are timed by the slope in $n$. | `srw`, `rwre`, `erw`, `synthetic`, `percolation2d`, `percolation_tau`, `percolation_zd`, `percolation_tau_zd` |
+| `models.py` | 105 | `tool` | `ModelSpec` registry. Pure importer — simulation lives in `models/`. `batched_cost` marks the `*_gpu` models, which are timed by the slope in $n$; `latency_bound` marks one whose sample is a serial chain (`rwre_gpu`). | `srw`, `rwre`, `erw`, `synthetic`, `percolation2d`, `percolation_tau`, `percolation_zd`, `percolation_tau_zd` |
 | `loglog_plot.py` | 185 | `plot tool` | Generic log-log chart + the four-estimator comparison chart. | — |
 
 ### `src/` — the scripts a human runs
@@ -229,7 +229,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `consistency_threshold` | coverage | the honest \|z\| cut-off |
 | `se_ratio`, `format_result` | coverage | diagnostics |
 | `declared_exponent` | cost_model | $d$ from a model's own `cost_hint` — exact, not fitted |
-| `probe_batched` | cost_model | cost of ONE more sample, $(t(4n)-t(n))/3n$, for a `batched_cost` (GPU) model |
+| `probe_batched` | cost_model | cost of ONE more sample, $(t(4n)-t(n))/3n$, for a `batched_cost` (GPU) model; with `latency_bound`, $n$ first doubles until $t(4n)\ge3.5\,t(n)$ (`_saturate`) |
 | `compare_cost_models`, `format_cost_comparison` | cost_model | declared vs wall clock, two tolerances |
 | `ARTIFACTS`, `artifact_path`, `write_artifact`, `read_artifact` | artifacts | run outputs, named for content |
 | `classify`, `migrate`, `find_artifacts` | artifacts | legacy rescue |

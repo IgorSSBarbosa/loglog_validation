@@ -842,6 +842,15 @@ BATCH_FACTOR = 4
 #: fitting the floor.
 BATCH_MAX_N = 2 ** 24
 
+#: For a model that declares `latency_bound` (ModelSpec), the batched walk
+#: keeps doubling n until the larger call of a pair takes at least this many
+#: times the smaller one. BATCH_FACTOR (4) is the ratio of a device that is
+#: full; while it is not, the extra samples ride along in blocks that were idle
+#: anyway and the ratio is ~1. At 3.5 the smaller call is at least 7/8 of the
+#: way to full, which bounds the marginal cost's bias at ~5% low
+#: (t = max(L, c*n) gives (4 - 8/7)/3 = 0.95c). models/rwre_gpu.py, 2026-09-24.
+SATURATION_RATIO = 3.5
+
 
 def probe_batched(spec, params: dict, rng, scales,
                   repeats: int = PROBE_REPEATS,
@@ -912,6 +921,9 @@ def probe_batched(spec, params: dict, rng, scales,
                     f"here, so there is no per-sample cost to measure.")
             n *= 2
             t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+        if spec.latency_bound:
+            n = _saturate(spec, k, params, rng, repeats, aggregator, n,
+                          batch_factor, max_n)
         big = batch_factor * n
         spec.simulate(k, big, params, rng)               # warm the larger call
         marginal, calls = [], []
@@ -948,7 +960,45 @@ def probe_batched(spec, params: dict, rng, scales,
     # what was FITTED. Here that share is zero by construction, since the
     # difference removes it.
     out["call_overhead_share"] = max(a0 / t for t in call_seconds.values())
+    if spec.latency_bound:
+        out["saturation_ratio"] = SATURATION_RATIO
     return out
+
+
+def _saturate(spec, k: int, params: dict, rng, repeats: int, aggregator: str,
+              n: int, batch_factor: int, max_n: int) -> int:
+    """Double n until a call of batch_factor * n is SATURATION_RATIO times slower.
+
+    Only for a `latency_bound` model, where one sample is a long serial chain
+    and a call of few samples takes the latency of one, however many ride
+    along: models/rwre_gpu.py at k = 128 takes 0.2 ms for every n from 1 to
+    256, and only past ~4096 does the time grow with n. The overhead floor
+    above is cleared at n = 1 there, so without this walk the pair compares
+    two equal latencies and its difference is jitter.
+
+    The ratio is taken between the FASTEST of each call's `repeats` timings,
+    not the aggregate. Jitter only ever adds time, and added to the larger
+    call it passes this test early: on a shared card, a median over five
+    stopped rwre_gpu at n = 16 of k = 256 (2026-09-24), where the device is
+    still latency-bound, and the pairs then differenced to zero.
+    """
+    _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+    t_n = min(times)
+    while True:
+        _, times = time_at_scale(spec, k, params, rng, repeats, aggregator,
+                                 n=batch_factor * n)
+        t_big = min(times)
+        if t_big >= SATURATION_RATIO * t_n:
+            return n
+        if 2 * batch_factor * n > max_n:
+            raise RuntimeError(
+                f"probe_batched: at scale {k}, a call of {batch_factor * n} "
+                f"samples still takes only {t_big / t_n:.2f}x one of {n} "
+                f"(need {SATURATION_RATIO:g}x), so the device never fills "
+                f"below {max_n} samples and no per-sample cost can be read.")
+        n *= 2
+        _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+        t_n = min(times)
 
 
 def fit_cost_probe(probe: dict, cost_hint=None, params: dict | None = None) -> dict:
