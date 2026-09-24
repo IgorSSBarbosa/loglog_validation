@@ -76,12 +76,14 @@ def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[st
     # The pilot draws the same n at every scale; a recipe that doesn't would need a
     # per-scale column here, not a silently picked first entry.
     assert len(set(pilot["n"])) == 1, f"{study}: pilot n varies by scale: {pilot['n']}"
-    om_pilot = (f"| {p} | {om['value']:.3f} ± {om['se']:.3f} | {ladder(pilot['scales'])} "
-                f"| {draws(pilot['n'][0], pilot['replicates'])}")
+    # The converged flag must belong to the fit that produced constants.json's omega1.
+    assert pilot["direct_fit"]["omega1"] == om["value"], f"{study}: omega1 not from direct_fit"
+    om_pilot = (f"| {p} | {om['value']:.3f} ± {om['se']:.3f} | {pilot['direct_fit']['converged']} "
+                f"| {ladder(pilot['scales'])} | {draws(pilot['n'][0], pilot['replicates'])}")
     if not ap.get("drawn"):
         return (f"| {p} | `{study}` | not drawn (gate) | {gamma_true(p):.3f} | - | - | - | - "
                 f"| {ap['pilot_seconds'] / 60:.1f} |",
-                f"{om_pilot} | - | - | - | - | - |")
+                f"{om_pilot} | - | - | - | - |")
     answer = json.loads((data / study / "answer.json").read_text())
     # From the artifacts rather than this script's clock, so a resumed sweep's summary
     # still has it; matches the clock to 0.1 min on the 2026-09-23 ERW_GPU sweep.
@@ -94,7 +96,7 @@ def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[st
     return ((f"| {p} | `{study}` | drawn{forced} | {gamma_true(p):.3f} "
              f"| {ap['gamma']:.5f} ± {answer['se']:.5f} | [{lo:.4f}, {hi:.4f}] "
              f"| {answer['scales'][0]}..{answer['scales'][-1]} | {final} | {wall} |"),
-            (f"{om_pilot} | {fit['omega1']:.3f} | {fit['a1']:.3g} | {fit['converged']} "
+            (f"{om_pilot} | {fit['omega1']:.3f} | {fit['a1']:.3g} "
              f"| {ladder(answer['scales'])} | {final} |"))
 
 
@@ -169,8 +171,8 @@ def main() -> int:
         "and since the plan deepens m0 until the correction has died, that refit is mostly",
         "noise (see `src/study/report.py`'s `wilson_inputs`). Read omega1 from the pilot.",
         "",
-        "| p | omega1 pilot ± se | pilot scales | pilot n/scale × reps | omega1 final fit "
-        "| a1 final fit | final-fit converged | final scales | final n/scale × reps |",
+        "| p | omega1 pilot ± se | pilot converged | pilot scales | pilot n/scale × reps "
+        "| omega1 final fit | a1 final fit | final scales | final n/scale × reps |",
         "|---|---|---|---|---|---|---|---|---|",
         *(o for _, o in rows),
         "",
