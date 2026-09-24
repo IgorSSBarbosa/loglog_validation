@@ -84,11 +84,25 @@ from models.rwre import _check, cost_hint, window_width
 
 __all__ = ["walk", "simulate", "cost_hint", "threads_per_sample", "max_steps"]
 
-#: The window lives in a block's shared memory, one byte per site, and 48 KiB
-#: is what CUDA gives a block without an opt-in. At the default window_c = 12
-#: that allows k up to 4096**2, about 1.7e7 steps, and 2**16 at
-#: window_exponent = 3/4 (see `max_steps`).
-_MAX_W = 48 * 1024
+#: Shared memory the kernel declares statically (`parity`, 4 bytes, rounded up
+#: for alignment), on top of the W bytes of window it asks for at launch.
+_STATIC_SHARED = 16
+
+#: The window lives in a block's shared memory, one byte per site. 48 KiB is
+#: what CUDA gives a block without an opt-in, and it is a hard cap on the
+#: window PLUS `_STATIC_SHARED`: the first version checked the window alone,
+#: allowed W = 49152 at k = 2**16 (window_exponent = 3/4), and every study
+#: planned up to that rung died on CUDA_ERROR_INVALID_VALUE (2026-09-24,
+#: experiments/13_rwre_gpu sweep `1h`). Above 48 KiB the kernel opts in, up to
+#: this fixed 96 KiB, which fits the RTX 5090's 99 KiB opt-in. A constant, so
+#: `max_steps` does not depend on the device; `walk` raises on a device that
+#: cannot give it. At window_c = 12: k up to 8191**2 at window_exponent = 1/2,
+#: about 1.6e5 at 3/4.
+_MAX_SHARED = 96 * 1024
+_MAX_W = _MAX_SHARED - _STATIC_SHARED
+
+#: The most a block gets without opting in.
+_DEFAULT_SHARED = 48 * 1024
 
 #: Threads per sample are at most this, and it is also the stride between
 #: samples in Philox subsequences, so it may never change without changing
@@ -222,9 +236,17 @@ def walk(k: int, n: int = 1, params: dict | None = None,
                          "shared memory one sample may use; use MODELS[\"rwre\"]")
 
     cp = _cupy()
+    kernel = _kernel(cp)
+    if w + _STATIC_SHARED > _DEFAULT_SHARED:
+        optin = cp.cuda.Device().attributes["MaxSharedMemoryPerBlockOptin"]
+        if w + _STATIC_SHARED > optin:
+            raise RuntimeError(
+                f"window width {w} at k = {k} needs {w + _STATIC_SHARED} bytes of shared "
+                f"memory per block and this device allows {optin}; lower k or use "
+                'MODELS["rwre"]')
+        kernel.max_dynamic_shared_size_bytes = w
     rng = rng if rng is not None else np.random.default_rng()
     seed = int(rng.integers(0, 2 ** 63))
-    kernel = _kernel(cp)
     threads = threads_per_sample(w)
 
     out = np.empty(n, dtype=np.int64)
