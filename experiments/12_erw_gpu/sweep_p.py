@@ -9,7 +9,13 @@ The pilot recipe for each p is `recipes/samples_super_p0.9.json` with only `para
 changed. That is the recipe the 2026-09-23 `ERW_p0.75_20m` study was piloted from.
 Arms run sequentially because they share one GPU. p = 0.75 goes first because it is
 the one this sweep is for. A p whose study already holds `autopilot.json` is skipped,
-so rerunning the same command resumes an interrupted sweep.
+so rerunning the same command resumes an interrupted sweep, and on a finished sweep
+it only rewrites the summary.
+
+The summary `sweep_p_<tag>.md` holds two tables (format set by the user, 2026-09-24):
+gamma_hat against the true gamma, and omega1 as the pilot measured it next to the
+final run's refit, each with the scales and draws it came from. The true gamma is
+the model's known answer, used here only to score the result, never by autopilot.
 
     python3 experiments/12_erw_gpu/sweep_p.py --tag 1h --time 1h
     python3 experiments/12_erw_gpu/sweep_p.py --tag 1h --time 1h --p 0.75 0.8 -- --force
@@ -29,7 +35,6 @@ from pathlib import Path
 EXP = Path(__file__).resolve().parent
 ROOT = EXP.parents[1]
 TEMPLATE = EXP / "recipes" / "samples_super_p0.9.json"
-DATA = EXP / "data"
 
 P_GRID = [0.75, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.725, 0.775, 0.8, 0.9]
 
@@ -46,19 +51,51 @@ def write_recipe(p: float) -> Path:
     return path
 
 
-def summary_row(p: float, study: str, code: int | None, minutes: float | None) -> str:
-    ap_path = DATA / study / "autopilot.json"
+def gamma_true(p: float) -> float:
+    """ERW: diffusive (1/2) up to the critical p = 3/4, superdiffusive 2p - 1 above."""
+    return 0.5 if p <= 0.75 else 2 * p - 1
+
+
+def ladder(scales: list) -> str:
+    return f"{scales[0]}..{scales[-1]} ({len(scales)})"
+
+
+def draws(n: int, replicates: int) -> str:
+    return f"{n:,} × {replicates}"
+
+
+def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[str, str]:
+    """(gamma row, omega1 row) for one study."""
+    ap_path = data / study / "autopilot.json"
     if not ap_path.exists():
-        return f"| {p} | `{study}` | exit {code} | - | - | - | - |"
+        return (f"| {p} | `{study}` | exit {code} | {gamma_true(p):.3f} | - | - | - | - | - |",
+                f"| {p} | - | - | - | - | - | - | - | - |")
     ap = json.loads(ap_path.read_text())
-    wall = "-" if minutes is None else f"{minutes:.1f}"
+    pilot = json.loads((data / study / "pilot.json").read_text())
+    om = json.loads((data / study / "constants.json").read_text())["omega1"]
+    # The pilot draws the same n at every scale; a recipe that doesn't would need a
+    # per-scale column here, not a silently picked first entry.
+    assert len(set(pilot["n"])) == 1, f"{study}: pilot n varies by scale: {pilot['n']}"
+    om_pilot = (f"| {p} | {om['value']:.3f} ± {om['se']:.3f} | {ladder(pilot['scales'])} "
+                f"| {draws(pilot['n'][0], pilot['replicates'])}")
     if not ap.get("drawn"):
-        return f"| {p} | `{study}` | not drawn (gate) | - | - | - | {wall} |"
-    answer = json.loads((DATA / study / "answer.json").read_text())
+        return (f"| {p} | `{study}` | not drawn (gate) | {gamma_true(p):.3f} | - | - | - | - "
+                f"| {ap['pilot_seconds'] / 60:.1f} |",
+                f"{om_pilot} | - | - | - | - | - |")
+    answer = json.loads((data / study / "answer.json").read_text())
+    # From the artifacts rather than this script's clock, so a resumed sweep's summary
+    # still has it; matches the clock to 0.1 min on the 2026-09-23 ERW_GPU sweep.
+    final_s = json.loads((data / study / "final.json").read_text())["elapsed_seconds"]
+    wall = f"{(ap['pilot_seconds'] + final_s) / 60:.1f}"
     lo, hi = answer["wilson"]["interval"]
     forced = " (forced)" if ap.get("forced") else ""
-    return (f"| {p} | `{study}` | drawn{forced} | {ap['gamma']:.5f} ± {answer['se']:.5f} "
-            f"| [{lo:.4f}, {hi:.4f}] | {answer['scales'][0]}..{answer['scales'][-1]} | {wall} |")
+    final = draws(answer["n"], answer["replicates"])
+    fit = answer["fit"]
+    return ((f"| {p} | `{study}` | drawn{forced} | {gamma_true(p):.3f} "
+             f"| {ap['gamma']:.5f} ± {answer['se']:.5f} | [{lo:.4f}, {hi:.4f}] "
+             f"| {answer['scales'][0]}..{answer['scales'][-1]} | {final} | {wall} |"),
+            (f"{om_pilot} | {fit['omega1']:.3f} | {fit['a1']:.3g} | {fit['converged']} "
+             f"| {ladder(answer['scales'])} | {final} |"))
 
 
 def main() -> int:
@@ -66,27 +103,30 @@ def main() -> int:
     ap.add_argument("--tag", required=True, help="study name suffix: sweep_p<p>_<tag>")
     ap.add_argument("--time", required=True, help="autopilot --time for EACH p, e.g. 1h")
     ap.add_argument("--p", type=float, nargs="+", default=P_GRID, help="p values, run in this order")
+    ap.add_argument("--data-root", type=Path, default=EXP / "data",
+                    help="where the studies live (default: this experiment's data/)")
     ap.add_argument("autopilot_args", nargs=argparse.REMAINDER,
                     help="after `--`: extra arguments for every autopilot.py call")
     args = ap.parse_args()
     extra = [a for a in args.autopilot_args if a != "--"]
 
+    data = args.data_root.resolve()
     rows = []
     failed = []
     for p in args.p:
         study = f"sweep_p{p}_{args.tag}"
-        if (DATA / study / "autopilot.json").exists():
+        if (data / study / "autopilot.json").exists():
             print(f"[sweep] p={p}: {study} already finished, skipping", flush=True)
-            rows.append(summary_row(p, study, None, None))
+            rows.append((p, summary_rows(p, study, data, None)))
             continue
         recipe = write_recipe(p)
-        DATA.mkdir(exist_ok=True)
-        log = DATA / f"{study}.log"
+        data.mkdir(exist_ok=True)
+        log = data / f"{study}.log"
         # -u: autopilot's phase lines go to stdout and its progress to stderr. Piped,
         # stdout is block-buffered, so without -u the log shows the final run's draws
         # before the pilot's header lines, and they read as if the pilot drew them.
         cmd = [sys.executable, "-u", str(ROOT / "src/study/autopilot.py"), "-meta", str(recipe),
-               "--study", study, "--data-root", str(DATA), "--time", args.time,
+               "--study", study, "--data-root", str(data), "--time", args.time,
                "--no-progress", *extra]
         print(f"[sweep] p={p}: {' '.join(cmd)}\n[sweep]   log -> {log}", flush=True)
         t0 = time.monotonic()
@@ -102,18 +142,41 @@ def main() -> int:
             code = proc.wait()
         minutes = (time.monotonic() - t0) / 60
         print(f"[sweep] p={p}: exit {code} after {minutes:.1f} min", flush=True)
-        rows.append(summary_row(p, study, code, minutes))
+        rows.append((p, summary_rows(p, study, data, code)))
         if code != 0:
             failed.append(p)
 
+    rows = [r for _, r in sorted(rows, key=lambda t: t[0])]
     table = "\n".join([
         f"# erw_gpu p sweep, tag `{args.tag}`, --time {args.time} per p",
         "",
-        "| p | study | status | gamma_hat ± replicate se | Wilson 95% | final ladder | min |",
-        "|---|---|---|---|---|---|---|",
-        *rows,
+        "True gamma: 1/2 for p <= 3/4, 2p - 1 above (the two agree at p = 3/4).",
+        "",
+        "## gamma_hat",
+        "",
+        "| p | study | status | gamma true | gamma_hat ± replicate se | Wilson 95% "
+        "| final ladder | n/scale × reps | min (pilot + draw) |",
+        "|---|---|---|---|---|---|---|---|---|",
+        *(g for g, _ in rows),
+        "",
+        "`n/scale × reps` = draws per scale in each replicate × independent replicates.",
+        "",
+        "## omega1",
+        "",
+        "Both columns are the eq. (232) fit, pooled over replicates. **pilot** is the value in",
+        "`constants.json` that sized the plan and the Wilson bound. **final fit** is",
+        "`answer.json[\"fit\"]`, refitted on the final ladder after the plan: no se is recorded,",
+        "and since the plan deepens m0 until the correction has died, that refit is mostly",
+        "noise (see `src/study/report.py`'s `wilson_inputs`). Read omega1 from the pilot.",
+        "",
+        "| p | omega1 pilot ± se | pilot scales | pilot n/scale × reps | omega1 final fit "
+        "| a1 final fit | final-fit converged | final scales | final n/scale × reps |",
+        "|---|---|---|---|---|---|---|---|---|",
+        *(o for _, o in rows),
+        "",
+        "Scales are dyadic; `lo..hi (k)` = k scales from lo to hi.",
     ])
-    out = DATA / f"sweep_p_{args.tag}.md"
+    out = data / f"sweep_p_{args.tag}.md"
     out.write_text(table + "\n")
     print(f"\n{table}\n\n[sweep] summary -> {out}", flush=True)
     if failed:
