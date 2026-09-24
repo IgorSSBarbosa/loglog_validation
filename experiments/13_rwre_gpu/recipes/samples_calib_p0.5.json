@@ -1,0 +1,31 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.5,
+    "alpha": 0.5
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "02_rwre/recipes/samples_calib_p0.5.json (criterion A2 there) with only the",
+    "model changed, so the GPU arm and the CPU arm can be compared estimator by",
+    "estimator (G3 in ../README.md). It is also the template sweep_p.py copies",
+    "for every p. Every word of that recipe's note applies; read it there.",
+    "Its BUDGET UNITS paragraph does not: that one is CPU wall clock."
+  ]
+}

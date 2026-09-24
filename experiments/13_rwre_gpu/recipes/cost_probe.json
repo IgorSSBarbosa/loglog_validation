@@ -1,0 +1,27 @@
+{
+  "kind": "cost_probe",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5
+  },
+  "scales": [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384
+  ],
+  "repeats": 10,
+  "seed": 20260923,
+  "_note": [
+    "Criterion E1: does the batched probe (tools/cost_model.py's probe_batched,",
+    "selected by batched_cost, walked to a full device by latency_bound)",
+    "recover models/rwre.py's declared d = 3/2 on the GPU? 02_rwre's",
+    "cost_probe.json with only the model changed. p and alpha do not enter the",
+    "work -- every step stirs the whole window -- so one (p, alpha) stands for all."
+  ]
+}

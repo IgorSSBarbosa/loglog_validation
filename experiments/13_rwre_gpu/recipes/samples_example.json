@@ -1,0 +1,26 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5
+  },
+  "scales": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "n": 4000,
+  "seed": 20260923,
+  "_note": [
+    "DEMO for src/generate/generate.py + src/report/plot_loglog.py on the GPU, at",
+    "02_rwre's headline point p = 1/3. gamma is NOT known here: 02_rwre measured",
+    "an effective exponent ~0.57 still rising at k = 1024. A seed reproduces this",
+    "run only on the cupy/CUDA versions in ../README.md, never an rwre run."
+  ]
+}

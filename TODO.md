@@ -513,6 +513,17 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
   - [ ] The sieve in $\gamma_{\rm eff}$ (the axis Conjecture 3.5 is stated in), and a
         longer ladder with $W\propto k^{\hat\gamma}$ to tell a rising effective exponent
         from a settled one
+  - [x] ~~GPU port: `models/rwre_gpu.py`, `MODELS["rwre_gpu"]` — one `RawKernel` launch
+        per call, one CUDA block per sample with its window in shared memory, Philox
+        per (sample, thread); `cost_hint`/`_check`/`window_width` imported. A CuPy
+        port was launch-bound (~0.55 ms per step at any $n$) and was replaced.
+        4,600–10,800× the CPU model. Verified: G1 KS + mean against `rwre` on 10 arms,
+        G2 exact references (25/25); E1 $\hat d=1.390\pm0.044$, PASS, low for a measured
+        reason (device cost $k\,(a+bW)$); G3 control $p=1/2$ end to end
+        $\hat\gamma=0.50013\pm0.00021$, $\omega_1=0.988\pm0.100$, $a_1=-0.256\pm0.032$.
+        `ModelSpec.latency_bound` + `cost_model._saturate` so `probe_batched` can time a
+        serial-chain model. See `experiments/13_rwre_gpu/README.md`~~
+  - [ ] `13_rwre_gpu` sieve: `sweep_p.py --tag 1h` over 02's grid, 1h per $p$
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact
