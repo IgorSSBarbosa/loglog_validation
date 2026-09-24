@@ -523,7 +523,10 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $\hat\gamma=0.50013\pm0.00021$, $\omega_1=0.988\pm0.100$, $a_1=-0.256\pm0.032$.
         `ModelSpec.latency_bound` + `cost_model._saturate` so `probe_batched` can time a
         serial-chain model. See `experiments/13_rwre_gpu/README.md`~~
-  - [ ] `13_rwre_gpu` sieve: `sweep_p.py --tag 1h` over 02's grid, 1h per $p$
+  - [ ] `13_rwre_gpu` sieve: `sweep_p.py --tag 1h` over 02's grid, 1h per $p$, at
+        `window_exponent = 3/4` ($W=12\lceil k^{3/4}\rceil$, $d=7/4$, $k\le2^{16}$; user,
+        2026-09-24). Its $p=1/2$ arm is G3's real check: the 4-min smoke at 3/4 had
+        $a_1$ at $2.4\sigma$
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact

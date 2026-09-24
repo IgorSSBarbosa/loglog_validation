@@ -8,8 +8,9 @@ is a failure.
 The model, its four stated decisions (environment, step order, rate, window), its exact
 symmetries and what is known about $\gamma$ are in `experiments/02_rwre/README.md` and
 aren't repeated here. This experiment asks whether the device changes anything, and then
-spends the speed on 02's sieve of $p$. `models/rwre.py` is unchanged and taken as
-correct. Nothing in `src/` or `calibration/` changed. In `tools/`, the registry gained
+spends the speed on 02's sieve of $p$. `models/rwre.py` is taken as correct. Its one
+change is a new parameter, `window_exponent` (default ½, every draw bit-identical to
+before; see *The window* below). Nothing in `src/` or `calibration/` changed. In `tools/`, the registry gained
 the entry, and `tools/cost_model.py`'s `probe_batched` gained an opt-in saturation walk
 (`ModelSpec.latency_bound`, below), which no other model sets.
 
@@ -49,11 +50,26 @@ the fastest at $n$, which puts the smaller call at least 7/8 of the way to a ful
 and bounds the marginal cost's bias at ~5% low. Every other model's probe is unchanged:
 the full local suite gives the same 530 passed, 12 skipped with and without it.
 
+### The window: $W=12\lceil k^{3/4}\rceil$ for the sieve (user, 2026-09-24)
+
+02's window $W=12\lceil\sqrt k\rceil$ carries a wrap bound that assumed diffusive
+spread. Away from $p=1/2$, 02 measured $\lvert X_k\rvert\sim k^{0.58}$, which reaches
+$\lvert X\rvert/(W/2)=0.53$ by $k=32768$, and 02 set aside its own $1024..32768$ run for
+that reason. The GPU's hour per $p$ plans ladders in exactly that range, so
+`models/rwre.py` gained `window_exponent`: $W=\texttt{window\_c}\cdot\lceil
+k^{\texttt{window\_exponent}}\rceil$. `sweep_p.py` sets it to 3/4 ("just to be safe"),
+which outgrows any spread slower than $k^{3/4}$. The cost becomes $12\,k^{7/4}$, declared
+$d=7/4$. The window must fit one block's shared memory, which caps $k$ at $2^{16}$
+(`max_steps`), and `sweep_p.py` hands that to autopilot as `--max-scale`. The default
+stays ½: 02's results, and `recipes/samples_calib_p0.5.json` as 02's like-for-like, are
+unchanged.
+
 ## Acceptance criteria (written 2026-09-23)
 
 **G1. Distribution against `rwre`.** $k\in\{64,1024\}$ × five parameter sets ($p=1/3$,
 $p=0$, $p=1/2$, frozen environment `env_sweeps = 0` at $p=0.2$, and $\alpha=0.3$ at
-$p=0.3$), $n=4000$ per arm, independent spawned seeds: two-sample KS $p\ge0.01$, and
+$p=0.3$; added 2026-09-24: $p=1/3$ and $p=0$ at `window_exponent = 3/4`), $n=4000$ per
+arm, independent spawned seeds: two-sample KS $p\ge0.01$, and
 $\lvert\bar Y_{\rm GPU}-\bar Y_{\rm CPU}\rvert\le3$ combined se.
 
 **G2. Exact references, GPU only.**
@@ -81,7 +97,17 @@ driver's 20% of the declared $d=3/2$.
 
 ## G1, G2: PASS (2026-09-24, on the kernel)
 
-The checks are a local script (tests stay out of git, see CLAUDE.md); 25 of 25 pass:
+The checks are a local script (tests stay out of git, see CLAUDE.md). 25 of 25 pass on
+the first run. On the rerun after `window_exponent` was added, 27 of 27 pass, and the
+default-window CPU arms reproduce the first run's means to the last digit, so `rwre`
+at the default is unchanged. The two new arms, at $k=1024$:
+
+```
+PASS  {'p': 0.3333333333333333, 'window_exponent': 0.75} k=1024: KS p=0.704  mean cpu=35.730 gpu=36.086  z=+0.61
+PASS  {'p': 0.0, 'window_exponent': 0.75} k=1024: KS p=0.449  mean cpu=49.215 gpu=48.385  z=-1.05
+```
+
+The first run:
 
 ```
 PASS  {'p': 0.3333333333333333} k=64: KS p=1.000  mean cpu=7.274 gpu=7.324  z=+0.41
@@ -161,6 +187,17 @@ site of the window):
 | $\hat\gamma$, final ladder 256..8192 | $0.50013\pm0.00021$ | 1/2 | $0.6\sigma$ |
 | eq. (720) 95% interval | $[0.4989, 0.5013]$ | contains 1/2 | |
 
+**Second smoke, at `window_exponent = 3/4` (2026-09-24):** `sweep_p.py --tag smoke34
+--time 4m --p 0.5`, 3.7 min, `--max-scale 65536` applied, final ladder 256..8192:
+$\hat\gamma=0.50007\pm0.00031$ (0.2σ), eq. (720) interval $[0.4965,0.5036]$. The pilot's
+constants are further out: $\omega_1=0.753\pm0.122$ ($2.0\sigma$) and
+$a_1=-0.188\pm0.026$ ($2.4\sigma$, **outside the 2-se rule**). At $p=1/2$ the walk is
+exactly srw for any window (G2's $\chi^2$ checks that law), so this can't be the window.
+The two constants are fitted jointly and move together, so it's one deviation of a
+4-minute pilot, not two. The sweep's 1h $p=1/2$ arm is the G3 check that counts. Its
+clock read $d=1.572\pm0.005$ on 4..1024 against the declared 7/4, the same serial-part
+effect as E1.
+
 The same arm in `02_rwre` (A2) took three CPU replicates on 4..1024 and returned
 $0.5002\pm0.0022$. In four minutes the GPU's final ladder reaches 8192 with a replicate se
 ten times smaller.
@@ -169,7 +206,7 @@ ten times smaller.
 
 `sweep_p.py` runs `autopilot.py` once per $p$, one after another (they share one GPU),
 with the same 1h wall clock and the same pilot recipe each (`samples_calib_p0.5.json`
-with only $p$ changed). The grid is 02's A6 sieve plus its headline, in this order:
+with $p$ changed and `window_exponent = 3/4`), and `--max-scale 65536`. The grid is 02's A6 sieve plus its headline, in this order:
 $p=1/3, 0, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5$. $[0,1/2]$ is enough because $\lvert X_k\rvert$
 has the same law at $p$ and $1-p$. The question is 02's open one: at $p=1/3$ the
 effective exponent was $\ge0.579$ at $k\in[512,1024]$ and still rising, so does it settle,
