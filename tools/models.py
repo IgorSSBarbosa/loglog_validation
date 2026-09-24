@@ -37,6 +37,7 @@ from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_gpu as model_percolation_zd_gpu
 from models import percolation_zd_stream as model_percolation_zd_stream
 from models import rwre as model_rwre
+from models import rwre_gpu as model_rwre_gpu
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -149,6 +150,19 @@ MODELS: dict[str, ModelSpec] = {
         # covers only the densities where the speed is non-zero, and alpha =
         # 1/2 with symmetric drifts is exactly the zero-speed case they leave
         # open. See experiments/02_rwre/README.md.
+    ),
+    "rwre_gpu": ModelSpec(
+        simulate=model_rwre_gpu.simulate,
+        # rwre's own cost_hint (i * W(i), d = 3/2) and window, imported, so
+        # neither can drift. The same walker on the same stirred SSEP, one
+        # CUDA block per sample with its window in shared memory, Philox
+        # seeded from the driver's rng -- equal to rwre in DISTRIBUTION, not
+        # bit for bit. See models/rwre_gpu.py, experiments/13_rwre_gpu.
+        cost_hint=model_rwre_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
+        # One CUDA block walks one sample's k steps in series, so a call of
+        # few samples costs one sample's latency. See ModelSpec.latency_bound.
+        latency_bound=True,
     ),
     "erw": ModelSpec(
         simulate=model_erw.simulate,

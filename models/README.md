@@ -200,6 +200,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `synthetic` | planted eq. (232) | `cost_scale·i**cost_d`, else 1 | any, else 0 | recovers the planted $d$ | **yes** |
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
 | `rwre` | $\lvert X_k\rvert$ on an SSEP | $i\,W(i)$ | 3/2 | $1.4926$ (amortized; see below) | no |
+| `rwre_gpu` | the same, on a GPU | $i\,W(i)$ | 3/2 | $1.390\pm0.044$ (batched, saturated; see below) | no |
 | `erw` | $\lvert S_k\rvert$ of the elephant random walk | $i$ | 1 | $1.09\pm0.03$ / $0.92\pm0.03$ (two runs; see below) | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
@@ -1093,3 +1094,37 @@ Measured 2026-09-23 on the RTX 5090: CuPy pool peak 45.8–46.1 bytes/step at
 $k=2^6..2^{20}$; 0.51–0.62 ns/step, flat in $k$, against the CPU model's 30–43 ns
 (52–73×). Verified in `tools/tests/test_erw_gpu.py` (KS and mean against `erw`, plus
 `test_erw.py`'s exact references). See `experiments/12_erw_gpu/README.md`.
+
+### `rwre_gpu.py` — `rwre` on a CUDA GPU
+
+`walk(k, n=1, params=None, rng=None)` and `simulate(i, n, params, rng)`, as in `rwre`.
+`_check`, `window_width` and `cost_hint` are imported from `rwre`, so the parameters, the
+window and the declared $d=3/2$ can't drift. The algorithm is a CUDA kernel, not a CuPy
+port (user, 2026-09-23). A one-to-one CuPy port sampled the right law, but each step was
+~40 small kernels, so a call cost ~0.55 ms per step whatever $n$ was, and
+`probe_batched` could not time it. The kernel runs one sample per CUDA block with its
+window in shared memory ($W\le48$ KiB, so $k\le4096^2$ at `window_c = 12`). Per step,
+thread 0 reads and jumps (float64 uniform), then `env_sweeps` brick-wall sweeps run with
+the parity drawn per sample and each disjoint bond of that parity swapped in place
+(float32 uniforms), with barriers between phases: `rwre`'s order (b), exactly. Every
+uniform is `1 - curand_uniform`, on $[0,1)$ like numpy's.
+
+The stream: one `rng.integers(0, 2**63)` per call seeds Philox4x32-10, and thread $t$ of
+sample $j$ draws from subsequence $256j+t$. The thread count is a function of $W$ alone.
+So, unlike every other `*_gpu` model, a sample's draw does not depend on how the call is
+cut into launches, and the first $m$ samples of a call are the same at any $n\ge m$.
+Equal in distribution to `rwre`, not bit for bit. cupy imported only inside `walk`.
+
+Its registry entry sets `batched_cost=True` and `latency_bound=True` (user, 2026-09-24).
+One sample is a serial chain on $\le256$ threads, so the device fills only at ~4000
+samples in flight, and below that extra samples are free. `latency_bound` makes
+`probe_batched` double $n$ until a call of $4n$ takes $\ge3.5\times$ one of $n$
+(`tools/cost_model.py`'s `_saturate`).
+
+Measured 2026-09-24 on the RTX 5090, device full: per sample $k\,(a+bW)$ with
+$a=0.71$ ns (the serial read, jump and barriers) and $b=2.44$ ps per step·site. The
+clock's local exponent $1+\tfrac12 bW/(a+bW)$ is 1.28 at $k=1024$ and 1.42 at $k=16384$,
+so E1's $\hat d=1.390\pm0.044$ on $2^7..2^{14}$ sits 2.3σ under the declared 3/2, which
+counts the work and is right asymptotically. 3.6–4.6 ps per step·site against the CPU
+model's 21–39 ns (4,600–10,800×). Verified against `rwre` (KS and mean) and against
+exact references. See `experiments/13_rwre_gpu/README.md`.
