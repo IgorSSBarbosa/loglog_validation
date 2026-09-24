@@ -1103,7 +1103,8 @@ window and the declared $d=3/2$ can't drift. The algorithm is a CUDA kernel, not
 port (user, 2026-09-23). A one-to-one CuPy port sampled the right law, but each step was
 ~40 small kernels, so a call cost ~0.55 ms per step whatever $n$ was, and
 `probe_batched` could not time it. The kernel runs one sample per CUDA block with its
-window in shared memory ($W\le48$ KiB, so $k\le4096^2$ at `window_c = 12`). Per step,
+window in shared memory ($W\le48$ KiB, so $k\le4096^2$ at `window_c = 12`, and $k\le2^{16}$ at
+`window_exponent = 3/4`; `max_steps(params)` gives the ceiling). Per step,
 thread 0 reads and jumps (float64 uniform), then `env_sweeps` brick-wall sweeps run with
 the parity drawn per sample and each disjoint bond of that parity swapped in place
 (float32 uniforms), with barriers between phases: `rwre`'s order (b), exactly. Every
@@ -1128,3 +1129,8 @@ so E1's $\hat d=1.390\pm0.044$ on $2^7..2^{14}$ sits 2.3σ under the declared 3/
 counts the work and is right asymptotically. 3.6–4.6 ps per step·site against the CPU
 model's 21–39 ns (4,600–10,800×). Verified against `rwre` (KS and mean) and against
 exact references. See `experiments/13_rwre_gpu/README.md`.
+
+`rwre`'s `window_exponent` (default ½, added 2026-09-24) sets
+$W=\texttt{window\_c}\cdot\lceil k^{\texttt{window\_exponent}}\rceil$, so cost is
+$k^{1+\texttt{window\_exponent}}$. 13's sieve runs at 3/4, because 02 measured
+superdiffusive spread that outruns a $\sqrt k$ window on long ladders.

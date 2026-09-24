@@ -87,6 +87,14 @@ decisions all move the answer, and all four were taken explicitly (2026-09-15).
     wrap bond would share a site with another bond of the same parity and the
     "swap" would stop being a permutation.
 
+    `window_exponent` (default 1/2) replaces the sqrt: W(k) = window_c *
+    ceil(k^window_exponent). The bound above assumed DIFFUSIVE spread, and
+    experiments/02_rwre measured |X_k| ~ k^0.58 away from p = 1/2, which
+    reaches |X|/(W/2) = 0.53 at k = 32768. At 3/4 (user, 2026-09-24, for
+    experiments/13_rwre_gpu's longer ladders: "just to be safe") the window
+    outgrows any exponent below 3/4 and cost(k) = window_c * k^(7/4), d = 7/4.
+    At the default every draw is bit-identical to before the parameter existed.
+
 Blocking, and a deliberate deviation from models/README.md's contract
 ---------------------------------------------------------------------
 That contract asks a model to block over n and stay bit-identical at any block
@@ -137,21 +145,30 @@ _DEFAULTS = {
     "env_sweeps": 4,
     "swap_prob": 0.5,
     "window_c": 12.0,
+    "window_exponent": 0.5,
 }
 
 
-def window_width(k: int, window_c: float = 12.0) -> int:
+def window_width(k: int, window_c: float = 12.0, window_exponent: float = 0.5) -> int:
     """Width of the periodic environment window for a k-step walk.
 
-    window_c * ceil(sqrt k), rounded up to an even number (both parities must
-    be perfect matchings of the periodic window -- see the module docstring),
-    and never below 4 so that there are at least two bonds of each parity.
+    window_c * ceil(k**window_exponent), rounded up to an even number (both
+    parities must be perfect matchings of the periodic window -- see the
+    module docstring), and never below 4 so that there are at least two bonds
+    of each parity.
     """
     if k < 1:
         raise ValueError(f"k must be >= 1; got {k}")
     if window_c <= 0:
         raise ValueError(f"window_c must be > 0; got {window_c}")
-    w = int(np.ceil(window_c * np.ceil(np.sqrt(float(k)))))
+    if window_exponent == 0.5:
+        root = np.ceil(np.sqrt(float(k)))      # the original rule, bit for bit
+    else:
+        # pow is not exact at perfect powers (16**0.75 may be 8.000000001), and a
+        # ceil there would add a whole site; snap within 1e-9 relative first.
+        r = float(k) ** window_exponent
+        root = float(round(r)) if abs(r - round(r)) <= 1e-9 * r else float(np.ceil(r))
+    w = int(np.ceil(window_c * root))
     w += w % 2
     return max(w, 4)
 
@@ -174,6 +191,10 @@ def _check(params: dict) -> dict:
         raise ValueError(f"env_sweeps must be a non-negative integer; "
                          f"got {q['env_sweeps']}")
     q["env_sweeps"] = int(q["env_sweeps"])
+    if not 0.5 <= q["window_exponent"] <= 1.0:
+        raise ValueError(f"window_exponent must be in [1/2, 1] (the walk spreads at "
+                         f"least diffusively, at most ballistically); "
+                         f"got {q['window_exponent']}")
     return q
 
 
@@ -234,7 +255,7 @@ def walk(k: int, n: int = 1, params: dict | None = None,
     if n < 0:
         raise ValueError(f"n must be >= 0; got {n}")
 
-    w = window_width(k, q["window_c"])
+    w = window_width(k, q["window_c"], q["window_exponent"])
     half = w // 2
     col_parity = (np.arange(w) % 2).astype(np.int8)
     p, alpha, sweeps, swap_prob = q["p"], q["alpha"], q["env_sweeps"], q["swap_prob"]
@@ -277,11 +298,12 @@ def cost_hint(i: int, params: dict | None = None) -> float:
     times, and env_sweeps is constant across scales so it cancels in every
     ratio the allocation takes (tools/models.py's ModelSpec.cost_hint). Hence
 
-        cost(i) = i * W(i) = window_c * i^(3/2),
+        cost(i) = i * W(i) = window_c * i^(1 + window_exponent),
 
-    and Assumption 7's exponent is d = 3/2 exactly -- known rather than fitted,
+    and Assumption 7's exponent is d = 3/2 exactly at the default window
+    (7/4 at window_exponent = 3/4) -- known rather than fitted,
     as it is for srw (d = 1) and percolation_zd (d = dim), so a measured d can
     be scored against it.
     """
     q = _check(dict(params or {}))
-    return float(i) * float(window_width(i, q["window_c"]))
+    return float(i) * float(window_width(i, q["window_c"], q["window_exponent"]))

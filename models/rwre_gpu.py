@@ -82,11 +82,12 @@ import numpy as np
 
 from models.rwre import _check, cost_hint, window_width
 
-__all__ = ["walk", "simulate", "cost_hint", "threads_per_sample"]
+__all__ = ["walk", "simulate", "cost_hint", "threads_per_sample", "max_steps"]
 
 #: The window lives in a block's shared memory, one byte per site, and 48 KiB
 #: is what CUDA gives a block without an opt-in. At the default window_c = 12
-#: that allows k up to 4096**2, about 1.7e7 steps.
+#: that allows k up to 4096**2, about 1.7e7 steps, and 2**16 at
+#: window_exponent = 3/4 (see `max_steps`).
 _MAX_W = 48 * 1024
 
 #: Threads per sample are at most this, and it is also the stride between
@@ -184,6 +185,25 @@ def threads_per_sample(w: int) -> int:
     return min(_MAX_THREADS, 32 * math.ceil((w // 2) / 32))
 
 
+def max_steps(params: dict | None = None) -> int:
+    """The largest k whose window fits one block's shared memory, for these params.
+
+    What autopilot's --max-scale should be for this model: `walk` raises above
+    it rather than silently moving the window to slower global memory.
+    """
+    q = _check(dict(params or {}))
+    lo, hi = 1, 2
+    while window_width(hi, q["window_c"], q["window_exponent"]) <= _MAX_W:
+        lo, hi = hi, 2 * hi
+    while hi - lo > 1:                  # window_width is non-decreasing in k
+        mid = (lo + hi) // 2
+        if window_width(mid, q["window_c"], q["window_exponent"]) <= _MAX_W:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
 def walk(k: int, n: int = 1, params: dict | None = None,
          rng: np.random.Generator | None = None) -> np.ndarray:
     """n i.i.d. realizations of the SIGNED displacement X_k, on the GPU. int64, shape (n,).
@@ -196,7 +216,7 @@ def walk(k: int, n: int = 1, params: dict | None = None,
         raise ValueError(f"k must be >= 1; got {k}")
     if n < 0:
         raise ValueError(f"n must be >= 0; got {n}")
-    w = window_width(k, q["window_c"])
+    w = window_width(k, q["window_c"], q["window_exponent"])
     if w > _MAX_W:
         raise ValueError(f"window width {w} at k = {k} exceeds the {_MAX_W} bytes of "
                          "shared memory one sample may use; use MODELS[\"rwre\"]")
