@@ -86,13 +86,20 @@ def ladder(scales: list) -> str:
     return f"{scales[0]}..{scales[-1]} ({len(scales)})"
 
 
-def draws(n: int, replicates: int) -> str:
-    return f"{n:,} × {replicates}"
+def per_scale(n: int | list, scales: list) -> list[int]:
+    return list(n) if isinstance(n, list) else [n] * len(scales)
 
 
-def samples(n: int, replicates: int, scales: list) -> str:
-    """Samples produced: every replicate draws n at every scale."""
-    return f"{n * replicates * len(scales):,}"
+def draws(n: int | list, replicates: int, scales: list) -> str:
+    """n/scale × reps; a per-scale n (e.g. a neyman pilot) as smallest-scale..largest-scale."""
+    ns = per_scale(n, scales)
+    each = f"{ns[0]:,}" if len(set(ns)) == 1 else f"{ns[0]:,}..{ns[-1]:,}"
+    return f"{each} × {replicates}"
+
+
+def samples(n: int | list, replicates: int, scales: list) -> str:
+    """Samples produced: every replicate draws n_i at each scale i."""
+    return f"{sum(per_scale(n, scales)) * replicates:,}"
 
 
 def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[str, str]:
@@ -101,15 +108,12 @@ def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[st
     if pilot_path.exists():
         pilot = json.loads(pilot_path.read_text())
         om = json.loads((data / study / "constants.json").read_text())["omega1"]
-        # The pilot draws the same n at every scale; a recipe that doesn't would need a
-        # per-scale column here, not a silently picked first entry.
-        assert len(set(pilot["n"])) == 1, f"{study}: pilot n varies by scale: {pilot['n']}"
         # The converged flag must belong to the fit that produced constants.json's omega1.
         assert pilot["direct_fit"]["omega1"] == om["value"], f"{study}: omega1 not from direct_fit"
         om_pilot = (f"| {label(p)} | {om['value']:.3f} ± {om['se']:.3f} "
                     f"| {pilot['direct_fit']['converged']} "
-                    f"| {ladder(pilot['scales'])} | {draws(pilot['n'][0], pilot['replicates'])} "
-                    f"| {samples(pilot['n'][0], pilot['replicates'], pilot['scales'])}")
+                    f"| {ladder(pilot['scales'])} | {draws(pilot['n'], pilot['replicates'], pilot['scales'])} "
+                    f"| {samples(pilot['n'], pilot['replicates'], pilot['scales'])}")
     else:
         om_pilot = f"| {label(p)} | - | - | - | - | -"
     ap_path = data / study / "autopilot.json"
@@ -130,7 +134,7 @@ def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[st
     wall = f"{(ap['pilot_seconds'] + final_s) / 60:.1f}"
     lo, hi = answer["wilson"]["interval"]
     forced = " (forced)" if ap.get("forced") else ""
-    final = draws(answer["n"], answer["replicates"])
+    final = draws(answer["n"], answer["replicates"], answer["scales"])
     total = samples(answer["n"], answer["replicates"], answer["scales"])
     fit = answer["fit"]
     return ((f"| {label(p)} | `{study}` | drawn{forced} "
@@ -199,8 +203,9 @@ def main() -> int:
         "|---|---|---|---|---|---|---|---|---|",
         *(g for g, _ in rows),
         "",
-        "`n/scale × reps` = draws per scale in each replicate × independent replicates;",
-        "`samples` = n/scale × reps × number of scales, the samples the final run produced.",
+        "`n/scale × reps` = draws per scale in each replicate × independent replicates",
+        "(`a..b` when n differs by scale: n at the smallest scale..n at the largest);",
+        "`samples` = n summed over the scales × reps, the samples the final run produced.",
         "",
         "## omega1",
         "",
