@@ -17,10 +17,17 @@ reach half the window by k = 32768; W = 12 ceil(k^(3/4)) outgrows any such sprea
 block's shared memory, so every study is given `--max-scale` = models/rwre_gpu.py's
 `max_steps` (a `--max-scale` after `--` overrides it). A p whose
 study already holds `autopilot.json` is skipped, so rerunning the same command
-resumes an interrupted sweep. Arms run sequentially because they share one GPU.
+resumes an interrupted sweep, and on a finished sweep it only rewrites the summary.
+Arms run sequentially because they share one GPU.
+
+The summary `sweep_p_<tag>.md` holds two tables, in the format of
+12_erw_gpu/sweep_p.py (user, 2026-09-25): gamma_hat, and omega1 as the pilot measured
+it next to the final run's refit, each with the scales and draws it came from. There
+is no true-gamma column: rwre's gamma is known only at p = 1/2.
 
     python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h
     python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h --p 1/3 0.2 -- --force
+    python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h --data-root experiments/13_rwre_gpu/data/sweep_data/sweep_1h
 
 Anything after `--` is passed to every `autopilot.py` call unchanged.
 """
@@ -41,7 +48,6 @@ TEMPLATE = EXP / "recipes" / "samples_calib_p0.5.json"
 
 sys.path.insert(0, str(ROOT))
 from models.rwre_gpu import max_steps  # noqa: E402
-DATA = EXP / "data"
 
 P_GRID = [1 / 3, 0.0, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5]
 
@@ -76,19 +82,62 @@ def write_recipe(p: float) -> Path:
     return path
 
 
-def summary_row(p: float, study: str, code: int | None, minutes: float | None) -> str:
-    ap_path = DATA / study / "autopilot.json"
+def ladder(scales: list) -> str:
+    return f"{scales[0]}..{scales[-1]} ({len(scales)})"
+
+
+def draws(n: int, replicates: int) -> str:
+    return f"{n:,} × {replicates}"
+
+
+def samples(n: int, replicates: int, scales: list) -> str:
+    """Samples produced: every replicate draws n at every scale."""
+    return f"{n * replicates * len(scales):,}"
+
+
+def summary_rows(p: float, study: str, data: Path, code: int | None) -> tuple[str, str]:
+    """(gamma row, omega1 row) for one study."""
+    pilot_path = data / study / "pilot.json"
+    if pilot_path.exists():
+        pilot = json.loads(pilot_path.read_text())
+        om = json.loads((data / study / "constants.json").read_text())["omega1"]
+        # The pilot draws the same n at every scale; a recipe that doesn't would need a
+        # per-scale column here, not a silently picked first entry.
+        assert len(set(pilot["n"])) == 1, f"{study}: pilot n varies by scale: {pilot['n']}"
+        # The converged flag must belong to the fit that produced constants.json's omega1.
+        assert pilot["direct_fit"]["omega1"] == om["value"], f"{study}: omega1 not from direct_fit"
+        om_pilot = (f"| {label(p)} | {om['value']:.3f} ± {om['se']:.3f} "
+                    f"| {pilot['direct_fit']['converged']} "
+                    f"| {ladder(pilot['scales'])} | {draws(pilot['n'][0], pilot['replicates'])} "
+                    f"| {samples(pilot['n'][0], pilot['replicates'], pilot['scales'])}")
+    else:
+        om_pilot = f"| {label(p)} | - | - | - | - | -"
+    ap_path = data / study / "autopilot.json"
     if not ap_path.exists():
-        return f"| {label(p)} | `{study}` | exit {code} | - | - | - | - |"
+        # A pilot that gave up without writing autopilot.json still measured omega1,
+        # and those gated p's are the ones whose omega1 is worth reading.
+        return (f"| {label(p)} | `{study}` | exit {code} | - | - | - | - | - | - |",
+                f"{om_pilot} | - | - | - | - | - |")
     ap = json.loads(ap_path.read_text())
-    wall = "-" if minutes is None else f"{minutes:.1f}"
     if not ap.get("drawn"):
-        return f"| {label(p)} | `{study}` | not drawn (gate) | - | - | - | {wall} |"
-    answer = json.loads((DATA / study / "answer.json").read_text())
+        return (f"| {label(p)} | `{study}` | not drawn (gate) | - | - | - | - | - "
+                f"| {ap['pilot_seconds'] / 60:.1f} |",
+                f"{om_pilot} | - | - | - | - | - |")
+    answer = json.loads((data / study / "answer.json").read_text())
+    # From the artifacts rather than this script's clock, so a resumed sweep's summary
+    # still has it.
+    final_s = json.loads((data / study / "final.json").read_text())["elapsed_seconds"]
+    wall = f"{(ap['pilot_seconds'] + final_s) / 60:.1f}"
     lo, hi = answer["wilson"]["interval"]
     forced = " (forced)" if ap.get("forced") else ""
-    return (f"| {label(p)} | `{study}` | drawn{forced} | {ap['gamma']:.5f} ± {answer['se']:.5f} "
-            f"| [{lo:.4f}, {hi:.4f}] | {answer['scales'][0]}..{answer['scales'][-1]} | {wall} |")
+    final = draws(answer["n"], answer["replicates"])
+    total = samples(answer["n"], answer["replicates"], answer["scales"])
+    fit = answer["fit"]
+    return ((f"| {label(p)} | `{study}` | drawn{forced} "
+             f"| {ap['gamma']:.5f} ± {answer['se']:.5f} | [{lo:.4f}, {hi:.4f}] "
+             f"| {answer['scales'][0]}..{answer['scales'][-1]} | {final} | {total} | {wall} |"),
+            (f"{om_pilot} | {fit['omega1']:.3f} | {fit['a1']:.3g} "
+             f"| {ladder(answer['scales'])} | {final} | {total} |"))
 
 
 def main() -> int:
@@ -97,25 +146,28 @@ def main() -> int:
     ap.add_argument("--time", default="1h", help="autopilot --time for EACH p (default 1h)")
     ap.add_argument("--p", type=parse_p, nargs="+", default=P_GRID,
                     help="p values, run in this order; fractions like 1/3 are accepted")
+    ap.add_argument("--data-root", type=Path, default=EXP / "data",
+                    help="where the studies live (default: this experiment's data/)")
     ap.add_argument("autopilot_args", nargs=argparse.REMAINDER,
                     help="after `--`: extra arguments for every autopilot.py call")
     args = ap.parse_args()
     extra = [a for a in args.autopilot_args if a != "--"]
 
+    data = args.data_root.resolve()
     rows = []
     failed = []
     for p in args.p:
         study = f"sweep_p{label(p)}_{args.tag}"
-        if (DATA / study / "autopilot.json").exists():
+        if (data / study / "autopilot.json").exists():
             print(f"[sweep] p={label(p)}: {study} already finished, skipping", flush=True)
-            rows.append(summary_row(p, study, None, None))
+            rows.append((p, summary_rows(p, study, data, None)))
             continue
         recipe = write_recipe(p)
         max_scale = max_steps(json.loads(recipe.read_text())["params"])
-        DATA.mkdir(exist_ok=True)
-        log = DATA / f"{study}.log"
+        data.mkdir(exist_ok=True)
+        log = data / f"{study}.log"
         cmd = [sys.executable, str(ROOT / "src/study/autopilot.py"), "-meta", str(recipe),
-               "--study", study, "--data-root", str(DATA), "--time", args.time,
+               "--study", study, "--data-root", str(data), "--time", args.time,
                "--max-scale", str(max_scale), "--no-progress", *extra]
         print(f"[sweep] p={label(p)}: {' '.join(cmd)}\n[sweep]   log -> {log}", flush=True)
         t0 = time.monotonic()
@@ -131,19 +183,45 @@ def main() -> int:
             code = proc.wait()
         minutes = (time.monotonic() - t0) / 60
         print(f"[sweep] p={label(p)}: exit {code} after {minutes:.1f} min", flush=True)
-        rows.append(summary_row(p, study, code, minutes))
+        rows.append((p, summary_rows(p, study, data, code)))
         if code != 0:
             failed.append(label(p))
 
+    rows = [r for _, r in sorted(rows, key=lambda t: t[0])]
     table = "\n".join([
         f"# rwre_gpu p sweep, tag `{args.tag}`, --time {args.time} per p, "
         f"W = 12 ceil(k^{WINDOW_EXPONENT})",
         "",
-        "| p | study | status | gamma_hat ± replicate se | Wilson 95% | final ladder | min |",
-        "|---|---|---|---|---|---|---|",
-        *rows,
+        "## gamma_hat",
+        "",
+        "| p | study | status | gamma_hat ± replicate se | Wilson 95% "
+        "| final ladder | n/scale × reps | samples | min (pilot + draw) |",
+        "|---|---|---|---|---|---|---|---|---|",
+        *(g for g, _ in rows),
+        "",
+        "`n/scale × reps` = draws per scale in each replicate × independent replicates;",
+        "`samples` = n/scale × reps × number of scales, the samples the final run produced.",
+        "",
+        "## omega1",
+        "",
+        "Both columns are the eq. (232) fit, pooled over replicates. **pilot** is the value in",
+        "`constants.json` that sized the plan and the Wilson bound; **pilot converged** is that",
+        "fit's own flag (`pilot.json[\"direct_fit\"]`). **final fit** is `answer.json[\"fit\"]`,",
+        "refitted on the final ladder after the plan: no se is recorded, and since the plan",
+        "deepens m0 until the correction has died, that refit is mostly noise (see",
+        "`src/study/report.py`'s `wilson_inputs`). Read omega1 from the pilot.",
+        "",
+        "| p | omega1 pilot ± se | pilot converged | pilot scales | pilot n/scale × reps "
+        "| pilot samples | omega1 final fit | a1 final fit | final scales "
+        "| final n/scale × reps | final samples |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+        *(o for _, o in rows),
+        "",
+        "Scales are dyadic; `lo..hi (k)` = k scales from lo to hi. **pilot samples** counts the",
+        "pilot's last doubling round only, the one omega1 was fitted on; earlier rounds are",
+        "discarded redraws and `pilot.json` does not record them.",
     ])
-    out = DATA / f"sweep_p_{args.tag}.md"
+    out = data / f"sweep_p_{args.tag}.md"
     out.write_text(table + "\n")
     print(f"\n{table}\n\n[sweep] summary -> {out}", flush=True)
     if failed:
