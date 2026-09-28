@@ -1,0 +1,29 @@
+{
+  "kind": "cost_probe",
+  "model": "erw_urn_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576
+  ],
+  "repeats": 10,
+  "seed": 20260928,
+  "_note": [
+    "Criterion E1: does the batched probe (tools/cost_model.py's probe_batched,",
+    "selected by batched_cost, walked to a full device by latency_bound) recover",
+    "models/erw.py's declared d = 1 for the urn sampler? 12_erw_gpu's ladder,",
+    "2^10..2^20, so the two E1 results read side by side. p does not enter the",
+    "work, so one p stands for all."
+  ]
+}

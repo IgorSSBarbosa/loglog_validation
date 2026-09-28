@@ -1,0 +1,33 @@
+{
+  "kind": "samples",
+  "model": "erw_urn_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 4000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "The pilot template of ../sweep_p.py: 12_erw_gpu/recipes/samples_super_p0.9.json",
+    "(itself 11_erw's E6 arm) with the model changed and the budget raised from",
+    "1e9 to 4e9. At 1e9 the rule gave 122,129 draws per scale, under half of the",
+    "RTX 5090's 261,120 resident threads; 4e9 gives 488,519, so every pilot call",
+    "fills the device, for ~10 ms of device work per replicate. The scales are",
+    "12's, so the two sweeps' pilots measure omega1 on the same ladder."
+  ]
+}

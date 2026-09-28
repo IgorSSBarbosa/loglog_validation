@@ -1095,6 +1095,32 @@ $k=2^6..2^{20}$; 0.51–0.62 ns/step, flat in $k$, against the CPU model's 30–
 (52–73×). Verified in `tools/tests/test_erw_gpu.py` (KS and mean against `erw`, plus
 `test_erw.py`'s exact references). See `experiments/12_erw_gpu/README.md`.
 
+### `erw_urn_gpu.py` — `erw` as an urn, on a CUDA GPU
+
+`walk(k, n, p, rng=None)` and `simulate(i, n, params, rng)`, as in `erw_gpu`.
+`_check` and `cost_hint` are imported from `erw`. The sampler differs (user,
+2026-09-28). Only the colour of the uniformly picked past step matters, so a sample's
+whole state is $(m, U_m)$, the number of $+1$ steps so far. Each step is eq. (2.2)'s
+chain drawn as its two independent coins: pick a $+1$ with probability $U_m/m$, then
+reverse it with probability $1-p$. One CUDA thread per sample runs all $k$ steps in one
+`RawKernel` launch. Both coins are integer comparisons on one Philox `curand4` draw
+($\lfloor a\,m/2^{64}\rfloor<U_m$, $b<\lfloor(1-p)2^{64}\rfloor$, the threshold computed
+exactly on the host), so no float64 runs on the device and $p\in\{0,1\}$ are exact.
+Stream as `rwre_gpu`: one `rng.integers(0, 2**63)` per call seeds Philox, and sample $j$
+is subsequence $j$, independent of the launch chunk.
+
+Its registry entry sets `batched_cost=True` and `latency_bound=True`. A call of fewer
+samples than the device holds costs one sample's latency: flat 6.8 ms for $n\le2^{15}$
+at $k=2^{16}$. `resident_threads()` ($=261{,}120$ on the RTX 5090) is within ~7% of
+full throughput, and `experiments/14_erw_urn_gpu/sweep_p.py` caps the ladder so that
+final runs never plan below it.
+
+Measured 2026-09-28 on the RTX 5090: 2.35 ps/step at a full device, against
+`erw_gpu`'s 0.56–0.59 ns (~240×). A float64 draft ran at 23 ps. Memory is 8 bytes per
+sample. E1 $\hat d=1.012\pm0.003$. Verified in `tools/tests/test_erw_urn_gpu.py` (KS and
+mean against `erw` and, up to $k=2^{16}$, `erw_gpu`, plus `test_erw.py`'s exact
+references). See `experiments/14_erw_urn_gpu/README.md`.
+
 ### `rwre_gpu.py` — `rwre` on a CUDA GPU
 
 `walk(k, n=1, params=None, rng=None)` and `simulate(i, n, params, rng)`, as in `rwre`.
