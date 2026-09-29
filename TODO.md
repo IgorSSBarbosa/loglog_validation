@@ -559,6 +559,17 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         `experiments/12_erw_gpu/README.md`~~
   - [ ] `12_erw_gpu` G3: the E2/E6 arms end to end, GPU against CPU, once the grid below
         is decided
+  - [x] ~~Urn sampler: `models/erw_urn_gpu.py`, `MODELS["erw_urn_gpu"]` (user,
+        2026-09-28) — state $(m, U_m)$, one CUDA thread per sample, eq. (2.2)'s two
+        coins in integers. 2.35 ps/step, ~240× `erw_gpu`. Verified:
+        `tools/tests/test_erw_urn_gpu.py`, 62 passed (KS + mean vs `erw` and `erw_gpu`,
+        `test_erw.py`'s exact references); E1 $\hat d=1.012\pm0.003$, PASS; G3 smoke at
+        $p=0.9$, $\hat\gamma=0.80006\pm0.00004$. `sweep_p.py` caps the ladder so the final
+        $n$ fills the device. See `experiments/14_erw_urn_gpu/README.md`~~
+  - [ ] `14_erw_urn_gpu` sweep: `sweep_p.py --tag 1h --time 1h` over 12's grid
+  - [ ] Pilot ladder for `14_erw_urn_gpu` (user): 4..4096 measures $d$ and throughput
+        poorly for the urn (per-sample fixed cost dominates), so plans use ~half their
+        time
   - [ ] Decide the $p$ grid, the ladder and the time per arm (user); run E2 first, then
         E4–E6; agree E5's criterion
   - [ ] Exact $\mathbb E\lvert S_k\rvert$ on the ladder by DP → the estimator at

@@ -25,6 +25,7 @@ import numpy as np
 
 from models import erw as model_erw
 from models import erw_gpu as model_erw_gpu
+from models import erw_urn_gpu as model_erw_urn_gpu
 from models import percolation2d as model_percolation2d
 from models import percolation2d_gpu as model_percolation2d_gpu
 from models import percolation_tau as model_percolation_tau
@@ -189,6 +190,20 @@ MODELS: dict[str, ModelSpec] = {
         # experiments/12_erw_gpu.
         cost_hint=model_erw_gpu.cost_hint,
         batched_cost=True,              # as percolation2d_gpu
+    ),
+    "erw_urn_gpu": ModelSpec(
+        simulate=model_erw_urn_gpu.simulate,
+        # erw's own cost_hint (i), imported, so it cannot drift. The same walk
+        # drawn as the urn it is: one thread per sample keeps (m, #up steps)
+        # and draws each step from eq. (2.2)'s two coins, in integers, Philox
+        # seeded from the driver's rng -- equal to erw in DISTRIBUTION, not
+        # bit for bit. See models/erw_urn_gpu.py, experiments/14_erw_urn_gpu.
+        cost_hint=model_erw_urn_gpu.cost_hint,
+        batched_cost=True,              # as percolation2d_gpu
+        # One thread walks one sample's k steps in series, so a call of fewer
+        # samples than the device holds costs one sample's latency. See
+        # ModelSpec.latency_bound.
+        latency_bound=True,
     ),
     "percolation2d": ModelSpec(
         simulate=model_percolation2d.simulate,
