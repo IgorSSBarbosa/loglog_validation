@@ -422,6 +422,11 @@ $s_k = (\log\overline Y_{\rho^{k+1}} - \log\overline Y_{\rho^k})/\log\rho$ —
 $\hat\gamma$ with $m = 2$, $m_0 = k$ — from the pilot's smallest scale up to
 the top of the final ladder (plans/local_slope.md).
 
+`autopilot.py` runs it as its last step on every study it draws, seeded by
+child 2 of its own seed (children 0 and 1 are the pilot's and the run's). Its
+draws are **not** inside `--time`; it prints its own prediction first.
+`--no-local-slope` skips it.
+
 ```bash
 python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 --dry-run
 python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 [--min-scale 4] [--truth 0.5]

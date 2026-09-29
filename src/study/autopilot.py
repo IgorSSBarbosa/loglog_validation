@@ -113,6 +113,7 @@ from src.budget.allocation_table import human_time  # noqa: E402
 from src.study import pilot as pilot_mod  # noqa: E402
 from src.study import plan as plan_mod  # noqa: E402
 from src.study import report as report_mod  # noqa: E402
+from src.study.local_slope import local_slope  # noqa: E402
 from src.study import run as run_mod  # noqa: E402
 
 #: Fraction of --time the pilot may consume before the loop gives up. The
@@ -488,7 +489,7 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
               target_se: float | None = None, pilot_seconds_cap: float | None = None,
               reuse_from: Path | None = None, reuse_cache: bool = False,
               yes: bool = False, max_scale: float | None = None,
-              log=print) -> dict:
+              slopes: bool = True, log=print) -> dict:
     """pilot -> plan -> run -> report, deciding in between. Returns the record.
 
     Two ways to say how big the study is, and exactly one of them is required.
@@ -499,6 +500,9 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
 
     `reuse_from` skips the pilot entirely and carries another study's constants
     in (see pilot.reuse). The gates are still evaluated, at THIS study's m0.
+
+    `slopes` ends a drawn study with src/study/local_slope.py. Its draws (top-ups
+    and gaps, at the final's n) are NOT inside --time: it prints its own prediction.
     """
     t0 = time.perf_counter()
     if (seconds is None) == (target_se is None):
@@ -517,10 +521,12 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
     if reused and not recipe:
         recipe = reused["recipe"]
 
-    # Independent streams for the two draws. The pilot's samples must not
+    # Independent streams for the three draws. The pilot's samples must not
     # reappear in the run it sized -- that would be the same duplication
-    # tools/rng.py's spawn(skip=) exists to prevent, one level up.
-    pilot_seed, run_seed = spawn(seed if seed is not None else recipe.get("seed"), 2)
+    # tools/rng.py's spawn(skip=) exists to prevent, one level up. Children 0
+    # and 1 are what spawn(seed, 2) gave before the local slopes were added.
+    pilot_seed, run_seed, slope_seed = spawn(
+        seed if seed is not None else recipe.get("seed"), 3)
     if reused:
         _refuse_seed_collision(reused["entropy"], run_seed, reused["source_dir"])
         pilot_mod.write_reused(sd, reused, log=log)
@@ -611,6 +617,9 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
                                seed=seed, reuse_from=reuse_from,
                                max_scale=max_scale)
                            if target_se else "")
+    if slopes and rec["drawn"]:
+        log("\nlocal slopes (src/study/local_slope.py), below and across the final ladder")
+        local_slope(sd, slope_seed)
     if not ok:
         log("\n  !! --force: the constants above were NOT determined, and the "
             "answer\n     printed here inherits that. The eq. (720) bound's "
@@ -872,6 +881,9 @@ def _main(argv=None) -> None:
                         "decides only whether the long run happens. The answer "
                         "is stamped `forced: true` in autopilot.json, because "
                         "it rests on constants known to be undetermined")
+    p.add_argument("--no-local-slope", action="store_false", dest="slopes",
+                   help="skip src/study/local_slope.py at the end. It runs by default "
+                        "on a drawn study, and its draws are outside --time")
     p.add_argument("--no-progress", action="store_false", dest="progress",
                    help="no progress bar (also off automatically when not a TTY)")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -908,7 +920,7 @@ def _main(argv=None) -> None:
                     pilot_cap=a.pilot_cap, max_rounds=a.max_rounds,
                     force=a.force, progress=a.progress, yes=a.yes,
                     reuse_from=reuse_from, reuse_cache=a.reuse_cost,
-                    max_scale=a.max_scale)
+                    max_scale=a.max_scale, slopes=a.slopes)
     raise SystemExit(0 if rec["ok"] else 1)
 
 

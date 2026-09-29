@@ -63,10 +63,18 @@ PRODUCED_BY = "src/study/local_slope.py"
 _BLUE, _ORANGE, _AQUA, _MUTED = "#2a78d6", "#eb6834", "#1baf7a", "#898781"
 
 
-def _entropy(record) -> int | None:
+def _stream(record) -> tuple | None:
     if record is None:
         return None
-    return int(as_seed_sequence(record).entropy)
+    ss = as_seed_sequence(record)
+    return int(ss.entropy), tuple(ss.spawn_key)
+
+
+def _overlaps(a: tuple, b: tuple) -> bool:
+    """Whether two seeds' spawn trees share a stream: same entropy, and one spawn_key a
+    prefix of the other. An int seed (key ()) thus clashes with every child of itself."""
+    k = min(len(a[1]), len(b[1]))
+    return a[0] == b[0] and a[1][:k] == b[1][:k]
 
 
 def _k_of(scale: float, rho: float) -> int | None:
@@ -336,8 +344,14 @@ def _main(argv=None) -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="print what would be reused and drawn, and the predicted time")
     a = p.parse_args(argv)
+    local_slope(Path(a.data_root) / a.study, a.seed, min_scale=a.min_scale,
+                truth=a.truth, dry_run=a.dry_run)
 
-    sd = Path(a.data_root) / a.study
+
+def local_slope(sd: Path, seed, *, min_scale: int | None = None,
+                truth: float | None = None, dry_run: bool = False) -> None:
+    """The whole tool on the study in `sd`. `seed` is an int or a spawned SeedSequence
+    (autopilot passes a child of its own seed, independent of the pilot's and run's)."""
     pilot = read_artifact(sd, "pilot")
     final = read_artifact(sd, "final")
     prev = read_artifact(sd, "local_slope", required=False)
@@ -350,35 +364,38 @@ def _main(argv=None) -> None:
                          f"{prev['model']} {prev['params']}, not {model} {params}")
     d = require(load(sd), "d").value
 
-    min_scale = a.min_scale if a.min_scale is not None else min(pilot["scales"])
+    if min_scale is None:
+        min_scale = min(pilot["scales"])
     plan = make_plan(pilot, final, prev, min_scale)
     seconds = predicted_seconds(plan["actions"], model, params, pilot.get("throughput"))
     print(f"study      = {sd}")
     print(f"model      = {model}  params={params}")
     print_plan(plan, seconds)
 
-    used = {_entropy(pilot["recipe"].get("seed"))} | {_entropy(s) for s in final["seeds"]}
+    used = {_stream(pilot["recipe"].get("seed"))} | {_stream(s) for s in final["seeds"]}
     auto = read_artifact(sd, "autopilot", required=False)
     if auto is not None:
-        used.add(_entropy(auto.get("seed")))
-    used |= set((prev or {}).get("seeds_used", []))
+        used.add(_stream(auto.get("seed")))
+    used |= {_stream(s) for s in (prev or {}).get("seeds_used", [])}
     used.discard(None)
-    if plan["actions"] and a.seed in used:
-        raise SystemExit(f"--seed {a.seed} was already used by this study (seeds used: "
-                         f"{sorted(used)}); its spawn children would repeat those streams. "
-                         f"Pass another --seed.")
-    if a.dry_run:
+    mine = _stream(seed)
+    if plan["actions"] and any(_overlaps(mine, u) for u in used):
+        raise SystemExit(f"--seed {seed_record(seed)} was already used by this study (seeds "
+                         f"used: {sorted(used)}); its spawn children would repeat those "
+                         f"streams. Pass another --seed.")
+    if dry_run:
         print("\n--dry-run: nothing drawn.")
         return
 
     t0 = time.perf_counter()
-    seeds_used = sorted(set((prev or {}).get("seeds_used", []))
-                        | ({a.seed} if plan["actions"] else set()))
+    seeds_used = list((prev or {}).get("seeds_used", []))
+    if plan["actions"] and seed_record(seed) not in seeds_used:
+        seeds_used.append(seed_record(seed))
     base = {"model": model, "params": params, "rho": plan["rho"], "n": plan["n"],
-            "ladder": plan["ladder"], "min_scale": min_scale, "seed": a.seed,
+            "ladder": plan["ladder"], "min_scale": min_scale, "seed": seed_record(seed),
             "seeds_used": seeds_used, "predicted_seconds": seconds,
-            "truth": None if a.truth is None else
-            {"value": a.truth, "source": "user-supplied (--truth), reporting only"}}
+            "truth": None if truth is None else
+            {"value": truth, "source": "user-supplied (--truth), reporting only"}}
 
     def checkpoint(new_cells):
         write_artifact(sd, "local_slope", {
@@ -387,7 +404,7 @@ def _main(argv=None) -> None:
 
     if plan["actions"]:
         P.say(f"drawing {len(plan['actions'])} cell(s) ...")
-    new = draw(plan, model, params, a.seed, checkpoint)
+    new = draw(plan, model, params, seed, checkpoint)
     cells = plan["keep"] + new
 
     by_scale = {i: [c for c in cells if c["scale"] == i] for i in plan["ladder"]}
@@ -405,7 +422,7 @@ def _main(argv=None) -> None:
                       for i in plan["ladder"]],
         "drawn_cells": len(new), "elapsed_seconds": elapsed}, produced_by=PRODUCED_BY)
     print_analysis(res, d, plan["n"])
-    png = plot(sd, res, model=model, params=params, n=plan["n"], d=d, truth=a.truth)
+    png = plot(sd, res, model=model, params=params, n=plan["n"], d=d, truth=truth)
     print(f"\ndrew {len(new)} cell(s) in {human_time(elapsed)}"
           + (f" (predicted {human_time(seconds)})" if seconds and new else ""))
     print(f"output = {out}\n         {png}")
