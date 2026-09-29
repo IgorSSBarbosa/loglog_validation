@@ -125,6 +125,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 |---|---|---|---|---|
 | `loglog.py` | 253 | `statistical tool` | Four $\hat\gamma$ estimators + the article's closed-form eq. (526) weights. **The canonical weight definition** — `allocation.py` and `wilson.py` import it. | — |
 | `correction.py` | 215 | `statistical tool` | Two $\omega_1$ estimators: direct fit of eq. (232), and bias-decay fit. Non-convex in $\omega_1$, hence multi-restart. | — |
+| `local_slope.py` | 208 | `statistical tool` | Consecutive-point slopes $s_k$ (eq. 526 at $m=2$) from $R$ replicate means per scale, with se; the local exponent $w_k$ of $\Delta s_k$ (flat under Prop. 820's power law, drifting to 0 under $c/\ln i$); the (P) power and (L) log fits compared by $\chi^2$, $p$ only; the exact mean/cv merge a top-up needs. No I/O. | — |
 | `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
 | `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model, walked on to a full device for a `latency_bound` one. | `loglog` |
 | `wilson.py` | 276 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. | `loglog` |
@@ -152,6 +153,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
 | `report/plot_cost.py` | 88 | `plot tool` | Cost-probe timings. | `loglog_plot` |
+| `study/local_slope.py` | 415 | `experiment`, `statistical tool` | Below a finished study: brings every stored replicate mean to the final's $n$ (reuse / top-up / drop+redraw), draws the gap scales, then $s_k$, $w_k$ and the two fits, `local_slope.json` + `.png`. `--truth` is reporting only. | `local_slope`, `generate`, `rng`, `summary`, `artifacts`, `constants` |
 
 ### `calibration/` — checks on our own machinery, not on a model
 
@@ -197,6 +199,9 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `compare_methods` | loglog | all four, bundled |
 | `fit_correction` | correction | eq. (232) fit → $(a_0,\gamma,a_1,\omega_1)$ |
 | `omega1_from_bias_decay` | correction | $\omega_1$ from how $\hat\gamma_i$ drifts |
+| `local_slopes` | local_slope | $s_k$, $\Delta s_k$, $w_k$ with Jacobian-propagated se and resolved flags |
+| `fit_power`, `fit_log` | local_slope | (P) $\gamma + c\,i^{-\omega}$ and (L) $\gamma + c/\ln i$ on $s_k$, with $\chi^2$, dof, $p$ |
+| `merge_means` | local_slope | exact $(n, \bar Y, \mathrm{cv})$ of two independent samples' union |
 | `total_cost` | allocation | `lem:budget` geometric sum |
 | `feasible` | allocation | $\theta_1+d\theta_2=1$ self-check |
 | `optimal_allocation` | allocation | **eq. (945–946)**, as written |
