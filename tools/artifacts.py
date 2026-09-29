@@ -63,6 +63,10 @@ ARTIFACTS: dict[str, str] = {
                                                   # -- is the tabulated p_c the
                                                   # critical point? spanning
                                                   # probability vs box side
+    "local_slope":      "local_slope.json",       # src/study/local_slope.py --
+                                                  # consecutive-point slopes s_k
+                                                  # below a finished study, and
+                                                  # the cells drawn to fill them
 }
 
 #: old filename -> the kinds that ever used it, most specific first.

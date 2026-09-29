@@ -414,6 +414,42 @@ $\hat\omega_1 = 0.06 \pm 0.18$; the `snr` rule at the same wall clock returned
 $0.98 \pm 0.28$. The rule's own `omega1` is a *design* input that shapes the
 sample counts, not an estimate — roughly right is enough.
 
+## Below a finished study: consecutive-point slopes
+
+`local_slope.py` takes a finished study (autopilot, or the four steps) and
+looks at the slope between each pair of consecutive scales,
+$s_k = (\log\overline Y_{\rho^{k+1}} - \log\overline Y_{\rho^k})/\log\rho$ —
+$\hat\gamma$ with $m = 2$, $m_0 = k$ — from the pilot's smallest scale up to
+the top of the final ladder (plans/local_slope.md).
+
+```bash
+python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 --dry-run
+python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 [--min-scale 4] [--truth 0.5]
+```
+
+- **One $n$ at every scale**, the final's. $\mathbb E\log\overline Y \approx
+  \log\mathbb E Y - \mathrm{cv}^2/(2n)$, so unequal $n$ on a pair adds
+  $\mathrm{cv}^2(1/n_k - 1/n_{k+1})/(2\log\rho)$ to $s_k$. A stored mean with a
+  smaller $n$ is topped up with fresh draws and merged exactly; one with a larger
+  $n$ is dropped and redrawn; scales with no stored mean (between the pilot and
+  the final) are drawn with the final's $R$. The printout shows the n-mismatch
+  term, which is 0 by construction.
+- Every draw is one `generate()` call with its own `spawn` child of `--seed`, and
+  lands in `local_slope.json` as a cell (scale, $n$, source, seeds). A rerun
+  reuses those cells; a `--seed` the study or an earlier run already used is
+  refused when anything is to be drawn.
+- **Read $w_k$, not the fits.** $w_k = -\log(\Delta s_{k+1}/\Delta s_k)/\log\rho$
+  is flat at $\omega_1$ under a power law (Prop. 820) and drifts to 0 under
+  $s - \gamma \sim c/\ln i$. A point whose $|\Delta s|$ is under 2 se is drawn
+  hollow and marked `?`: it is not read. The (P) and (L) fits are compared by
+  $\chi^2$ and $p$ only; no verdict is printed.
+- The budget axis is secondary: at fixed $n$ a pair costs $B_k \propto n\,i^d$, so
+  the bias falls like $B^{-\omega_1/d}$ here. The rate $B^{-\omega_1/(d+2\omega_1)}$
+  of eq. (941)/(966) needs $n$ grown with $B$ (Experiment C) and is printed
+  alongside, not measured.
+- `--truth` adds panel (c), $|s_k - \gamma|$ on log-log, and is recorded as
+  user-supplied. It never reaches a fit.
+
 ## Notes
 
 - **`d` comes from the clock; a `cost_hint` only checks it.** A declaration
