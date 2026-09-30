@@ -18,8 +18,8 @@ the device, and no driver learns about hardware.
 
 What is imported from the CPU sibling, and what is not
 ------------------------------------------------------
-DECLARATIONS are imported: the parameter check `_check`, `window_width` and
-`cost_hint`. So MODELS["rwre_gpu"].cost_hint IS MODELS["rwre"].cost_hint --
+DECLARATIONS are imported: the parameter check `_check`, the window `_window`
+and `cost_hint`. So MODELS["rwre_gpu"].cost_hint IS MODELS["rwre"].cost_hint --
 the declared d = 3/2 cannot drift, and neither can the window the walk runs
 in. The ALGORITHM is a CUDA kernel, `_KERNEL` below.
 
@@ -80,7 +80,7 @@ import math
 
 import numpy as np
 
-from models.rwre import _check, cost_hint, window_width
+from models.rwre import _check, _window, cost_hint
 
 __all__ = ["walk", "simulate", "cost_hint", "threads_per_sample", "max_steps"]
 
@@ -97,7 +97,7 @@ _STATIC_SHARED = 16
 #: this fixed 96 KiB, which fits the RTX 5090's 99 KiB opt-in. A constant, so
 #: `max_steps` does not depend on the device; `walk` raises on a device that
 #: cannot give it. At window_c = 12: k up to 8191**2 at window_exponent = 1/2,
-#: about 1.6e5 at 3/4.
+#: about 1.6e5 at 3/4; 49094 on the linear window W = 2k + 100.
 _MAX_SHARED = 96 * 1024
 _MAX_W = _MAX_SHARED - _STATIC_SHARED
 
@@ -207,11 +207,11 @@ def max_steps(params: dict | None = None) -> int:
     """
     q = _check(dict(params or {}))
     lo, hi = 1, 2
-    while window_width(hi, q["window_c"], q["window_exponent"]) <= _MAX_W:
+    while _window(hi, q) <= _MAX_W:
         lo, hi = hi, 2 * hi
     while hi - lo > 1:                  # window_width is non-decreasing in k
         mid = (lo + hi) // 2
-        if window_width(mid, q["window_c"], q["window_exponent"]) <= _MAX_W:
+        if _window(mid, q) <= _MAX_W:
             lo = mid
         else:
             hi = mid
@@ -230,7 +230,7 @@ def walk(k: int, n: int = 1, params: dict | None = None,
         raise ValueError(f"k must be >= 1; got {k}")
     if n < 0:
         raise ValueError(f"n must be >= 0; got {n}")
-    w = window_width(k, q["window_c"], q["window_exponent"])
+    w = _window(k, q)
     if w > _MAX_W:
         raise ValueError(f"window width {w} at k = {k} exceeds the {_MAX_W} bytes of "
                          "shared memory one sample may use; use MODELS[\"rwre\"]")

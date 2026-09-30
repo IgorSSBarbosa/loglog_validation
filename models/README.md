@@ -1134,3 +1134,7 @@ exact references. See `experiments/13_rwre_gpu/README.md`.
 $W=\texttt{window\_c}\cdot\lceil k^{\texttt{window\_exponent}}\rceil$, so cost is
 $k^{1+\texttt{window\_exponent}}$. 13's sieve runs at 3/4, because 02 measured
 superdiffusive spread that outruns a $\sqrt k$ window on long ladders.
+`window_slope` > 0 (with `window_offset`, both default 0, added 2026-09-30) replaces that
+rule by $W=\lceil\texttt{window\_slope}\cdot k+\texttt{window\_offset}\rceil$, so cost is
+$\texttt{window\_slope}\,k^2+\texttt{window\_offset}\,k$, not a power law. 14 runs
+$W=2k+100$: the walker can't reach the seam, and $k\le49094$ on the GPU.
