@@ -1,0 +1,28 @@
+{
+  "kind": "cost_probe",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5,
+    "window_slope": 2.0,
+    "window_offset": 100.0
+  },
+  "scales": [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384
+  ],
+  "repeats": 10,
+  "seed": 20260923,
+  "_note": [
+    "Criterion L4: 13_rwre_gpu/recipes/cost_probe.json on the linear window",
+    "W = 2k + 100. cost_hint(k) = k(2k + 100) is not a power law; the declared d",
+    "is its log-log OLS on these scales (tools/cost_model.py's declared_exponent),",
+    "1.941 on 128..16384. p and alpha do not enter the work."
+  ]
+}
