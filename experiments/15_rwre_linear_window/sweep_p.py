@@ -1,35 +1,34 @@
-"""Run `autopilot.py` on `rwre_gpu` over a sieve of p, one study per p, one after another.
+"""Run `autopilot.py` on `rwre_gpu` over a sieve of p on the linear window W = 2k + 100.
 
-Question: how does gamma_hat(p) behave on 02_rwre's sieve when the GPU buys each
-point an hour instead of a CPU budget? At p = 1/2 the walk is srw (gamma = 1/2
-exactly); below it 02_rwre measured effective exponents above 1/2, peaking near
-p = 0.3 and still rising at k = 1024. Every arm gets the same pilot recipe and the
-same wall clock, so what differs between studies is p alone.
+Experiment 15 is 13_rwre_gpu's sieve with one change, the window: W = 2k + 100
+instead of 12 ceil(k^(3/4)) (user, 2026-09-30). At slope 2 the walker can never
+reach the seam of the periodic window, and the offset keeps the environment's
+wrap heuristic below e^-50 at every k (models/rwre.py, decision (d)). Same grid
+(02_rwre's A6 sieve plus p = 1/3, all in [0, 1/2]), same pilots, same wall clock
+per p, so what differs from 13 is the window alone. The pilot recipe for each p
+is a template with only `params.p` changed, chosen by `--pilot`:
 
-The grid is 02_rwre's A6 sieve plus its headline p = 1/3, all in [0, 1/2]: |X_k| has
-the same law at p and 1 - p (02_rwre/README.md), so the other half adds nothing.
-p = 1/3 goes first because it is the point 02_rwre left open. The pilot recipe for
-each p is `recipes/samples_calib_p0.5.json` with `params.p` changed and
-`window_exponent = 3/4`. 02_rwre's window W = 12 ceil(sqrt k) assumed diffusive spread,
-and away from p = 1/2 the walk spreads like k^0.58, so the hour's longer ladders would
-reach half the window by k = 32768; W = 12 ceil(k^(3/4)) outgrows any such spread
-(user, 2026-09-24: "just to be safe"). It also caps k at 2^16, where the window fills a
-block's shared memory, so every study is given `--max-scale` = models/rwre_gpu.py's
-`max_steps` (a `--max-scale` after `--` overrides it). A p whose
-study already holds `autopilot.json` is skipped, so rerunning the same command
-resumes an interrupted sweep, and on a finished sweep it only rewrites the summary.
-Arms run sequentially because they share one GPU.
+- `neyman` (default): `recipes/samples_sweep_neyman.json`, a ladder from i = 2
+  with n_i ~ i**(-d/2), run with `--max-rounds 9` (13's neyman pilot).
+- `snr`: `recipes/samples_calib_p0.5.json` (flat n on 4..1024).
 
-The summary `sweep_p_<tag>.md` holds two tables, in the format of
-12_erw_gpu/sweep_p.py (user, 2026-09-25): gamma_hat, and omega1 as the pilot measured
-it next to the final run's refit, each with the scales and draws it came from. There
-is no true-gamma column: rwre's gamma is known only at p = 1/2.
+Both templates already carry the window; `write_recipe` refuses one that does not.
+The window caps k at 49094, where 2k + 100 fills a block's shared memory, so every
+study is given `--max-scale` = models/rwre_gpu.py's `max_steps` (a `--max-scale`
+after `--` overrides it): the ladders stop at 2^15, where 13's reached 2^16. A p
+whose study already holds `autopilot.json` is skipped, so rerunning the same
+command resumes an interrupted sweep, and on a finished sweep it only rewrites the
+summary. Arms run sequentially because they share one GPU.
 
-    python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h
-    python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h --p 1/3 0.2 -- --force
-    python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h --data-root experiments/13_rwre_gpu/data/sweep_data/sweep_1h
+The summary `sweep_p_<tag>.md` holds 13's two tables: gamma_hat, and omega1 as the
+pilot measured it next to the final run's refit. There is no true-gamma column:
+rwre's gamma is known only at p = 1/2.
 
-Anything after `--` is passed to every `autopilot.py` call unchanged.
+    python3 experiments/15_rwre_linear_window/sweep_p.py --tag neyman --time 1h
+    python3 experiments/15_rwre_linear_window/sweep_p.py --tag smoke --time 4m --p 0.5 --pilot snr
+
+Anything after `--` is passed to every `autopilot.py` call unchanged, after the
+script's own flags, so a `--max-rounds` there overrides the neyman pilot's 9.
 """
 
 from __future__ import annotations
@@ -44,15 +43,21 @@ from pathlib import Path
 
 EXP = Path(__file__).resolve().parent
 ROOT = EXP.parents[1]
-TEMPLATE = EXP / "recipes" / "samples_calib_p0.5.json"
+#: --pilot -> (template recipe, autopilot flags the rule needs, generated recipe suffix).
+#: The suffixes keep the two pilots' generated recipes apart.
+PILOTS = {
+    "neyman": (EXP / "recipes" / "samples_sweep_neyman.json",
+               ["--max-rounds", "9"], "_neyman_pilot"),
+    "snr": (EXP / "recipes" / "samples_calib_p0.5.json", [], "_snr_pilot"),
+}
 
 sys.path.insert(0, str(ROOT))
 from models.rwre_gpu import max_steps  # noqa: E402
 
 P_GRID = [1 / 3, 0.0, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5]
 
-#: The window rule the sweep runs at: W = window_c * ceil(k**WINDOW_EXPONENT).
-WINDOW_EXPONENT = 0.75
+#: The window rule the sweep runs at, W = window_slope * k + window_offset.
+WINDOW = {"window_slope": 2.0, "window_offset": 100.0}
 
 
 def parse_p(s: str) -> float:
@@ -68,16 +73,19 @@ def label(p: float) -> str:
     return f"{p:.4g}"
 
 
-def write_recipe(p: float) -> Path:
-    recipe = json.loads(TEMPLATE.read_text())
+def write_recipe(p: float, pilot: str) -> Path:
+    template, _, suffix = PILOTS[pilot]
+    recipe = json.loads(template.read_text())
+    window = {k: recipe["params"].get(k) for k in WINDOW}
+    if window != WINDOW:
+        raise ValueError(f"{template.name} has window {window}; this sweep runs at {WINDOW}")
     recipe["params"]["p"] = p
-    recipe["params"]["window_exponent"] = WINDOW_EXPONENT
     recipe["_note"] = [
-        f"GENERATED by experiments/13_rwre_gpu/sweep_p.py: {TEMPLATE.name} with only",
-        f"params.p changed and window_exponent = {WINDOW_EXPONENT}. Edit the template or",
-        "the script, not this file.",
+        f"GENERATED by experiments/15_rwre_linear_window/sweep_p.py --pilot {pilot}:",
+        f"{template.name} with only params.p changed. Edit the template or the script,",
+        "not this file.",
     ]
-    path = EXP / "recipes" / f"samples_sweep_p{label(p)}.json"
+    path = EXP / "recipes" / f"samples_sweep_p{label(p)}{suffix}.json"
     path.write_text(json.dumps(recipe, indent=2) + "\n")
     return path
 
@@ -152,6 +160,8 @@ def main() -> int:
                     help="p values, run in this order; fractions like 1/3 are accepted")
     ap.add_argument("--data-root", type=Path, default=EXP / "data",
                     help="where the studies live (default: this experiment's data/)")
+    ap.add_argument("--pilot", choices=sorted(PILOTS), default="neyman",
+                    help="the pilot's recipe template (default neyman; see the module docstring)")
     ap.add_argument("autopilot_args", nargs=argparse.REMAINDER,
                     help="after `--`: extra arguments for every autopilot.py call")
     args = ap.parse_args()
@@ -166,13 +176,13 @@ def main() -> int:
             print(f"[sweep] p={label(p)}: {study} already finished, skipping", flush=True)
             rows.append((p, summary_rows(p, study, data, None)))
             continue
-        recipe = write_recipe(p)
+        recipe = write_recipe(p, args.pilot)
         max_scale = max_steps(json.loads(recipe.read_text())["params"])
-        data.mkdir(exist_ok=True)
+        data.mkdir(parents=True, exist_ok=True)
         log = data / f"{study}.log"
         cmd = [sys.executable, str(ROOT / "src/study/autopilot.py"), "-meta", str(recipe),
                "--study", study, "--data-root", str(data), "--time", args.time,
-               "--max-scale", str(max_scale), "--no-progress", *extra]
+               "--max-scale", str(max_scale), "--no-progress", *PILOTS[args.pilot][1], *extra]
         print(f"[sweep] p={label(p)}: {' '.join(cmd)}\n[sweep]   log -> {log}", flush=True)
         t0 = time.monotonic()
         # tee by hand: the log must survive a crash of this script, and the terminal
@@ -194,7 +204,8 @@ def main() -> int:
     rows = [r for _, r in sorted(rows, key=lambda t: t[0])]
     table = "\n".join([
         f"# rwre_gpu p sweep, tag `{args.tag}`, --time {args.time} per p, "
-        f"W = 12 ceil(k^{WINDOW_EXPONENT})",
+        f"W = {WINDOW['window_slope']:g}k + {WINDOW['window_offset']:g}, pilot `{args.pilot}` "
+        f"({PILOTS[args.pilot][0].name})",
         "",
         "## gamma_hat",
         "",

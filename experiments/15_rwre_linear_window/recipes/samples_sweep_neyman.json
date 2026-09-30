@@ -1,0 +1,33 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5,
+    "window_slope": 2.0,
+    "window_offset": 100.0
+  },
+  "scales": [
+    2,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "13_rwre_gpu/recipes/samples_sweep_p0.45_neyman.json (ladder 2..1024, neyman",
+    "allocation, run with --max-rounds 9) on the linear window W = 2k + 100, at",
+    "p = 1/3. The template sweep_p.py --pilot neyman (the default) copies for every",
+    "p, changing only params.p."
+  ]
+}

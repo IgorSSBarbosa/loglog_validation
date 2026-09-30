@@ -95,6 +95,25 @@ decisions all move the answer, and all four were taken explicitly (2026-09-15).
     outgrows any exponent below 3/4 and cost(k) = window_c * k^(7/4), d = 7/4.
     At the default every draw is bit-identical to before the parameter existed.
 
+    `window_slope` > 0 (with `window_offset`) replaces the power rule by a
+    LINEAR one, W(k) = ceil(window_slope * k + window_offset), even, and then
+    window_c and window_exponent must stay at their defaults (user, 2026-09-30,
+    experiments/15_rwre_linear_window: W = 2k + 100). At slope 2 the walker
+    itself can never reach the seam, |X_k| <= k < W/2. What is left is the
+    environment: stirring moves a site's content by +-1 with probability
+    swap_prob per sweep, so the value read at y is the initial value at the end
+    of a backward path of variance env_sweeps * swap_prob = 2 per walker step
+    (at the defaults), at most env_sweeps * k long. The torus differs from the
+    line only if two sites the walker reads trace back to sites W apart, and the
+    walker's sites span at most k + 1, so two paths must separate by W - k =
+    k + 100 more. Exactly impossible while 8k < k + 100 (k <= 14); beyond that,
+    a Gaussian tail with the two paths treated as independent -- a heuristic,
+    not a bound -- gives exp(-(k + 100)^2 / (8k)), largest at k = 100, where
+    it is e^-50 ~ 2e-22. Cost is k * W = 2k^2 + 100k, no longer a power law:
+    Assumption 7's d is what tools/cost_model.py's declared_exponent fits on
+    the ladder, rising to 2 as k grows. At window_slope = 0 (the default)
+    every draw is bit-identical to before the parameter existed.
+
 Blocking, and a deliberate deviation from models/README.md's contract
 ---------------------------------------------------------------------
 That contract asks a model to block over n and stay bit-identical at any block
@@ -146,13 +165,17 @@ _DEFAULTS = {
     "swap_prob": 0.5,
     "window_c": 12.0,
     "window_exponent": 0.5,
+    "window_slope": 0.0,
+    "window_offset": 0.0,
 }
 
 
-def window_width(k: int, window_c: float = 12.0, window_exponent: float = 0.5) -> int:
+def window_width(k: int, window_c: float = 12.0, window_exponent: float = 0.5,
+                 window_slope: float = 0.0, window_offset: float = 0.0) -> int:
     """Width of the periodic environment window for a k-step walk.
 
-    window_c * ceil(k**window_exponent), rounded up to an even number (both
+    window_c * ceil(k**window_exponent), or ceil(window_slope * k +
+    window_offset) when window_slope > 0, rounded up to an even number (both
     parities must be perfect matchings of the periodic window -- see the
     module docstring), and never below 4 so that there are at least two bonds
     of each parity.
@@ -161,6 +184,10 @@ def window_width(k: int, window_c: float = 12.0, window_exponent: float = 0.5) -
         raise ValueError(f"k must be >= 1; got {k}")
     if window_c <= 0:
         raise ValueError(f"window_c must be > 0; got {window_c}")
+    if window_slope > 0:
+        w = int(np.ceil(window_slope * k + window_offset))
+        w += w % 2
+        return max(w, 4)
     if window_exponent == 0.5:
         root = np.ceil(np.sqrt(float(k)))      # the original rule, bit for bit
     else:
@@ -195,7 +222,22 @@ def _check(params: dict) -> dict:
         raise ValueError(f"window_exponent must be in [1/2, 1] (the walk spreads at "
                          f"least diffusively, at most ballistically); "
                          f"got {q['window_exponent']}")
+    if q["window_slope"] < 0 or q["window_offset"] < 0:
+        raise ValueError(f"window_slope and window_offset must be >= 0; got "
+                         f"{q['window_slope']}, {q['window_offset']}")
+    if q["window_slope"] == 0 and q["window_offset"] != 0:
+        raise ValueError("window_offset needs window_slope > 0 (the linear window rule)")
+    if q["window_slope"] > 0 and (q["window_c"] != _DEFAULTS["window_c"]
+                                  or q["window_exponent"] != _DEFAULTS["window_exponent"]):
+        raise ValueError("window_slope > 0 replaces window_c * ceil(k**window_exponent); "
+                         "leave window_c and window_exponent at their defaults")
     return q
+
+
+def _window(k: int, q: dict) -> int:
+    """window_width with the window parameters of a checked params dict."""
+    return window_width(k, q["window_c"], q["window_exponent"],
+                        q["window_slope"], q["window_offset"])
 
 
 def gamma_eff(params: dict | None = None) -> float:
@@ -255,7 +297,7 @@ def walk(k: int, n: int = 1, params: dict | None = None,
     if n < 0:
         raise ValueError(f"n must be >= 0; got {n}")
 
-    w = window_width(k, q["window_c"], q["window_exponent"])
+    w = _window(k, q)
     half = w // 2
     col_parity = (np.arange(w) % 2).astype(np.int8)
     p, alpha, sweeps, swap_prob = q["p"], q["alpha"], q["env_sweeps"], q["swap_prob"]
@@ -303,7 +345,8 @@ def cost_hint(i: int, params: dict | None = None) -> float:
     and Assumption 7's exponent is d = 3/2 exactly at the default window
     (7/4 at window_exponent = 3/4) -- known rather than fitted,
     as it is for srw (d = 1) and percolation_zd (d = dim), so a measured d can
-    be scored against it.
+    be scored against it. On the linear window (window_slope > 0) the cost is
+    window_slope * i^2 + window_offset * i, and d is the ladder's log-log fit.
     """
     q = _check(dict(params or {}))
-    return float(i) * float(window_width(i, q["window_c"], q["window_exponent"]))
+    return float(i) * float(_window(i, q))

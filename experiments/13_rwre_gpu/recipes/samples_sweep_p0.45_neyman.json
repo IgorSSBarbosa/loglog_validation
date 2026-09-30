@@ -1,0 +1,36 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.45,
+    "alpha": 0.5,
+    "window_exponent": 0.75
+  },
+  "scales": [
+    2,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "samples_sweep_p0.45.json (what sweep_p.py generates) with the ladder extended",
+    "down to i = 2 and the pilot's draws allocated by neyman, n_i ~ i**(-d/2), instead",
+    "of snr at omega1 = 0 (flat). The p = 0.45 pilot hit --max-rounds 6 with omega1",
+    "undetermined in both the 1h and RWRE_longsieve sweeps; the correction lives at",
+    "small i, and tools/allocation.py's snr_allocation docstring measured neyman on a",
+    "ladder reaching i = 2 as the rule that pins omega1 down (user, 2026-09-25: more",
+    "budget to small scales, more samples to very small scales). Run with",
+    "--max-rounds 9. Only the pilot uses this allocation; the final run's is the plan's."
+  ]
+}
