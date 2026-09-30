@@ -98,7 +98,7 @@ decisions all move the answer, and all four were taken explicitly (2026-09-15).
     `window_slope` > 0 (with `window_offset`) replaces the power rule by a
     LINEAR one, W(k) = ceil(window_slope * k + window_offset), even, and then
     window_c and window_exponent must stay at their defaults (user, 2026-09-30,
-    experiments/14_rwre_linear_window: W = 2k + 100). At slope 2 the walker
+    experiments/15_rwre_linear_window: W = 2k + 100). At slope 2 the walker
     itself can never reach the seam, |X_k| <= k < W/2. What is left is the
     environment: stirring moves a site's content by +-1 with probability
     swap_prob per sweep, so the value read at y is the initial value at the end

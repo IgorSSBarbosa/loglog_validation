@@ -527,7 +527,7 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         `window_exponent = 3/4` ($W=12\lceil k^{3/4}\rceil$, $d=7/4$, $k\le2^{16}$; user,
         2026-09-24). Its $p=1/2$ arm is G3's real check: the 4-min smoke at 3/4 had
         $a_1$ at $2.4\sigma$
-  - [ ] `14_rwre_linear_window` sieve: 13's sweep on $W=2k+100$ (`window_slope`,
+  - [ ] `15_rwre_linear_window` sieve: 13's sweep on $W=2k+100$ (`window_slope`,
         `window_offset`; user, 2026-09-30), $k\le49094$. L0–L4 PASS (bit-identical at
         the old windows, G1 on the new one, $p=1/2$ smoke $\hat\gamma=0.50019\pm0.00018$,
         cost $\hat d=1.933$ vs declared 1.941). Run `sweep_p.py --tag 1h` and compare

@@ -1,9 +1,9 @@
-# Experiment 14 — `rwre_gpu` on the linear window $W=2k+100$
+# Experiment 15 — `rwre_gpu` on the linear window $W=2k+100$
 
 **Question.** Does 13's sieve of $p$ change when the periodic window grows linearly,
 $W=2k+100$, instead of as $12\lceil k^{3/4}\rceil$ (user, 2026-09-30)? Everything else
 is 13's: the model (`rwre_gpu`), the grid, the pilots, the wall clock per $p$. So a
-difference between 13 and 14 at the same $p$ is the window's.
+difference between 13 and 15 at the same $p$ is the window's.
 
 Why a linear window. 13's rule rests on a *measured* spread, $\lvert X_k\rvert\sim
 k^{0.58}$, and a margin over it. On $W=2k+100$ the walker can never reach the seam:
@@ -19,7 +19,7 @@ heuristic, not a bound. The derivation is in `models/rwre.py`, decision (d).
 
 What it costs:
 
-| | 13: $12\lceil k^{3/4}\rceil$ | 14: $2k+100$ |
+| | 13: $12\lceil k^{3/4}\rceil$ | 15: $2k+100$ |
 |---|---|---|
 | cost$(k)=k\,W$ | $12\,k^{7/4}$ | $2k^2+100k$ |
 | declared $d$, 4..1024 / 128..16384 | 1.74 / 1.75 | 1.54 / 1.94 |
@@ -116,11 +116,11 @@ now small against $bW$ at every probed $k$, because $W$ is never below ~350 ther
 ## The sieve (not yet run)
 
 ```bash
-python3 experiments/14_rwre_linear_window/sweep_p.py --tag 1h --time 1h      # 8 x 1h, resumable
+python3 experiments/15_rwre_linear_window/sweep_p.py --tag 1h --time 1h      # 8 x 1h, resumable
 ```
 
 Same grid as 13, $p=1/3, 0, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5$, with the neyman pilot on
-2..1024. The comparison that answers the question is 14 against 13's same-tag sweep, $p$
+2..1024. The comparison that answers the question is 15 against 13's same-tag sweep, $p$
 by $p$: $\hat\gamma$ and the pilot's $\omega_1$. The small-scale local slopes on 4..1024
 are part of it too, and there the two windows differ most in relative terms ($W=36$
 against 108 at $k=4$). Results go to `data/sweep_p_<tag>.md` and are recorded here once
