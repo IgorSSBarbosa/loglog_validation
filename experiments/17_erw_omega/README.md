@@ -107,6 +107,14 @@ column of `data/omega_n8m.md`. The pilot's own eq. (232) fit (`constants.json`, 
 
 Bold rows are the discriminating $p$.
 
+![omega against p: exact w_k, pilot omega1 and the tail (P) fit, each with its se, against C and M](images/omega_vs_p_n8m.png)
+
+`plot_omega_vs_p.py --tag n8m` draws the table above with error bars. The pilot's se is
+the replicate spread (≤ 0.006). It is far smaller than its bias near $3/4$, so it does
+not cover the exact value. The tail fit's se is honest but wide where the corrections are
+already below the noise at $k\ge256$ ($p\le0.55$, and 0.95). The exact $w_k$ has no noise,
+only the pre-asymptotic drift its "trend" column shows.
+
 **Verdict.**
 - **C is falsified.** It is inconsistent at all 7 discriminating $p$, and it misses by
   0.2–0.4 each time. The non-power exponent is $\lvert3-4p\rvert$, not $\lvert3-4p\rvert/2$.
