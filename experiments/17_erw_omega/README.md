@@ -75,3 +75,61 @@ Results go to `data/omega_<tag>.{md,json,png}` and are recorded here once measur
 
 Smoke run (2026-09-30, $n=3\times10^5$ × 2, exact to 4096, $p\in\{0.6,0.9\}$): check
 $\chi^2$ 5.2/10 and 8.9/10, so the path works. Not evidence.
+
+## Result, tag `n8m` (2026-10-01)
+
+13 pilots, all exit 0, 62 min (about 4.6 min per $p$, including the cost probe), plus 7 min of exact DP.
+
+![drawn and exact local slopes, |Δs_k|, and exact w_k for 13 values of p](images/omega_n8m.png)
+
+**Prerequisite: PASS at every $p$.** The drawn $s_k$ against the exact ones on $4..2^{16}$
+(14 slopes): the worst check is $\chi^2=22.8/14$ ($p=0.06$) and max $\lvert z\rvert=2.5$.
+
+**Leading exponent.** $w_{\rm top}$ is the exact $w_k$ at middle scale $2^{14}$, the last
+column of `data/omega_n8m.md`. The pilot's own eq. (232) fit (`constants.json`, on
+4..2²⁰) is shown for comparison.
+
+| $p$ | $w_{\rm top}$ (trend) | pilot $\omega_1$ | $\omega_C$ | C | $\omega_M$ | M |
+|---|---|---|---|---|---|---|
+| 0.1 | 1.000 (flat) | 1.229 | 1 | ✓ | 1 | ✓ |
+| 0.25 | 1.000 (flat) | 1.114 | 1 | ✓ | 1 | ✓ |
+| **0.4** | 0.995 (↑ to 1) | 0.965 | 0.7 | **✗** | 1 | ✓ |
+| 0.5 | 1.000 (flat) | 0.988 | 1* | ✓ | 1 | ✓ |
+| **0.55** | 0.840 (↓) | 0.925 | 0.4 | **✗** | 0.8 | ✓ |
+| **0.6** | 0.592 (flat) | 0.712 | 0.3 | **✗** | 0.6 | ✓ |
+| **0.65** | 0.393 (flat) | 0.503 | 0.2 | **✗** | 0.4 | ✓ |
+| 0.7 | 0.236 (↓) | 0.355 | 0.1 | ✗ (0.14) | 0.2 | ✓ |
+| 0.75 | 0.172 (↓, no plateau) | 0.298 | log | see below | log | see below |
+| 0.8 | 0.241 (↓) | 0.352 | 0.1 | ✗ (0.14) | 0.2 | ✓ |
+| **0.85** | 0.405 (flat) | 0.480 | 0.2 | **✗** | 0.4 | ✓ |
+| **0.9** | 0.605 (flat) | 0.640 | 0.3 | **✗** | 0.6 | ✓ |
+| **0.95** | 0.816 (↓) | 0.801 | 0.4 | **✗** | 0.8 | ✓ |
+
+Bold rows are the discriminating $p$.
+
+**Verdict.**
+- **C is falsified.** It is inconsistent at all 7 discriminating $p$, and it misses by
+  0.2–0.4 each time. The non-power exponent is $\lvert3-4p\rvert$, not $\lvert3-4p\rvert/2$.
+- **M is consistent at all 12 non-critical $p$**, within 0.05 everywhere. On both sides of
+  $3/4$, the exponent is symmetric in $\lvert3-4p\rvert$: 0.6/0.9, 0.65/0.85 and 0.7/0.8
+  match to 0.01.
+- **The "$\omega=1$ at every $p$" part** is seen only where it leads, at
+  $p\le1/2$ and $p=0.4$. Where $\lvert3-4p\rvert<1$, $w$ reads the smaller exponent, and
+  nothing here isolates a $k^{-1}$ term underneath. (2P), which fixes $c_1/k$ and frees
+  $\omega$, gives 0.54, 0.37, 0.25, 0.26, 0.41, 0.60 at $p=0.6..0.9$. Those are close to
+  M and do not resolve the $1/k$ term.
+- **Critical $p=3/4$: logarithmic, but not a single $c/\ln k$.**
+  - Exact $w_k$ falls over the whole ladder (0.59 → 0.17) with no plateau, and still
+    falls at the same rate where the other $p$ have flattened. So there's no power law,
+    and the first half of the criterion passes.
+  - The drawn (L) fit on $k\ge256$ is rejected ($\chi^2=79/10$, $p=7\times10^{-13}$), so
+    the second half fails as pre-registered.
+  - The exact slopes say why. $(s_k-\tfrac12)\cdot2\ln k$ climbs
+    0.60, 0.68, …, 0.906, 0.915, 0.922, 0.928 at $k=4..2^{15}$, toward 1 like $1/\ln k$.
+    That's $s_k=\tfrac12+\tfrac1{2\ln k}-O(\ln^{-2}k)$: the $\sqrt{k\ln k}$ law with its
+    next logarithmic term. A two-parameter $\gamma+c/\ln k$ can't absorb the
+    $\ln^{-2}k$ term.
+
+**For the pipeline.** The pilot's eq. (232) fit tracks $\omega_M$ but is biased upward
+near $3/4$, by +0.12–0.13 at $p=0.7, 0.8$. It reads 0.30 at $p=3/4$, where there's no
+exponent to read, as 14 found (0.40 on 4..4096).
