@@ -1,6 +1,7 @@
 """models/rwre.py's walk on a lazily revealed environment, on a CUDA GPU.
 
-Phase A of plans/rwre_gpu_lazy.md: the byte layout. Not yet registered in
+Phases A and B of plans/rwre_gpu_lazy.md: the byte and bit-packed layouts
+(`layout`, default "bit"), bit-identical to each other. Not yet registered in
 tools/models.py (that is phase C, with `cost_hint`); until then it is reached
 as `from models import rwre_gpu_lazy`. Acceptance criteria and measured
 results: experiments/18_rwre_gpu_lazy/README.md.
@@ -33,7 +34,7 @@ step, for the distribution check against it (L1).
 
 The deque (plan §3)
 -------------------
-Per sample, the known cells live in a buffer of `cap` bytes in shared memory,
+Per sample, the known cells live in a buffer of `cap` cells in shared memory,
 absolute site a at buffer index a + cap/2. The deque [L, R] is the part that
 is swept. Its invariant: both end cells are U. A known value moves at most one
 site per sweep, so a sweep over the bonds inside [L, R] moves every known
@@ -61,10 +62,20 @@ cover four of them at a quarter of the cost). So the output is a pure function
 of (seed, sample index, k, p, alpha, env_sweeps, swap_prob, skip_read): it
 does not depend on the launch chunk, on `growth`, or on `cap` short of an
 overflow -- the L0 checks. At swap_prob = 1/2 a bond swaps iff its bit is
-set, one bit per bond, which is what the bit-packed layout (phase B) will use;
+set, one bit per bond, which is what the bit-packed layout uses;
 otherwise it draws a 24-bit float32 uniform per bond, as rwre's float32
 comparison does. The walker's uniform is a 53-bit double on [0, 1), the
 revealed value a 24-bit float32 uniform against alpha, as on CPU.
+
+Two layouts (plan §5), same draws, same output
+--------------------------------------------------
+"byte": one byte per cell, cap bytes of shared memory, any swap_prob. The
+readable reference. "bit": two bit-planes (known, value), cap / 4 bytes; a
+lane sweeps 128 cells per Philox draw with the masked XOR on both planes,
+t = (x ^ (x >> 1)) & m, x ^= t | (t << 1), plus the bond across each word
+boundary at odd parity. swap_prob = 1/2 only (plan §9 Q1). It is ~7.7x
+faster at cap = 2**15, mostly from occupancy: a sample holds 8 KiB of shared
+memory instead of 32 KiB.
 
 One warp per sample (plan §5): every lane computes every per-step draw itself
 (the same counter gives the same value, at no extra latency), so there is no
@@ -86,11 +97,13 @@ _DEFAULTS = {
     "env_sweeps": 4,
     "swap_prob": 0.5,
     "skip_read": True,
-    # Performance only: neither changes a draw (module docstring). cap = 2**15
-    # bytes is 3 samples per SM on the RTX 5090; plan §9.1 expects 1e4-3e4
-    # cells at k = 2**20, and phase A' (L4) sets it from measured widths.
+    # Performance only: none changes a draw (module docstring). cap is in
+    # cells: 2**15 is 8 KiB of shared memory in the bit layout, 32 KiB (3
+    # samples per SM on the RTX 5090) in the byte layout. Kept at 2**15 for now
+    # (Igor, 2026-10-02); L4 extrapolates ~1.3e4 cells per side at k = 2**20.
     "cap": 1 << 15,
     "growth": 32,
+    "layout": "bit",
 }
 
 #: Per-sample output columns of `walk_stats`, in order.
@@ -103,6 +116,9 @@ _OK, _OVERFLOW, _DEBUG_FAILED = 0, 1, 2
 #: the RTX 5090's 99 KiB), as in models/rwre_gpu.py.
 _DEFAULT_SHARED = 48 * 1024
 _MAX_SHARED = 96 * 1024
+
+#: Shared memory per cell: one byte, or one bit in each of two planes.
+_BYTES_PER_CELL = {"byte": 1.0, "bit": 0.25}
 
 #: Samples per launch. Only memory and responsiveness depend on it.
 _CHUNK = 1 << 16
@@ -139,90 +155,218 @@ extern "C" __global__ void philox_kat(const uint4* ctr, const uint2* key, uint4*
     if (i < m) out[i] = philox(ctr[i], key[i]);
 }
 
-// Swap cells j, j+1 if the bond lies in the deque. Bonds outside [L, R] join
-// two U cells, a no-op.
-__device__ __forceinline__ void swap_if(unsigned char* env, const int j, const bool on,
-                                        const int L, const int R) {
-    if (on && j >= L && j < R) {
-        const unsigned char a = env[j];
-        env[j] = env[j + 1];
-        env[j + 1] = a;
-    }
-}
+// ------------------------------------------------------------ byte layout
+// One byte per cell: 0 = U, 1 = hole, 3 = particle. The reference for BitEnv.
+struct ByteEnv {
+    unsigned char* e;
 
-// One brick-wall sweep over the bonds of absolute parity b inside [L, R].
-// Buffer index j is absolute j - c, and c is a multiple of 128, so the
-// 128-cell blocks are aligned in both. Lane l takes bonds at offsets 2l + b
-// and 2l + b + 64 of each block: the 64 bonds of a block are disjoint, and so
-// are those of different blocks (a bond crossing into the next block has odd
-// offset 127 and meets offset 0 of the next only at the other parity).
-__device__ void sweep(unsigned char* env, const int L, const int R, const int c,
-                      const int b, const unsigned s, const unsigned sample,
-                      const uint2 key, const bool bits, const float q,
-                      const unsigned lane) {
-    const int B0 = L >> 7, B1 = (R - 1) >> 7, o = 2 * (int)lane + b;
-    if (bits) {
+    __device__ void clear(const int cap, const unsigned lane) const {
+        for (int j = (int)lane; j < cap / 4; j += 32) ((unsigned*)e)[j] = 0u;
+    }
+    __device__ unsigned known(const int j) const { return e[j] & 1u; }
+    __device__ unsigned one(const int j) const { return e[j] >> 1; }
+    __device__ void reveal(const int j, const unsigned one) const { e[j] = one ? 3 : 1; }
+
+    // Swap cells j, j+1 if the bond lies in the deque. Bonds outside [L, R]
+    // join two U cells, a no-op.
+    __device__ __forceinline__ void swap_if(const int j, const bool on, const int L,
+                                            const int R) const {
+        if (on && j >= L && j < R) {
+            const unsigned char a = e[j];
+            e[j] = e[j + 1];
+            e[j + 1] = a;
+        }
+    }
+
+    // One brick-wall sweep over the bonds of absolute parity b inside [L, R].
+    // Buffer index j is absolute j - c, and c is a multiple of 128, so the
+    // 128-cell blocks are aligned in both. Lane l takes bonds at offsets 2l + b
+    // and 2l + b + 64 of each block: the 64 bonds of a block are disjoint, and
+    // so are those of different blocks (a bond crossing into the next block has
+    // odd offset 127 and meets offset 0 of the next only at the other parity).
+    __device__ void sweep(const int L, const int R, const int c, const int b,
+                          const unsigned s, const unsigned sample, const uint2 key,
+                          const float q, const unsigned lane) const {
+        const int B0 = L >> 7, B1 = (R - 1) >> 7, o = 2 * (int)lane + b;
+        if (q == 0.5f) {
+            for (int base = B0; base <= B1; base += 32) {
+                // Each lane draws one block's 128 bits; the warp then walks the
+                // blocks together, so accesses stay on distinct banks.
+                const uint4 r = philox(make_uint4((unsigned)(base + (int)lane - (c >> 7)), s,
+                                                  sample, TAG_SWAP), key);
+                const int nb = min(32, B1 - base + 1);
+                for (int i = 0; i < nb; ++i) {
+                    const unsigned w0 = __shfl_sync(FULL, r.x, i), w1 = __shfl_sync(FULL, r.y, i);
+                    const unsigned w2 = __shfl_sync(FULL, r.z, i), w3 = __shfl_sync(FULL, r.w, i);
+                    const int j = (base + i) << 7;
+                    swap_if(j + o, ((o < 32 ? w0 : w1) >> (o & 31)) & 1u, L, R);
+                    swap_if(j + o + 64, ((o < 32 ? w2 : w3) >> (o & 31)) & 1u, L, R);
+                }
+            }
+        } else {
+            for (int B = B0; B <= B1; ++B) {
+                const unsigned w = (unsigned)(B - (c >> 7)), j = (unsigned)(B << 7);
+                for (int h = 0; h < 2; ++h) {
+                    const int bond = (int)lane + 32 * h;          // bond index within the block
+                    const uint4 r = philox(make_uint4(w, s, sample, TAG_SWAPQ | ((unsigned)(bond >> 2) << 8)), key);
+                    swap_if((int)j + 2 * bond + b, unit24(word(r, bond & 3)) < q, L, R);
+                }
+            }
+        }
+    }
+
+    // Known cells and ones in [L, R]; cells outside are never touched.
+    __device__ void count(const int L, const int R, const unsigned lane, int& known,
+                          int& one) const {
+        known = one = 0;
+        for (int j = L + (int)lane; j <= R; j += 32) {
+            known += e[j] & 1;
+            one += e[j] >> 1;
+        }
+    }
+};
+
+// ------------------------------------------------------------ bit layout
+// Two bit-planes of cap / 32 words, K (known) and V (value), cell j at bit
+// j mod 32 of word j / 32; U is K = V = 0. Bit t of word 4B + i is the bond
+// with left endpoint at cell 128B + 32i + t, which is bit 32i + t of block B's
+// Philox draw: exactly the bit ByteEnv reads for that bond, so the two layouts
+// make the same swaps (L0).
+struct BitEnv {
+    unsigned* K;
+    unsigned* V;
+
+    __device__ void clear(const int cap, const unsigned lane) const {
+        for (int j = (int)lane; j < cap / 16; j += 32) K[j] = 0u;    // both planes
+    }
+    __device__ unsigned known(const int j) const { return (K[j >> 5] >> (j & 31)) & 1u; }
+    __device__ unsigned one(const int j) const { return (V[j >> 5] >> (j & 31)) & 1u; }
+    __device__ void reveal(const int j, const unsigned one) const {
+        K[j >> 5] |= 1u << (j & 31);
+        V[j >> 5] |= one << (j & 31);
+    }
+
+    // Swap bits t, t+1 for every left endpoint t set in m.
+    static __device__ __forceinline__ void swap_in(unsigned& x, const unsigned m) {
+        const unsigned t = (x ^ (x >> 1)) & m;
+        x ^= t | (t << 1);
+    }
+    // Swap bit 31 of x with bit 0 of y if bit 31 of m is set.
+    static __device__ __forceinline__ void swap_across(unsigned& x, unsigned& y, const unsigned m) {
+        const unsigned d = ((x >> 31) ^ y) & (m >> 31) & 1u;
+        x ^= d << 31;
+        y ^= d;
+    }
+    static __device__ __forceinline__ void swap_block(uint4& x, const uint4 m, const int b) {
+        // Parity 0: pairs (2i, 2i+1), all inside a word. Parity 1: pairs
+        // (2i+1, 2i+2) inside a word for bits 1..30, and bit 31 with bit 0 of
+        // the next word. Neither touches the bits the other one moves.
+        const unsigned in = b ? 0x2AAAAAAAu : 0x55555555u;
+        swap_in(x.x, m.x & in); swap_in(x.y, m.y & in);
+        swap_in(x.z, m.z & in); swap_in(x.w, m.w & in);
+        if (b) {
+            swap_across(x.x, x.y, m.x);
+            swap_across(x.y, x.z, m.y);
+            swap_across(x.z, x.w, m.z);
+        }
+    }
+
+    // One sweep over the blocks B0 .. B1 covering [L, R], lane l on block
+    // base + l, 128 cells and one Philox draw per lane. Swapping whole blocks
+    // also swaps bonds outside [L, R]: those join two U cells (both ends of the
+    // deque are U, and everything beyond), a no-op, as in ByteEnv.
+    __device__ void sweep(const int L, const int R, const int c, const int b,
+                          const unsigned s, const unsigned sample, const uint2 key,
+                          const float q, const unsigned lane) const {
+        uint4* K4 = (uint4*)K;
+        uint4* V4 = (uint4*)V;
+        const int B0 = L >> 7, B1 = R >> 7;
+        // Bit 31 of the previous chunk's last word, before this sweep, and its
+        // mask (0 for the first chunk: the bond into block B0 joins two U cells).
+        unsigned pk = 0u, pv = 0u, pm = 0u;
         for (int base = B0; base <= B1; base += 32) {
-            // Each lane draws one block's 128 bits; the warp then walks the
-            // blocks together, so accesses stay on distinct banks.
-            const uint4 r = philox(make_uint4((unsigned)(base + (int)lane - (c >> 7)), s,
-                                              sample, TAG_SWAP), key);
-            const int nb = min(32, B1 - base + 1);
-            for (int i = 0; i < nb; ++i) {
-                const unsigned w0 = __shfl_sync(FULL, r.x, i), w1 = __shfl_sync(FULL, r.y, i);
-                const unsigned w2 = __shfl_sync(FULL, r.z, i), w3 = __shfl_sync(FULL, r.w, i);
-                const int j = (base + i) << 7;
-                swap_if(env, j + o, ((o < 32 ? w0 : w1) >> (o & 31)) & 1u, L, R);
-                swap_if(env, j + o + 64, ((o < 32 ? w2 : w3) >> (o & 31)) & 1u, L, R);
+            const int B = base + (int)lane;
+            const bool on = B <= B1;
+            uint4 k = make_uint4(0u, 0u, 0u, 0u), v = k, m = k;
+            if (on) {
+                k = K4[B];
+                v = V4[B];
+                m = philox(make_uint4((unsigned)(B - (c >> 7)), s, sample, TAG_SWAP), key);
             }
-        }
-    } else {
-        for (int B = B0; B <= B1; ++B) {
-            const unsigned w = (unsigned)(B - (c >> 7)), j = (unsigned)(B << 7);
-            for (int h = 0; h < 2; ++h) {
-                const int bond = (int)lane + 32 * h;          // bond index within the block
-                const uint4 r = philox(make_uint4(w, s, sample, TAG_SWAPQ | ((unsigned)(bond >> 2) << 8)), key);
-                swap_if(env, (int)j + 2 * bond + b, unit24(word(r, bond & 3)) < q, L, R);
+            unsigned prevk = __shfl_up_sync(FULL, k.w, 1), prevv = __shfl_up_sync(FULL, v.w, 1);
+            unsigned prevm = __shfl_up_sync(FULL, m.w, 1);
+            unsigned nextk = __shfl_down_sync(FULL, k.x, 1), nextv = __shfl_down_sync(FULL, v.x, 1);
+            if (lane == 0) { prevk = pk; prevv = pv; prevm = pm; }
+            if (lane == 31) {
+                // The next chunk's first block, not yet swapped; past B1 the
+                // bond joins two U cells.
+                nextk = B < B1 ? K[4 * (B + 1)] : 0u;
+                nextv = B < B1 ? V[4 * (B + 1)] : 0u;
             }
+            pk = __shfl_sync(FULL, k.w, 31);
+            pv = __shfl_sync(FULL, v.w, 31);
+            pm = __shfl_sync(FULL, m.w, 31);
+            if (b) {
+                // The bonds into and out of the block, from the old neighbours.
+                // The neighbour lane makes the same decision on the same bits.
+                swap_across(prevk, k.x, prevm);
+                swap_across(prevv, v.x, prevm);
+                swap_across(k.w, nextk, m.w);
+                swap_across(v.w, nextv, m.w);
+            }
+            swap_block(k, m, b);
+            swap_block(v, m, b);
+            if (on) { K4[B] = k; V4[B] = v; }
+            __syncwarp();
         }
     }
-}
 
-// Debug build only: known cells in [L, R] must number exactly the reveals, and
-// the ones exactly the revealed ones (swaps only move values), and both end
-// cells must be U.
-__device__ bool deque_ok(const unsigned char* env, const int L, const int R,
-                         const long long reveals, const long long ones, const unsigned lane) {
-    int known = 0, one = 0;
-    for (int j = L + (int)lane; j <= R; j += 32) {
-        known += env[j] & 1;
-        one += env[j] >> 1;
+    // Known cells and ones in every block a sweep touches, so this also checks
+    // that the no-op swaps outside [L, R] left only U there.
+    __device__ void count(const int L, const int R, const unsigned lane, int& known,
+                          int& one) const {
+        known = one = 0;
+        for (int w = 4 * (L >> 7) + (int)lane; w < 4 * ((R >> 7) + 1); w += 32) {
+            known += __popc(K[w]);
+            one += __popc(V[w]);
+        }
     }
+};
+
+// ------------------------------------------------------------ the walk
+
+// Debug build only: known cells must number exactly the reveals, and the ones
+// exactly the revealed ones (swaps only move values), and both end cells must
+// be U.
+template <class Env>
+__device__ bool deque_ok(const Env& env, const int L, const int R, const long long reveals,
+                         const long long ones, const unsigned lane) {
+    int known, one;
+    env.count(L, R, lane, known, one);
     known = __reduce_add_sync(FULL, known);
     one = __reduce_add_sync(FULL, one);
-    return known == reveals && one == ones && !(env[L] & 1) && !(env[R] & 1);
+    return known == reveals && one == ones && !env.known(L) && !env.known(R);
 }
 
-extern "C" __global__ void lazy_walk(
-        const unsigned long long seed, const long long first, const long long n,
+template <class Env>
+__device__ void lazy_walk(
+        const Env env, const unsigned long long seed, const long long first,
         const long long k, const int sweeps, const double p, const float alpha,
         const float q, const int skip_read, const int cap, const int growth,
         const int debug, long long* out) {
-    extern __shared__ unsigned char env[];     // 0 = U, 1 = hole, 3 = particle
-    if (blockIdx.x >= n) return;
     const unsigned lane = threadIdx.x;
     const unsigned sample = (unsigned)(first + blockIdx.x);
     const uint2 key = make_uint2((unsigned)seed, (unsigned)(seed >> 32));
     const int c = cap / 2;
-    const bool bits = q == 0.5f;
     const double lo = fmin(p, 1.0 - p), hi = fmax(p, 1.0 - p);
 
-    for (int j = (int)lane; j < cap / 4; j += 32) ((unsigned*)env)[j] = 0u;
+    env.clear(cap, lane);
     __syncwarp();
 
     long long x = 0, reveals = 0, ones = 0, reads = 0;
     int L = c, R = c, err = 0;
     unsigned s = 0;                             // sweeps so far; k * sweeps < 2**32
+    uint4 pr;                                   // parities of sweeps 128(s/128) ..
     for (long long t = 0; t < k && !err; ++t) {
         const uint4 r = philox(make_uint4((unsigned)t, (unsigned)(t >> 32), sample, TAG_STEP), key);
         const double u = ((r.x >> 5) * 67108864.0 + (r.y >> 6)) * (1.0 / 9007199254740992.0);
@@ -238,28 +382,30 @@ extern "C" __global__ void lazy_walk(
             while (j <= L) L -= growth;         // keep both ends U around the read
             while (j >= R) R += growth;
             if (L < 0 || R >= cap) { err = 1; break; }
-            unsigned char v = env[j];
-            if (!(v & 1)) {
-                v = unit24(r.z) < alpha ? 3 : 1;
+            unsigned one;
+            if (env.known(j)) {
+                one = env.one(j);
+            } else {
+                one = unit24(r.z) < alpha;
                 ++reveals;
-                ones += v >> 1;
-                __syncwarp();                   // every lane has read env[j] as U
-                if (lane == 0) env[j] = v;
+                ones += one;
+                __syncwarp();                   // every lane has read cell j as U
+                if (lane == 0) env.reveal(j, one);
             }
             ++reads;
-            left = u < ((v >> 1) ? p : 1.0 - p);
+            left = u < (one ? p : 1.0 - p);
         }
         x += left ? -1 : 1;
         __syncwarp();                           // the reveal lands before anything moves
         if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
         for (int i = 0; i < sweeps; ++i, ++s) {
-            const uint4 pr = philox(make_uint4(s >> 7, 0u, sample, TAG_PARITY), key);
+            if (!(s & 127)) pr = philox(make_uint4(s >> 7, 0u, sample, TAG_PARITY), key);
             const int b = (word(pr, (s >> 5) & 3) >> (s & 31)) & 1u;
-            sweep(env, L, R, c, b, s, sample, key, bits, q, lane);
+            env.sweep(L, R, c, b, s, sample, key, q, lane);
             __syncwarp();                       // this sweep lands before the next reads
             // A known value moved at most one site, so at worst onto an end.
-            if (env[L] & 1) L -= growth;
-            if (env[R] & 1) R += growth;
+            if (env.known(L)) L -= growth;
+            if (env.known(R)) R += growth;
             if (L < 0 || R >= cap) { err = 1; break; }
             if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
         }
@@ -269,6 +415,26 @@ extern "C" __global__ void lazy_walk(
         o[0] = x; o[1] = reveals; o[2] = ones; o[3] = reads;
         o[4] = R - L + 1; o[5] = L - c; o[6] = R - c; o[7] = err;
     }
+}
+
+extern __shared__ uint4 smem[];
+
+#define ARGS const unsigned long long seed, const long long first, const long long n, \
+        const long long k, const int sweeps, const double p, const float alpha, \
+        const float q, const int skip_read, const int cap, const int growth, \
+        const int debug, long long* out
+#define PASS seed, first, k, sweeps, p, alpha, q, skip_read, cap, growth, debug, out
+
+// cap bytes of shared memory.
+extern "C" __global__ void lazy_walk_byte(ARGS) {
+    if (blockIdx.x >= n) return;
+    lazy_walk(ByteEnv{(unsigned char*)smem}, PASS);
+}
+
+// cap / 4 bytes of shared memory: two planes of cap bits.
+extern "C" __global__ void lazy_walk_bit(ARGS) {
+    if (blockIdx.x >= n) return;
+    lazy_walk(BitEnv{(unsigned*)smem, (unsigned*)smem + cap / 32}, PASS);
 }
 """
 
@@ -289,9 +455,17 @@ def _check(params: dict) -> dict:
     q["env_sweeps"] = int(q["env_sweeps"])
     if not isinstance(q["skip_read"], bool):
         raise ValueError(f"skip_read must be true or false; got {q['skip_read']!r}")
+    if q["layout"] not in _BYTES_PER_CELL:
+        raise ValueError(f"layout must be one of {sorted(_BYTES_PER_CELL)}; got {q['layout']!r}")
+    # Plan §9 Q1: the bit layout draws one bit per bond, so swap_prob = 1/2 only.
+    if q["layout"] == "bit" and q["swap_prob"] != 0.5:
+        raise ValueError(f"layout 'bit' needs swap_prob = 0.5; got {q['swap_prob']}. "
+                         "Use layout 'byte' for any other swap_prob.")
     # cap/2 must be a multiple of 128 so the swap blocks align in the buffer.
-    if int(q["cap"]) != q["cap"] or q["cap"] < 256 or q["cap"] % 256 or q["cap"] > _MAX_SHARED:
-        raise ValueError(f"cap must be a multiple of 256 in [256, {_MAX_SHARED}]; got {q['cap']}")
+    top = int(_MAX_SHARED / _BYTES_PER_CELL[q["layout"]])
+    if int(q["cap"]) != q["cap"] or q["cap"] < 256 or q["cap"] % 256 or q["cap"] > top:
+        raise ValueError(f"cap must be a multiple of 256 in [256, {top}] for layout "
+                         f"{q['layout']!r}; got {q['cap']}")
     if int(q["growth"]) != q["growth"] or not 1 <= q["growth"] <= q["cap"] // 4:
         raise ValueError(f"growth must be an integer in [1, cap/4]; got {q['growth']}")
     q["cap"], q["growth"] = int(q["cap"]), int(q["growth"])
@@ -361,13 +535,14 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
                          f"{q['env_sweeps']}")
 
     cp = _cupy()
-    kernel = _compiled(cp).get_function("lazy_walk")
-    if q["cap"] > _DEFAULT_SHARED:
+    kernel = _compiled(cp).get_function(f"lazy_walk_{q['layout']}")
+    shared = int(q["cap"] * _BYTES_PER_CELL[q["layout"]])
+    if shared > _DEFAULT_SHARED:
         optin = cp.cuda.Device().attributes["MaxSharedMemoryPerBlockOptin"]
-        if q["cap"] > optin:
-            raise RuntimeError(f"cap = {q['cap']} bytes of shared memory per sample; this "
-                               f"device allows {optin}")
-        kernel.max_dynamic_shared_size_bytes = q["cap"]
+        if shared > optin:
+            raise RuntimeError(f"cap = {q['cap']} cells is {shared} bytes of shared memory "
+                               f"per sample; this device allows {optin}")
+        kernel.max_dynamic_shared_size_bytes = shared
     rng = rng if rng is not None else np.random.default_rng()
     seed = int(rng.integers(0, 2 ** 63))
 
@@ -380,7 +555,7 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
                 cp.int32(q["env_sweeps"]), cp.float64(q["p"]), cp.float32(q["alpha"]),
                 cp.float32(q["swap_prob"]), cp.int32(q["skip_read"]), cp.int32(q["cap"]),
                 cp.int32(q["growth"]), cp.int32(debug), dev),
-               shared_mem=q["cap"])
+               shared_mem=shared)
         out[first:first + rows] = dev[:rows].get()
 
     err = out[:, STATS.index("error")]

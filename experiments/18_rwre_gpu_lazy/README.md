@@ -8,8 +8,8 @@ holds the acceptance criteria (copied from the plan's §6) and what was measured
 
 | | |
 |---|---|
-| model | `models/rwre_gpu_lazy.py`, phase A, the byte layout. One warp per sample. A deque of cells $\{U,0,1\}$ in `cap` bytes of shared memory, both ends always $U$, growing by `growth` cells, never shrinking. Philox4x32-10 keyed by what each draw is for, so the output doesn't depend on launch chunk, `growth` or `cap`. Skip-read on by default (`skip_read`). Not registered in `tools/models.py` yet (phase C) |
-| parameters | `p`, `alpha`, `env_sweeps`, `swap_prob` as `rwre`; `skip_read` (default true); `cap` (default $2^{15}$), `growth` (default 32), performance only |
+| model | `models/rwre_gpu_lazy.py`, phases A and B: `layout` "byte" (reference, any `swap_prob`) or "bit" (default, two bit-planes, `swap_prob` $=1/2$ only), bit-identical. One warp per sample. A deque of cells $\{U,0,1\}$ in `cap` cells of shared memory, both ends always $U$, growing by `growth` cells, never shrinking. Philox4x32-10 keyed by what each draw is for, so the output doesn't depend on launch chunk, `growth` or `cap`. Skip-read on by default (`skip_read`). Not registered in `tools/models.py` yet (phase C) |
+| parameters | `p`, `alpha`, `env_sweeps`, `swap_prob` as `rwre`; `skip_read` (default true); `cap` (default $2^{15}$ cells), `growth` (default 32), `layout` (default "bit"), performance only |
 | observable | $Y_k=\lvert X_k\rvert$; `walk_stats` also returns reveals, ones, reads, deque width and ends |
 | checks | `tools/tests/test_rwre_gpu_lazy.py` (L0, L2, L3, Philox known answers; local, gitignored), `local/rwre_lazy_ks.py` (L1a, L1), `local/rwre_lazy_l4.py` (L4, P1 timing) |
 
@@ -108,3 +108,61 @@ for the top rung, as the plan anticipated.
 on $k$. Either keep the fixed $2^{15}$, or set it per $k$ from this table: the smallest
 power of two at least $2\times1.5\times$ the largest half-span seen. That would be $2^{13}$
 at $k=2^{14}$, 3.2× faster than $2^{15}$ there.
+
+## Phase B: the bit-packed layout (2026-10-02)
+
+`cap` stays $2^{15}$ cells for now (Igor, 2026-10-02); the per-$k$ rule above is not
+adopted. In the bit layout that is 8 KiB of shared memory per sample instead of 32 KiB.
+
+**L0 bit vs byte: PASS, every column identical** (`width`, `left`, `right` included, at
+equal `growth`), in `test_l0_bit_layout_equals_byte_layout`: six parameter sets at
+$k=2048$, plus two with deques wider than one warp's 32 blocks (4096 cells), which
+exercise the carry between chunks: $k=2^{16}$ with `growth` 4096 (width 8193) and
+$k=2^{17}$ at $p=0$ (max width 4705). The L3 debug invariants hold in the bit layout,
+including a three-chunk deque; there they count every block a sweep touches, so they
+also check that the no-op swaps outside $[L,R]$ leave only $U$.
+`python3 -m pytest tools/tests/test_rwre_gpu_lazy.py`: 59 passed.
+
+**L1a: 14 of 14 pass**, now on the default bit layout. The KS $p$ and $z$ match phase A
+to every digit (KS $p$ from 0.148 to 1.000, $\lvert z\rvert\le2.15$), as they must:
+same seeds, same draws. L1 is not rerun: it passed on the byte layout, which the bit
+layout reproduces sample for sample.
+
+**P1 timing.** $k=2^{14}$, $n=2^{15}$, $p=1/3$, same seed (same draws in every row):
+
+| layout | `cap` | seconds | µs per sample |
+|---|---|---|---|
+| byte | $2^{13}$ | 1.37 | 41.9 |
+| byte | $2^{15}$ | 4.48 | 136.8 |
+| bit | $2^{12}$ | 0.44 | 13.4 |
+| bit | $2^{13}$ | 0.44 | 13.5 |
+| bit | $2^{14}$ | 0.46 | 14.0 |
+| bit | $2^{15}$ | 0.58 | 17.8 |
+| bit | $2^{16}$ | 1.09 | 33.3 |
+
+At `cap` $=2^{15}$ the bit layout is **7.7×** faster. Up to $2^{14}$ the cost no
+longer depends on `cap`, so occupancy has stopped being the limit.
+
+Scaling, bit layout, `cap` $2^{15}$, $p=1/3$, $n=2^{15}$, measured directly up to the top
+rung:
+
+| $k$ | µs per sample | mean $W$ | max $W$ | max half-span |
+|---|---|---|---|---|
+| $2^{14}$ | 18.0 | 1102 | 1633 | 1120 |
+| $2^{15}$ | 35.8 | 1609 | 2401 | 1504 |
+| $2^{16}$ | 71.7 | 2346 | 3425 | 2144 |
+| $2^{17}$ | 146.2 | 3421 | 5025 | 3520 |
+| $2^{18}$ | 352.7 | 4981 | 7297 | 4704 |
+| $2^{19}$ | 840.6 | 7244 | 10625 | 7200 |
+| $2^{20}$ | 2109.3 | 10523 | 15265 | 10144 |
+
+- **A $k=N=2^{20}$ rung costs ≈ 0.61 h** (2.11 ms × $2^{20}$), down from the byte
+  layout's projected 22–27 h. That meets §9 Q6's "a few hours".
+- The cost is linear in $k$ up to $2^{16}$ (≈ 1.1 ns per step). That is the serial
+  per-step term: the step's Philox, the read, the `__syncwarp`s, and the per-sweep end
+  checks. The sweeps take over from $2^{17}$ (local slope 1.27 to 1.33 from $2^{18}$ up).
+- **`cap` margin at the top rung:** the largest half-span in $2^{15}$ samples is 10144,
+  against `cap`/2 $=16384$ (1.6×). A full $N=2^{20}$ rung draws 32× more samples, so
+  its maximum will be somewhat larger. An overflow raises and names the sample. If one
+  ever occurs, `cap` $=2^{16}$ (16 KiB) is the fallback: it changes no draw and costs
+  about 1.9× at $k=2^{14}$.

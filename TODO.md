@@ -532,10 +532,11 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         the old windows, G1 on the new one, $p=1/2$ smoke $\hat\gamma=0.50019\pm0.00018$,
         cost $\hat d=1.933$ vs declared 1.941). Run `sweep_p.py --tag 1h` and compare
         with 13 $p$ by $p$
-  - [ ] `18_rwre_gpu_lazy` (plans/rwre_gpu_lazy.md): phase A done, `models/rwre_gpu_lazy.py`, byte
-        layout, L0/L1a/L1/L2/L3 PASS. L4 measured ($W\approx9\sqrt k$ at $2^{16}$, local slope
-        0.55). Next: sign off the `cap` rule (A'), then phase B (bit-packed), then C
-        (registration, `cost_hint`, E1). Byte layout projects to ~1 day per $k=N=2^{20}$ rung
+  - [ ] `18_rwre_gpu_lazy` (plans/rwre_gpu_lazy.md): phases A and B done,
+        `models/rwre_gpu_lazy.py`, `layout` byte / bit (default), bit-identical;
+        L0/L1a/L1/L2/L3 PASS, L4 measured. `cap` kept at $2^{15}$ cells (Igor, 2026-10-02).
+        Bit layout: a $k=N=2^{20}$ rung measures ≈ 0.6 h (byte: ~1 day). Next: C
+        (registration, `cost_hint`, E1)
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact

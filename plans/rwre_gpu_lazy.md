@@ -1,7 +1,9 @@
 # Plan — `rwre_gpu_lazy`: the walk on the SSEP with a lazily revealed environment
 
-**Status: phase A implemented and passing (2026-10-02), `models/rwre_gpu_lazy.py`; L4
-measured, `cap` awaiting sign-off (A'). Results: `experiments/18_rwre_gpu_lazy/README.md`.**
+**Status: phases A and B implemented and passing (2026-10-02), `models/rwre_gpu_lazy.py`
+(`layout` "byte" / "bit", bit-identical); `cap` kept at $2^{15}$ cells for now (Igor);
+a $k=N=2^{20}$ rung measures ≈ 0.6 h in the bit layout. Next: phase C. Results:
+`experiments/18_rwre_gpu_lazy/README.md`.**
 Proposed by Igor (the lazy environment came from the discussion with Roberto and Augusto;
 the deque layout, the skip-read rule and the chunked-growth test are Igor's), with the
 bit-packing and barrier proposals from the 2026-10-01 discussion. Written as a *new
