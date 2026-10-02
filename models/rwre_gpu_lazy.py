@@ -1,9 +1,11 @@
 """models/rwre.py's walk on a lazily revealed environment, on a CUDA GPU.
 
 Phases A and B of plans/rwre_gpu_lazy.md: the byte and bit-packed layouts
-(`layout`, default "bit"), bit-identical to each other. Not yet registered in
-tools/models.py (that is phase C, with `cost_hint`); until then it is reached
-as `from models import rwre_gpu_lazy`. Acceptance criteria and measured
+(`layout`, default "bit"), bit-identical to each other. Registered as
+MODELS["rwre_gpu_lazy"] (phase C) with no `cost_hint` and no `max_steps`: the
+work is k * W(k) with W the deque width, an exponent the clock fits rather
+than one the model can declare (plan §9 Q2), and there is no window to bound
+k -- a sample that outgrows `cap` raises. Acceptance criteria and measured
 results: experiments/18_rwre_gpu_lazy/README.md.
 
 Same walk, same environment, same observable Y_k = |X_k| as MODELS["rwre"] and

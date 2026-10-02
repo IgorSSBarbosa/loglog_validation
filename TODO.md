@@ -535,8 +535,11 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
   - [ ] `18_rwre_gpu_lazy` (plans/rwre_gpu_lazy.md): phases A and B done,
         `models/rwre_gpu_lazy.py`, `layout` byte / bit (default), bit-identical;
         L0/L1a/L1/L2/L3 PASS, L4 measured. `cap` kept at $2^{15}$ cells (Igor, 2026-10-02).
-        Bit layout: a $k=N=2^{20}$ rung measures ≈ 0.6 h (byte: ~1 day). Next: C
-        (registration, `cost_hint`, E1)
+        Bit layout: a $k=N=2^{20}$ rung measures ≈ 0.6 h (byte: ~1 day). C done:
+        `MODELS["rwre_gpu_lazy"]`, no `cost_hint`. E1: $p=1/2$ PASS ($\hat d=1.0013$);
+        $p=0,1/3$ give $\hat d\approx1.16$ against 1.53–1.56, because the clock counts
+        4096-cell warp chunks (verified: +0.69 ns per chunk per step). Next: design
+        the science run (the $\gamma$ ladder to $k=2^{20}$ per $p$)
   - [ ] The amplitude estimator with a standard error (invert `gamma_mle`'s Hessian):
         a **separate** task, since it modifies `tools/loglog.py`, with `01_srw` as the
         fixture where $a_0=\sqrt{2/\pi}$ and $\gamma=1/2$ are both exact

@@ -1,0 +1,29 @@
+{
+  "kind": "cost_probe",
+  "model": "rwre_gpu_lazy",
+  "params": {
+    "p": 0.3333333333333333,
+    "alpha": 0.5
+  },
+  "scales": [
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576
+  ],
+  "repeats": 5,
+  "seed": 20261003,
+  "_note": [
+    "Criterion E1 (plans/rwre_gpu_lazy.md \u00a76): the fitted d against",
+    "1 + max(gamma, 1/2), scored by hand in the README -- the model declares",
+    "no cost_hint (plan \u00a79 Q2), so measure_cost's own PASS/FAIL window does",
+    "not apply. 13's longsieve gamma_hat = 0.560, so 1 + max(gamma, 1/2) = 1.56.",
+    "Ladder to the top rung 2**20, so the serial per-step term (linear in k)",
+    "does not dominate the fit; 5 repeats keep the top rung to minutes."
+  ]
+}

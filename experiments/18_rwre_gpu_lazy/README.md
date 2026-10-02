@@ -8,7 +8,7 @@ holds the acceptance criteria (copied from the plan's §6) and what was measured
 
 | | |
 |---|---|
-| model | `models/rwre_gpu_lazy.py`, phases A and B: `layout` "byte" (reference, any `swap_prob`) or "bit" (default, two bit-planes, `swap_prob` $=1/2$ only), bit-identical. One warp per sample. A deque of cells $\{U,0,1\}$ in `cap` cells of shared memory, both ends always $U$, growing by `growth` cells, never shrinking. Philox4x32-10 keyed by what each draw is for, so the output doesn't depend on launch chunk, `growth` or `cap`. Skip-read on by default (`skip_read`). Not registered in `tools/models.py` yet (phase C) |
+| model | `models/rwre_gpu_lazy.py`, phases A and B: `layout` "byte" (reference, any `swap_prob`) or "bit" (default, two bit-planes, `swap_prob` $=1/2$ only), bit-identical. One warp per sample. A deque of cells $\{U,0,1\}$ in `cap` cells of shared memory, both ends always $U$, growing by `growth` cells, never shrinking. Philox4x32-10 keyed by what each draw is for, so the output doesn't depend on launch chunk, `growth` or `cap`. Skip-read on by default (`skip_read`). `MODELS["rwre_gpu_lazy"]`, no `cost_hint`, `batched_cost`, `latency_bound` (phase C) |
 | parameters | `p`, `alpha`, `env_sweeps`, `swap_prob` as `rwre`; `skip_read` (default true); `cap` (default $2^{15}$ cells), `growth` (default 32), `layout` (default "bit"), performance only |
 | observable | $Y_k=\lvert X_k\rvert$; `walk_stats` also returns reveals, ones, reads, deque width and ends |
 | checks | `tools/tests/test_rwre_gpu_lazy.py` (L0, L2, L3, Philox known answers; local, gitignored), `local/rwre_lazy_ks.py` (L1a, L1), `local/rwre_lazy_l4.py` (L4, P1 timing) |
@@ -166,3 +166,52 @@ rung:
   its maximum will be somewhat larger. An overflow raises and names the sample. If one
   ever occurs, `cap` $=2^{16}$ (16 KiB) is the fallback: it changes no draw and costs
   about 1.9× at $k=2^{14}$.
+
+## Phase C: registration and E1 (2026-10-02)
+
+`MODELS["rwre_gpu_lazy"]` with `batched_cost` and `latency_bound`, as `rwre_gpu`, and **no
+`cost_hint`** (plan §9 Q2): the work is $k\,W(k)$, and how $W$ grows is the exponent
+under study, so declaring it would be a guessed formula. **No `max_steps`**: there is no
+window, and a sample that outgrows `cap` raises.
+
+**E1, the cost exponent.** `src/estimate/measure_cost.py` on
+`recipes/cost_probe_{p0.3333,p0,p0.5}.json`, batched probe, 5 repeats, idle RTX 5090.
+The driver's own PASS/FAIL is its $[0.8,1.2]$ window for models with no `cost_hint`. It
+is not E1, and the verdicts below are scored by hand. Predicted
+$d=1+\max(\gamma,\tfrac12)$, with $\gamma$ from 13's `RWRE_longsieve`:
+
+| $p$ | ladder | $\hat d$ (affine) | local $\hat d$, last two rungs | predicted | verdict |
+|---|---|---|---|---|---|
+| 1/3 | $2^{12}..2^{20}$ | 1.163 | 1.313 | 1.560 | FAIL as stated, cause below |
+| 0 | $2^{12}..2^{20}$ | 1.160 | 1.312 | 1.529 | FAIL as stated, cause below |
+| 1/2 | $2^{12}..2^{18}$ | **1.0013** | 0.9998 | 1 (nothing revealed, $W=1$) | **PASS** |
+
+The cost per step, in ns, is a staircase, not a power law:
+
+| $k$ | $2^{12}$ | $2^{13}$ | $2^{14}$ | $2^{15}$ | $2^{16}$ | $2^{17}$ | $2^{18}$ | $2^{19}$ | $2^{20}$ |
+|---|---|---|---|---|---|---|---|---|---|
+| $p=1/3$ | 1.065 | 1.064 | 1.069 | 1.068 | 1.076 | 1.099 | 1.302 | 1.548 | 1.922 |
+| $p=0$ | 1.145 | 1.144 | 1.143 | 1.143 | 1.148 | 1.166 | 1.397 | 1.637 | 2.032 |
+
+**Cause, verified.** A warp sweeps 32 blocks, 4096 cells, in parallel, so a sweep costs one
+pass per **chunk** $\lceil W/4096\rceil$, not one per cell. The cost per step stays flat
+until the mean deque passes 4096 cells ($k\approx2^{18}$, mean $W\approx5000$). Forcing
+the width with `growth` (fixed $k$, $p=1/3$, $n=2^{14}$, final width 1, 2, 3, 5 chunks):
+
+| $k$ | 1 chunk | 2 | 3 | 5 |
+|---|---|---|---|---|
+| $2^{13}$ | 1.272 | 1.995 | 2.554 | 3.861 |
+| $2^{15}$ | 1.115 | 1.785 | 2.484 | 3.888 |
+
+That is **≈ 0.69 ns per extra chunk per step**, the same at both $k$. So up to $k=2^{20}$
+the clock measures $k\,(a+c\,\overline{\lceil W(t)/4096\rceil})$, with $a\approx1.1$ ns
+(the step's Philox, read, `__syncwarp`s, and one chunk) and $c\approx0.69$ ns. That is
+asymptotically $k^{1+\max(\gamma,1/2)}$, but only once $W$ is many chunks wide, beyond
+this ladder. The prediction is not wrong about the work. The device does the work in
+units of 4096 cells, and $W(2^{20})\approx10^4$ is only 2–3 of them.
+
+**What it means for a study.** Assumption 7 (cost a power law) holds only roughly on
+$k\le2^{20}$: the local $d$ climbs from 1.00 to 1.31. A pilot that fits $d$ on small
+rungs ($d\approx1$) and plans out to $2^{20}$ underestimates the top rung's cost by
+about $1.92/1.07\approx1.8\times$. The time budget is still met (0.6 h per $k=N=2^{20}$
+rung, phase B).
