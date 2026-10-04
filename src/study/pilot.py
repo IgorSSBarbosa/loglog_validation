@@ -757,12 +757,6 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
                                      on_scale=nar.done, on_scale_start=nar.start))
         dt = time.perf_counter() - t0
         drawn_seconds += dt
-        # Steps, not seconds, is the budget unit (see CATALOG / the cost-model
-        # discussion): the model's declared cost_hint is exact where a clock is
-        # not. Throughput converts one to the other for THIS machine.
-        drawn_steps += sum(c * (spec.cost_hint(i, params) if spec.cost_hint
-                                else 1.0)
-                           for i, c in zip(scales, counts_now))
         P.say(f"    replicate {have + k + 1}/{want} drawn in {dt:.1f}s")
 
     R = len(reps)
@@ -802,26 +796,7 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     cv_per_scale = cv_by_rep.mean(axis=0)
     cv_se = (float(np.std(cv_by_rep.mean(axis=1), ddof=1) / np.sqrt(R))
              if R > 1 else None)
-    throughput = (drawn_steps / drawn_seconds) if drawn_seconds > 0 else None
-    throughput_source = "the pilot's own clock"
-    aff = cost.get("affine") or {}
-    if spec.batched_cost and "d" in aff:
-        # A batched model's pilot clock is not its run's pace. Each rung is ONE
-        # call, and a GPU pilot is so short that the fixed cost of those calls
-        # is a fifth of it -- 20% on percolation2d_gpu even after the warm-up
-        # above -- while a real run spreads that cost over millions of
-        # samples. So throughput is the probe's per-sample cost, a + b*i**d,
-        # summed over this pilot's own allocation. Measured (user, 2026-09-16):
-        # plan.py's replicate at m0 = 4, scales 32..1024, took 15.68-15.95 s;
-        # the clock's 8.34e9 predicted 20.0 s, the probe's 1.04e10 16.0 s.
-        per_sample = sum(c * (aff["a"] + aff["b"] * float(i) ** aff["d"])
-                         for i, c in zip(scales, counts_now))
-        work = sum(c * (spec.cost_hint(i, params) if spec.cost_hint else 1.0)
-                   for i, c in zip(scales, counts_now))
-        throughput = work / per_sample
-        throughput_source = ("the batched cost probe: per-sample cost a + b*i**d "
-                             "over this pilot's allocation")
-    prov = (f"pilot, {R} replicate{'s' if R > 1 else ''}, pooled then refitted once"
+    prov =(f"pilot, {R} replicate{'s' if R > 1 else ''}, pooled then refitted once"
             if R > 1 else "pilot, 1 replicate (no stderr available)")
 
     consts = {
@@ -850,6 +825,39 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
             f"  or state it:  --assert-d <value>   (checked against the clock, "
             f"not a substitute for it)\n")
     cost["d_check"] = d_check
+
+    # Steps, not seconds, is the budget unit (see CATALOG / the cost-model
+    # discussion): the model's declared cost_hint is exact where a clock is
+    # not. Throughput converts one to the other for THIS machine.
+    #
+    # With no cost_hint, a sample at scale i is worth i**d, the unit plan.py
+    # charges (its cost_ratio is 1.0 exactly then), with the SAME d it plans
+    # on. Counting it as 1 made throughput samples/s while plan.py divided
+    # sum(n i**d) by it: rwre_gpu_lazy's autopilot predicted 94.6 min for a
+    # run that took 5.4 s, and planned n = 6,054 (user, 2026-10-04).
+    def work_per_replicate() -> float:
+        return sum(c * (spec.cost_hint(i, params) if spec.cost_hint
+                        else float(i) ** consts["d"].value)
+                   for i, c in zip(scales, counts_now))
+
+    drawn_steps = (R - have) * work_per_replicate()
+    throughput = (drawn_steps / drawn_seconds) if drawn_seconds > 0 else None
+    throughput_source = "the pilot's own clock"
+    aff = cost.get("affine") or {}
+    if spec.batched_cost and "d" in aff:
+        # A batched model's pilot clock is not its run's pace. Each rung is ONE
+        # call, and a GPU pilot is so short that the fixed cost of those calls
+        # is a fifth of it -- 20% on percolation2d_gpu even after the warm-up
+        # above -- while a real run spreads that cost over millions of
+        # samples. So throughput is the probe's per-sample cost, a + b*i**d,
+        # summed over this pilot's own allocation. Measured (user, 2026-09-16):
+        # plan.py's replicate at m0 = 4, scales 32..1024, took 15.68-15.95 s;
+        # the clock's 8.34e9 predicted 20.0 s, the probe's 1.04e10 16.0 s.
+        per_sample = sum(c * (aff["a"] + aff["b"] * float(i) ** aff["d"])
+                         for i, c in zip(scales, counts_now))
+        throughput = work_per_replicate() / per_sample
+        throughput_source = ("the batched cost probe: per-sample cost a + b*i**d "
+                             "over this pilot's allocation")
     if not cost.get("from_cache"):
         # Writing is not opt-in: a fresh probe always lands in the cache so
         # --reuse-cost has something to find next time. Reading it back is.
