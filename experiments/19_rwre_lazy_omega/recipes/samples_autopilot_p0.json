@@ -1,0 +1,19 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu_lazy",
+  "params": {
+    "p": 0.0,
+    "alpha": 0.5
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512, 1024],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "13_rwre_gpu/recipes/samples_sweep_p0.json (13's RWRE_longsieve pilot at p=0) with the",
+    "model swapped to rwre_gpu_lazy and window_exponent dropped (the lazy model has no window).",
+    "User, 2026-10-03."
+  ]
+}
