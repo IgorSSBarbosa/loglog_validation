@@ -91,3 +91,56 @@ $p$. Every $p$ exited 0 with no `cap` overflow, at 28–46 min each. The table i
 
 ![local slopes](images/slopes_ap2h_fix.png)
 ![pilot fits](images/pilot_fit_ap2h_fix.png)
+
+## Results, tag `n4e6` (2026-10-05 to 07, niagara, purus, amazonas)
+
+**Why it was run (user, 2026-10-05).** `ap2h_fix`'s $n=152{,}604$ is too small to tell the tail fits
+apart. This sweep uses $n=800{,}000$ × 5 per scale, which matches 16's se: about $\pm0.0008$ on
+each $s_k$. The ladder is $4..2^{20}$ for $p\ge0.35$, where the hump needs the top scales, and
+$4..2^{18}$ for $p\le0.3$, to save cost. A $2^{20}$ rung costs about 27 min per replicate,
+against about 4.5 min for $2^{18}$. So the curves for $p\le0.3$ stop at $s_{2^{17}}$ in the
+figures. Seed 20261007 $+$ the index of $p$ in `P_GRID`.
+
+The grid was split over three hosts. Tarim and xingu were the plan, but tarim's Ubuntu 24.04
+/ Python 3.12 can't use the repo's 3.10 `.venv`, and xingu's GPU was busy. So their shares
+moved to purus and amazonas (2026-10-06). Each host ran
+`data/chain_n4e6_<host>.sh`, a pair of commands of the form
+
+```bash
+python3 experiments/19_rwre_lazy_omega/omega_sweep.py --from-study autopilot_p0_fix --tag n4e6 \
+    --seed 20261007 --n 800000 --top 1048576 --p 0.35 0.5   # --top 262144 for p <= 0.3
+```
+
+and then everything was pooled with the same command plus `--analyse-only` and no `--top`/`--p`.
+Every $p$ exited 0. The draws took 42–46 min per $p$ on $4..2^{18}$ and 146–235 min on
+$4..2^{20}$. The table is `data/omega_n4e6.md`, and the figures are
+`images/{pilot_fit,slopes}_n4e6.png`.
+
+| p | eq. (232) on the whole ladder: γ, ω₁ | (P) $k\ge256$: γ, ω, χ² p | (L) $k\ge256$: γ, χ² p |
+|---|---|---|---|
+| 0 | 0.509, 0.225 ± 0.003 | 0.494, 0.153 ± 0.024, 0.54 | 0.485, 0.006 |
+| 0.05 | 0.504, 0.186 ± 0.002 | 0.480, 0.114 ± 0.022, 0.26 | 0.485, 6e-7 |
+| 0.1 | 0.489, 0.131 ± 0.002 | 0.489, 0.135 ± 0.021, 0.67 | 0.485, 3e-5 |
+| 0.15 | 0.419, 0.059 ± 0.001 | 0.480, 0.119 ± 0.018, 9e-4 | 0.483, 2e-12 |
+| 0.2 | not converged | 0.458, 0.087 ± 0.017, 0.73 | 0.486, 1e-15 |
+| 0.25 | not converged | ω at bound | 0.492, ≈0 |
+| 0.3 | not converged | ω at bound | 0.505, ≈0 |
+| 0.35 | 0.564, 1.12 ± 0.01 | ω at bound | 0.519, 0 |
+| 0.4 | 0.573, 0.294 ± 0.002 | 0.567, 1.9 ± 0.2, 0 | 0.566, 0 |
+| 0.45 | not converged | 0.593, 0.231 ± 0.011, ≈0 | 0.628, ≈0 |
+| 0.5 | 0.5000, 0.995 ± 0.024 | 0.5000, 1.4 ± 1.5, 0.19 | 0.499, 0.15 |
+
+**What it shows.** These are `ap2h_fix`'s conclusions, with error bars about 2.3× smaller.
+- **$p\le0.15$:** $s_k$ falls monotonically and reaches only 0.516–0.521 at $k=2^{17}$. The
+  tail (P) fit is now acceptable ($\chi^2$ p = 0.26–0.67, except 9e-4 at $p=0.15$), with
+  $\omega\approx0.11$–$0.15$ and $\gamma\approx0.48$–$0.49$. That is below $\tfrac12$ by 1.0–2.0
+  of its se (0.006–0.011). The whole-ladder fits still give a different
+  $\omega$ ($0.06$–$0.26$) with
+  $\chi^2$ p ≈ 0.
+- **$0.2\le p\le0.45$:** $s_k$ is flat up to $2^7$ at $p=0.2$, then has a hump that peaks at
+  about $2^7$ (0.25), $2^8$ (0.3), $2^{10}$ (0.35), $2^{12}$ (0.4) and $2^{17}$ (0.45). The
+  fits here are not meaningful. At $p=0.45$, $s_{2^{19}}=0.572$.
+- **$p=\tfrac12$:** flat at 0.500 from $k\approx64$, $\omega_1=0.995\pm0.024$.
+
+![local slopes, n4e6](images/slopes_n4e6.png)
+![pilot fits, n4e6](images/pilot_fit_n4e6.png)
