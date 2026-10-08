@@ -38,6 +38,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 
 EXP = Path(__file__).resolve().parent
 ROOT = EXP.parents[1]
@@ -48,6 +49,8 @@ P_GRID = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 RHO = 2.0
 #: Even k only: on odd k the parity makes E|X_k| jump (16_rwre_hump's smoke run).
 K_MIN = 4
+#: Block length (in rungs) of omega_eff's two differences.
+OMEGA_EFF_M = 2
 
 
 def label(p: float) -> str:
@@ -120,7 +123,7 @@ def analyse_p(sd: Path, tail: int) -> dict:
             "P_tail": LS.fit_power(lower[t], s[t], se[t]) if t.sum() >= 4 else None,
             "L_tail": LS.fit_log(lower[t], s[t], se[t]) if t.sum() >= 3 else None}
     return {"scales": scales, "n": ns[0], "R": len(reps), "s": s.tolist(), "se": se.tolist(),
-            "y_bar": pilot["y_bar"], "sigma_log": pilot["sigma_log"],
+            "cv": cv, "y_bar": pilot["y_bar"], "sigma_log": pilot["sigma_log"],
             "direct_fit": pilot["direct_fit"], "omega1_se": consts["omega1"]["se"],
             "drawn_seconds": pilot["drawn_seconds"], "fits": fits}
 
@@ -173,6 +176,174 @@ def plot_slopes(results: dict, out: Path) -> None:
     fig.savefig(out, dpi=130)
 
 
+def plot_log_slopes(results: dict, out: Path) -> None:
+    """log s_k (± se) against k, both axes logarithmic (user, 2026-10-08)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cmap = plt.get_cmap("viridis")
+    ps = sorted(results)
+    for t, p in enumerate(ps):
+        r = results[p]
+        ax.errorbar(r["scales"][:-1], r["s"], yerr=r["se"], color=cmap(t / max(len(ps) - 1, 1)),
+                    marker="o", ms=4, lw=1, label=f"p={label(p)}")
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("log")
+    ax.set(xlabel="k (lower scale of the pair)", ylabel="s_k (log axis)",
+           title="drawn local slopes s_k (± se), log-log")
+    ax.grid(True, which="both", color="#e1e0d9", lw=0.6)
+    ax.legend(fontsize=7, ncol=2)
+    fig.tight_layout()
+    fig.savefig(out, dpi=130)
+
+
+def plot_linearized(results: dict, tail: int, out: Path) -> None:
+    """log s_k against log ln k (user, 2026-10-08).
+
+    s_k itself, with no limit subtracted (user, 2026-10-08). Dashed: weighted line in
+    (log ln k, log s_k) on k >= max(tail, the peak of s_k), slope and chi^2/dof in the legend.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cmap = plt.get_cmap("viridis")
+    ps = sorted(results)
+    for t, p in enumerate(ps):
+        r = results[p]
+        k = np.asarray(r["scales"][:-1], float)
+        x, y, se = np.log(k), np.asarray(r["s"]), np.asarray(r["se"])
+        c = cmap(t / max(len(ps) - 1, 1))
+        fit = k >= max(tail, k[np.argmax(y)])
+        lab = f"p={label(p)}"
+        if fit.sum() >= 4:
+            # log y has se = se/y; weighted straight line in (log x, log y).
+            X, Y, w = np.log(x[fit]), np.log(y[fit]), (y[fit] / se[fit]) ** 2
+            A = np.vstack([X, np.ones_like(X)]).T
+            coef = np.linalg.lstsq(A * np.sqrt(w)[:, None], Y * np.sqrt(w), rcond=None)[0]
+            chi2 = float(np.sum(w * (Y - A @ coef) ** 2))
+            xx = np.exp(np.linspace(X[0], X[-1], 50))
+            ax.plot(xx, np.exp(coef[1]) * xx ** coef[0], "--", color=c, lw=1)
+            lab += f": slope {coef[0]:.4f}, χ²/dof {chi2:.0f}/{fit.sum() - 2}"
+        ax.errorbar(x, y, yerr=se, color=c, marker="o", ms=4, lw=0.8, elinewidth=1, label=lab)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.minorticks_off()
+    js = [3, 5, 8, 12, 16, 20]
+    ax.set_xticks([j * math.log(2) for j in js])
+    ax.set_xticklabels([f"ln $2^{{{j}}}$" for j in js])
+    # s_k spans less than a decade, so the log axis gets no default labels.
+    ax.set_yticks(np.arange(0.50, 0.65, 0.02))
+    ax.set_yticklabels([f"{v:.2f}" for v in np.arange(0.50, 0.65, 0.02)])
+    ax.set(xlabel=r"$\ln k$ (log axis)", ylabel=r"$s_k$ (log axis)",
+           title=rf"$\log s_k$ vs $\log\ln k$ (± se); dashed: weighted line on k ≥ max({tail}, peak)")
+    ax.grid(True, which="both", color="#e1e0d9", lw=0.6)
+    ax.legend(fontsize=7, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(out, dpi=130)
+
+
+def omega_eff(r: dict, tail: int, m: int = OMEGA_EFF_M) -> dict:
+    """Limit-free local exponent of s_k's decay (user, 2026-10-08).
+
+    With D1 = s_{k/2^m} - s_k and D2 = s_k - s_{k 2^m}, omega_eff(k) = log2(D1/D2) / m.
+    The limit of s_k cancels. A power-law correction s_k - g ~ c k^-w gives omega_eff = w
+    at every k; a logarithmic one, s_k - g ~ c (ln k)^-b, gives about (b + 1) / ln k,
+    i.e. a line through the origin against 1/ln k. Kept only where s_k decreases
+    significantly over both blocks (D1, D2 > 2 se), so p = 1/2 and the rising side of
+    the hump drop out. The se and the covariance across k come from the delta method
+    with independent per-scale log Ybar (ground rule 2), var of ln Ybar = cv^2 / (n R)
+    as in `local_slope.clt_se`; neighbouring omega_eff share scales, hence the GLS. Both
+    hypotheses are asymptotic, so the GLS fits use only k >= tail.
+    """
+    s = np.asarray(r["s"])
+    sig = np.asarray(r["cv"]) / math.sqrt(r["n"] * r["R"]) / math.log(RHO)  # se of log2 Ybar
+    S = len(r["scales"])
+    ds = np.zeros((S - 1, S))                       # s_j = l_{j+1} - l_j in the log2 Ybar l
+    ds[np.arange(S - 1), np.arange(1, S)], ds[np.arange(S - 1), np.arange(S - 1)] = 1, -1
+    k, w, G = [], [], []
+    for b in range(m, S - 1 - m):
+        g1, g2 = ds[b - m] - ds[b], ds[b] - ds[b + m]
+        d1, d2 = s[b - m] - s[b], s[b] - s[b + m]
+        if d1 <= 2 * math.sqrt(g1 ** 2 @ sig ** 2) or d2 <= 2 * math.sqrt(g2 ** 2 @ sig ** 2):
+            continue
+        k.append(r["scales"][b])
+        w.append(math.log2(d1 / d2) / m)
+        G.append((g1 / d1 - g2 / d2) / (m * math.log(2)))
+    out = {"m": m, "tail": tail, "k": k, "omega_eff": w, "se": [], "fits": None}
+    if not k:
+        return out
+    G = np.asarray(G)
+    C = G @ np.diag(sig ** 2) @ G.T
+    out["se"] = np.sqrt(np.diag(C)).tolist()
+    t = np.asarray(k) >= tail
+    if t.sum() >= 3:
+        y, x, Ci = np.asarray(w)[t], 1 / np.log(np.asarray(k, float)[t]), np.linalg.inv(C[np.ix_(t, t)])
+        fits = {}
+        for name, X in (("power", np.ones((len(y), 1))), ("log", x[:, None])):
+            A = np.linalg.inv(X.T @ Ci @ X)
+            beta = A @ X.T @ Ci @ y
+            res = y - X @ beta
+            chi2 = float(res @ Ci @ res)
+            fits[name] = {"coef": float(beta[0]), "se": float(math.sqrt(A[0, 0])), "chi2": chi2,
+                          "dof": int(t.sum()) - 1, "p_value": float(stats.chi2.sf(chi2, int(t.sum()) - 1))}
+        out["fits"] = fits
+    return out
+
+
+def plot_omega_eff(results: dict, out: Path) -> None:
+    """omega_eff(k) (± se) against 1/ln k, one panel per p with s_k decaying somewhere.
+
+    Dashed: GLS constant (power law). Dotted: GLS line through the origin (log decay).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    ps = [p for p in sorted(results) if results[p]["omega_eff"]["k"]]
+    ncol = min(4, len(ps))
+    nrow = -(-len(ps) // ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(3.2 * ncol, 3.0 * nrow), sharex=True, sharey=True,
+                             squeeze=False)
+    cmap = plt.get_cmap("viridis")
+    xx = np.linspace(0, 0.5, 50)
+    for ax, p in zip(axes.flat, ps):
+        e = results[p]["omega_eff"]
+        c = cmap(sorted(results).index(p) / max(len(results) - 1, 1))
+        x, y, se = 1 / np.log(e["k"]), np.asarray(e["omega_eff"]), np.asarray(e["se"])
+        t = np.asarray(e["k"]) >= e["tail"]
+        ax.errorbar(x[t], y[t], yerr=se[t], color=c, marker="o", ms=4, lw=0, elinewidth=1)
+        ax.errorbar(x[~t], y[~t], yerr=se[~t], color=c, marker="o", ms=4, lw=0, elinewidth=1, mfc="white")
+        txt = [f"p={label(p)}"]
+        if e["fits"]:
+            fp, fl = e["fits"]["power"], e["fits"]["log"]
+            ax.plot(xx, np.full_like(xx, fp["coef"]), "--", color="#555", lw=1)
+            ax.plot(xx, fl["coef"] * xx, ":", color="#555", lw=1.2)
+            txt += [f"power: ω={fp['coef']:.3f}, χ²/dof={fp['chi2']:.1f}/{fp['dof']}",
+                    f"log: β+1={fl['coef']:.2f}, χ²/dof={fl['chi2']:.1f}/{fl['dof']}"]
+        ax.text(0.03, 0.97, "\n".join(txt), transform=ax.transAxes, va="top", fontsize=7)
+        ax.axhline(0, color="#999", lw=0.6)
+        ax.grid(True, color="#e1e0d9", lw=0.6)
+    for ax in axes.flat[len(ps):]:
+        ax.set_visible(False)
+    for ax in axes[-1]:
+        ax.set_xlabel(r"$1/\ln k$")
+    for ax in axes[:, 0]:
+        ax.set_ylabel(r"$\omega_{\rm eff}(k)$")
+    axes[0, 0].set_xlim(0, 0.5)
+    axes[0, 0].set_ylim(-1, 1.5)
+    for ax in axes[0]:
+        top = ax.secondary_xaxis("top", functions=(lambda x: x, lambda x: x))
+        top.set_xticks([1 / (j * math.log(2)) for j in (3, 5, 8, 12, 20)])
+        top.set_xticklabels([f"$2^{{{j}}}$" for j in (3, 5, 8, 12, 20)], fontsize=7)
+    m = results[ps[0]]["omega_eff"]["m"]
+    fig.suptitle(rf"$\omega_{{\rm eff}}(k)=\frac{{1}}{{{m}}}\log_2\frac{{s_{{k/2^{m}}}-s_k}}{{s_k-s_{{k2^{m}}}}}$"
+                 " (± se): flat = power law (dashed), line through 0 = log decay (dotted);"
+                 f" fits on k ≥ {results[ps[0]]['omega_eff']['tail']} (filled)", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out, dpi=130)
+
+
 def _fmt_fit(f: dict | None, key: str = "omega") -> str:
     if f is None:
         return "-"
@@ -219,9 +390,13 @@ def main() -> int:
             run_pilot(write_recipe(p, scales, n, seed, args.from_study, args.tag),
                       study, data, R, seed)
         results[p] = analyse_p(data / study, args.tail)
+        results[p]["omega_eff"] = omega_eff(results[p], args.tail)
 
     plot_fits(results, data / f"pilot_fit_{args.tag}.png")
     plot_slopes(results, data / f"slopes_{args.tag}.png")
+    plot_omega_eff(results, data / f"omega_eff_{args.tag}.png")
+    plot_log_slopes(results, data / f"log_slopes_{args.tag}.png")
+    plot_linearized(results, args.tail, data / f"linearized_{args.tag}.png")
     lines = [
         f"# rwre_gpu_lazy correction exponent across p, tag `{args.tag}` (from "
         f"`{args.from_study}`)",
@@ -248,13 +423,24 @@ def main() -> int:
         r = results[p]
         lines.append(f"- p={label(p)}: " + ", ".join(
             f"{k}: {v:.4f}±{e:.4f}" for k, v, e in zip(r["scales"], r["s"], r["se"])))
+    lines += ["", f"## omega_eff(k), m = {OMEGA_EFF_M} (GLS: power = constant, log = (β+1)/ln k)", "",
+              "| p | points | power: ω, χ²/dof, p | log: β+1, χ²/dof, p |", "|---|---|---|---|"]
+    for p in sorted(results):
+        e = results[p]["omega_eff"]
+        if not e["fits"]:
+            lines.append(f"| {label(p)} | {len(e['k'])} | n/a | n/a |")
+            continue
+        fp, fl = e["fits"]["power"], e["fits"]["log"]
+        lines.append(f"| {label(p)} | {e['k'][0]}..{e['k'][-1]} ({len(e['k'])}) "
+                     f"| {fp['coef']:.3f} ± {fp['se']:.3f}, {fp['chi2']:.1f}/{fp['dof']}, {fp['p_value']:.2g} "
+                     f"| {fl['coef']:.2f} ± {fl['se']:.2f}, {fl['chi2']:.1f}/{fl['dof']}, {fl['p_value']:.2g} |")
     text = "\n".join(lines) + "\n"
     (data / f"omega_{args.tag}.md").write_text(text)
     (data / f"omega_{args.tag}.json").write_text(json.dumps(
         {"produced_by": "experiments/19_rwre_lazy_omega/omega_sweep.py",
          "args": vars(args) | {"data_root": str(data)},
          "results": {label(p): r for p, r in results.items()}}, indent=1, default=str))
-    print(text + f"\n[omega] figures -> {data}/pilot_fit_{args.tag}.png, slopes_{args.tag}.png",
+    print(text + f"\n[omega] figures -> {data}/pilot_fit_{args.tag}.png, slopes_{args.tag}.png, omega_eff_{args.tag}.png, log_slopes_{args.tag}.png, linearized_{args.tag}.png",
           flush=True)
     return 0
 
