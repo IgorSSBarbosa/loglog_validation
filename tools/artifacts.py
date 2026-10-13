@@ -67,6 +67,12 @@ ARTIFACTS: dict[str, str] = {
                                                   # consecutive-point slopes s_k
                                                   # below a finished study, and
                                                   # the cells drawn to fill them
+    "theorem_scores":   "theorem_scores.json",    # calibration/score_theorems.py --
+                                                  # eq. (583), eq. (720) and the
+                                                  # prop:opt rate scored on an
+                                                  # allocation_sweep; analysis only
+    "theorem_scores_figure": "theorem_scores.png",  # the same, as QQ / RMSE(B) /
+                                                    # coverage panels
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
