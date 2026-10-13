@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "percolation2d_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "anchor": "south",
+    "geometry": "cylinder"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000000.0
+  },
+  "seed": 2026100820,
+  "_comment": "Pilot for 20: the 07 GPU pilot's model and geometry, ladder 8..512. Re-piloted 2026-10-08 at budget 4e11 (was 1e10) on 8..1024: the 1e10 draw took 5 s and left omega1 unidentified (0.38 +- 0.21, a1 = -0.08 +- 0.37)."
+}

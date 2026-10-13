@@ -1,0 +1,25 @@
+{
+  "kind": "sweep",
+  "model": "percolation2d_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "anchor": "origin",
+    "geometry": "box"
+  },
+  "m": 6,
+  "rho": 2.0,
+  "d": 2.041156460326018,
+  "omega1": 0.6874114243940831,
+  "a1": 0.828335236146348,
+  "cv": 1.2017763096682526,
+  "budgets": [
+    200000000000.0
+  ],
+  "m0_values": [
+    6
+  ],
+  "replicates": 50,
+  "true_gamma": 1.7916666666666667,
+  "seed": 2026100926,
+  "_comment": "T3 for 26: eq. (720) coverage at one budget, the tuned m0 = 6 (ladder 128..4096), R = 50. true_gamma = gamma/nu = 43/24. d, omega1, a1, cv copied from data/pilot/constants.json (pilot 2026-10-08). true_gamma is used ONLY to score the finished estimates (ground rule 4)."
+}

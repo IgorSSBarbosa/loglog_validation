@@ -1,0 +1,33 @@
+{
+  "kind": "sweep",
+  "model": "percolation_zd_gpu",
+  "params": {
+    "dim": 3,
+    "anchor": "face_far",
+    "geometry": "cylinder"
+  },
+  "m": 5,
+  "rho": 2.0,
+  "d": 3.1389847950638883,
+  "omega1": 1.7934857064360663,
+  "a1": -1.4806693642216786,
+  "cv": 0.9105013707781526,
+  "budgets": [
+    10000000000.0,
+    25000000000.0,
+    63000000000.0,
+    160000000000.0,
+    400000000000.0,
+    1000000000000.0
+  ],
+  "m0_values": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "replicates": 20,
+  "true_gamma": 2.52293,
+  "seed": 2026100923,
+  "_comment": "T2+T3 for 23: RATE (eq. 941) over 2 decades of budget and POINT (best m0 vs eq. 946's prop:opt m0 = 4-5 and the tuned m0 = 2-3), m = 5, R = 20 per cell. The per-replicate values are kept for the eq. (720) coverage scoring. true_gamma = literature d_f(3) = 2.52293(10). d, omega1, a1, cv copied from data/pilot/constants.json (pilot 2026-10-08). true_gamma is used ONLY to score the finished estimates (ground rule 4)."
+}

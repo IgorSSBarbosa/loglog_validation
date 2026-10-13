@@ -1,0 +1,23 @@
+{
+  "kind": "samples",
+  "model": "percolation2d_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "anchor": "origin",
+    "geometry": "box"
+  },
+  "scales": [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 1000000000000.0
+  },
+  "seed": 2026101026,
+  "_comment": "Diagnostic re-pilot on the coverage run's own ladder 128..4096, for per-scale cv (exact finite-m variance) and (omega1, a1) there."
+}

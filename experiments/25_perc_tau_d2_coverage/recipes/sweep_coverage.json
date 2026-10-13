@@ -1,0 +1,27 @@
+{
+  "kind": "sweep",
+  "model": "percolation_tau_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "observable": "tail",
+    "box_factor": 16.0,
+    "box_exponent": 0.5,
+    "geometry": "torus"
+  },
+  "m": 6,
+  "rho": 2.0,
+  "d": 1.0037279246640147,
+  "omega1": 0.7519901642624739,
+  "a1": -0.5223580504160957,
+  "cv": 0.4307350050722217,
+  "budgets": [
+    100000000.0
+  ],
+  "m0_values": [
+    7
+  ],
+  "replicates": 50,
+  "true_gamma": -1.0549450549450547,
+  "seed": 2026100925,
+  "_comment": "T3 for 25: eq. (720) coverage at one budget, the tuned m0 = 7 (ladder 256..8192), R = 50. The fitted exponent is 1 - tau, so true_gamma = 1 - 187/91. d, omega1, a1, cv copied from data/pilot/constants.json (pilot 2026-10-08). true_gamma is used ONLY to score the finished estimates (ground rule 4)."
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_gpu",
+  "params": {
+    "dim": 3,
+    "eps0": 0.15,
+    "box_factor": 4.0,
+    "nu_box": 0.88,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 1000000000.0
+  },
+  "seed": 2026100837,
+  "_comment": "Pilot for 37: 09's d = 3 pilot with a new seed."
+}
