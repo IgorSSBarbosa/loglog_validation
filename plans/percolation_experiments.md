@@ -156,12 +156,14 @@ log `local/queue.done`. Pilot triage: `local/triage.py`. Scoring: `calibration/s
 | 21 | done | γ̂ normal; Var 1.27× the asymptotic eq. (583), 1.04× the exact finite-m form (Assumption 6 not converged); eq. (720) 200/200, 9.5× wide |
 | 22 | done | RATE −0.185 vs −0.192 ✓; prop:opt m₀ = 10–12 unaffordable; tuned within 1.10× of best; eq. (720) 30/30 cells |
 | 23 | done | RATE −0.304 vs −0.267 ✓; **prop:opt costs 5.6–22× RMSE**, tuned = best; eq. (720) 479/480 |
-| 25 | done | **eq. (720) covers 50 %**: τ's box rule (`box_exponent` 1/2) leaves a non-decaying slope bias (+0.0096; −0.033 at 0.6). Decision pending: `box_exponent` = 48/91 |
+| 25 | done | at `box_exponent` 1/2 eq. (720) covered 50 % (non-decaying box bias +0.0096); **at 48/91 (user, 2026-10-13) it covers 100/100**, bias +0.001–0.002, Assumption 6 holds |
 | 26 | done | eq. (720) 50/50; Var 1.6× because Assumption 6 fails for the origin anchor (cv 1.27 → 1.66) |
 | 27 | done | **d̂_f(3) = 2.5222 ± 0.0133** (eq. 720; lit. 2.52293 inside, actual error 0.0007); 3× tighter than before; wall clock 1.64× the plan |
-| 28–30 | pilots done, not run | d off by 5.6–7.9 % (cache pressure); ω₁ identified |
+| 28 | pilot done, not run | d off by 7.9 % |
+| 29 | done | d̂_f(4) = 3.0939 ± 0.0904, lit. inside; bias +0.049 = predicted 0.048; box cap 128⁴ makes it bias-limited |
+| 30 | done | d̂_f(5) = 3.7851 ± 0.2677, lit. inside by 0.009; bias 1.65× the pilot's prediction |
 | 31 | pilot done | d = 6: pilot is confidently wrong (d_f 4.36, ω₁ 1.665 ± 0.015) — the deliberate Assumption 1 failure |
 | 32–36 | pilots done | all RED: clock d off by 7–19 %; ω₁ 0.49 (d=3), 0.23 (d=4), unidentified at d=5, fit not converged at d=6, 7. Pilot τ̂ 2.196 / 2.352 / 2.595 / 2.783 / 2.445 |
 | 37, 38, 40 | pilots done, not run | ω₁ unidentified / fit not converged |
 | 39 | pilot done, not run | a₁ unidentified |
-| 24 | not started | |
+| 24 | done (from pilot probes) | cost = i^dim holds mid-ladder; the +1–7 % in d̂ is the top rung only (per-site cost ≈ 2× once a sample exceeds ~10⁸ sites), which explains 27's 1.64× overrun |

@@ -1,6 +1,6 @@
 # Experiment 25 — eq. (720) coverage for $\hat\tau$, $d=2$, tail observable
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: pilot and T3 run (2026-10-08). **The eq. (720) bound under-covers: 50 %.****
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). With box_exponent = 48/91 the eq. (720) bound covers 100/100 and the bias falls 5–10×; at 1/2 it covered 50 %.**The eq. (720) bound under-covers: 50 %.****
 
 ## Acceptance criterion
 
@@ -76,3 +76,32 @@ cutoff exactly.
 box rule, not of the bound: eq. (232) cannot see a bias that does not decay on the ladder.
 Using `box_exponent` = 48/91 would remove it, but imports d_f as a design constant; that
 choice is the user's (ground rule 4). **Decision pending.**
+
+## Step 4 — rerun at box_exponent = 48/91 (user decision 2026-10-13)
+
+`box_exponent` = 48/91 = 1/d_f(2) is a design constant: it sizes the box and never reaches the
+estimator (same category as `DF_LOWER` in `models/percolation_tau_zd.py`).
+
+```bash
+python3 src/study/pilot.py -meta experiments/25_perc_tau_d2_coverage/recipes/samples_pilot_box_df.json \
+    --study pilot_box_df --replicates 5 --data-root experiments/25_perc_tau_d2_coverage/data
+python3 src/budget/allocation_experiment.py -meta experiments/25_perc_tau_d2_coverage/recipes/sweep_coverage_box_df.json \
+    -o experiments/25_perc_tau_d2_coverage/data --tag coverage_box_df
+python3 calibration/score_theorems.py --sweep experiments/25_perc_tau_d2_coverage/data/coverage_box_df \
+    --pilot experiments/25_perc_tau_d2_coverage/data/pilot_box_df
+```
+
+**Pilot** (8..8192, 330 s): d = 1.0625 (+0.7 % on the declared 2·48/91), ω₁ = 0.557 ± 0.024,
+a₁ = −0.425 ± 0.003, **cv flat at 0.39 on every rung** (it rose 0.42 → 0.46 at 1/2): Assumption 6
+now holds. Triage GREEN.
+
+**Coverage** (B = 10⁸, R = 50 per cell, seed 2026101326, 25 min):
+
+| m₀ | ladder | bias | Var ratio | KS p | eq. (720) half-width | coverage | bound/RMSE |
+|---|---|---|---|---|---|---|---|
+| 7 | 256..8192 (the failed run's ladder) | **+0.0022** (was +0.0099) | 0.75 [0.49, 1.01] | 0.73 | 0.019 | **50/50** | 6.7 |
+| 8 (tuned) | 512..16384 | **+0.0010** | 0.99 [0.54, 1.51] | 0.76 | 0.019 | **50/50** | 5.7 |
+
+**Conclusion.** With the box tied to the cluster size, the bias decays like a correction to
+scaling again, eq. (232) identifies it, and eq. (720) covers. The 50 % failure at
+`box_exponent` = 1/2 was the observable, not the bound.

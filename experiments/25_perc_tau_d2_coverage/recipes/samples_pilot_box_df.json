@@ -1,0 +1,30 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "observable": "tail",
+    "box_factor": 16.0,
+    "box_exponent": 0.5274725274725275,
+    "geometry": "torus"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000.0
+  },
+  "seed": 2026101325,
+  "_comment": "Pilot for the box_exponent = 48/91 = 1/d_f(2) arm (user decision 2026-10-13): the design constant that freezes the cluster-size cutoff relative to the box (models/percolation_tau.py lines 81-93), so the slope bias seen at 1/2 (+0.0096) and 0.6 (-0.033) should vanish. Ladder 8..8192 covers the coverage run's own scales."
+}
