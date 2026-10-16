@@ -48,6 +48,7 @@ python3 src/report/plot_cost.py -data experiments/01_srw/data/cost_probe
 # 5. Estimate the correction-to-scaling exponent omega_1 from a run (Experiment B)
 python3 src/generate/generate.py -meta experiments/01_srw/recipes/samples_omega1.json --tag omega1
 python3 src/estimate/estimate_omega1.py -data experiments/01_srw/data/omega1 --expect-omega1 1.0
+python3 src/estimate/omega_loglog.py --study sweep_p0.5_2h --data-root experiments/14_erw_urn_gpu/data
 
 # 5b. Compare two observables of the SAME gamma at equal budget (which one
 #     converges faster?) -- e.g. percolation's side-connected vs origin cluster
