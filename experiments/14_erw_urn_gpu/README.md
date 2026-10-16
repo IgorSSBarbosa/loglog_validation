@@ -155,6 +155,52 @@ A first smoke run with the ceiling sized on the device's own marginal rate
 (5.3 × 10¹¹) showed why the planner's rate has to be used: the planner read 1.8 × 10¹¹, so at the cap
 $n$ could have fallen to about a third of `min_n`.
 
+## $\omega$ from the loglog-log plot, tag `2h` (2026-10-16)
+
+**Method (user, 2026-10-16).** `tools/loglog_log.py`, driven by
+`src/estimate/omega_loglog.py`. In each study, $\gamma_k$ are the consecutive slopes of the
+**pilot's** log-log plot (4..4096). $\hat\gamma$ is the **final** run's `answer.json` value,
+an independent draw. Under eq. (232),
+$\gamma_k-\gamma\propto\rho^{-\omega_1 k}$, so $\omega$ is minus the slope of
+$\ln\lvert\gamma_k-\hat\gamma\rvert$ against $\ln k$. The fit is a GLS on the exact
+delta-method covariance, because every point shares $\hat\gamma$ and neighbours share a
+scale. Only points with $\lvert\gamma_k-\hat\gamma\rvert>3$ sd and the majority sign
+enter. The cut was 2 sd at first; exp 19 at $p=\tfrac12$ showed one noise point passing
+it, and the user chose 3 sd over any extra rule.
+
+```bash
+for s in sweep_p{0.2,0.3,0.4,0.5,0.6,0.7,0.725,0.75,0.775,0.8,0.9}_2h; do
+  python3 src/estimate/omega_loglog.py --study $s --data-root experiments/14_erw_urn_gpu/data; done
+python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h --omega-loglog
+```
+
+| p | $\hat\gamma$ (final) | fitted pairs (count) | ω ± se | χ²/dof | χ² p | ω₁ eq. (232), pilot |
+|---|---|---|---|---|---|---|
+| 0.2 | 0.50002 | 4..64 (5) | 1.160 ± 0.012 | 27.7/3 | 4.2e-06 | 1.174 |
+| 0.3 | 0.49999 | 4..256 (6) | 1.033 ± 0.016 | 15.9/4 | 0.0032 | 1.054 |
+| 0.4 | 0.50001 | 4..64 (5) | 0.978 ± 0.025 | 4.1/3 | 0.26 | 0.991 |
+| 0.5 | 0.50001 | 4..32 (4) | 0.906 ± 0.045 | 0.1/2 | 0.94 | 0.924 |
+| 0.6 | 0.50005 | 4..256 (7) | 0.705 ± 0.012 | 3.8/5 | 0.58 | 0.747 |
+| 0.7 | 0.50305 | 4..2048 (10) | 0.337 ± 0.002 | 157.6/8 | 5.2e-30 | 0.443 |
+| 0.725 | 0.51047 | 4..2048 (10) | 0.292 ± 0.002 | 219.0/8 | 6.3e-43 | 0.410 |
+| 0.75 | 0.52707 | 4..2048 (10) | 0.269 ± 0.001 | 226.7/8 | 1.5e-44 | 0.381 |
+| 0.775 | 0.56018 | 4..2048 (10) | 0.291 ± 0.001 | 257.8/8 | 3.8e-51 | 0.407 |
+| 0.8 | 0.60298 | 4..2048 (10) | 0.331 ± 0.002 | 174.9/8 | 1.2e-33 | 0.435 |
+| 0.9 | 0.80005 | 4..512 (7) | 0.631 ± 0.008 | 3.2/5 | 0.66 | 0.645 |
+
+**What it shows.**
+- **Line accepted ($p=0.4,0.5,0.6,0.9$):** ω agrees with the pilot's eq. (232)
+  $\omega_1$ within about 1 se of the combined error. At $p=0.6$ it's 0.705 ± 0.012
+  against 0.747 ± 0.052.
+- **$p=0.2,0.3$:** ω = 1.16 and 1.03. Close to eq. (232), but the line is rejected
+  (χ² p < 0.01).
+- **$0.7\le p\le0.8$:** ω = 0.27–0.34, about 0.1 below eq. (232), with χ²/dof 20–30.
+  The plot bends there. The final's $\hat\gamma$ is itself biased (0.527 at $p=\tfrac34$,
+  against a true $\tfrac12$), and $\lvert\gamma_k-\hat\gamma\rvert$ inherits that offset.
+  Neither ω is close to the conjecture $\lvert4p-3\rvert$ on this window.
+
+![omega from the loglog-log plot](images/omega_loglog_vs_p_2h.png)
+
 ## Open
 
 - **The sweep.** `python3 experiments/14_erw_urn_gpu/sweep_p.py --tag 1h --time 1h`
