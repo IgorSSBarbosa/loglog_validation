@@ -144,3 +144,58 @@ $4..2^{20}$. The table is `data/omega_n4e6.md`, and the figures are
 
 ![local slopes, n4e6](images/slopes_n4e6.png)
 ![pilot fits, n4e6](images/pilot_fit_n4e6.png)
+
+## $\omega$ from the loglog-log plot, tags `n4e6` and `ap2h_fix` (2026-10-16)
+
+**Method (user, 2026-10-16).** The loglog-log plot of `tools/loglog_log.py`: $\omega$ is minus
+the slope of $\ln\lvert\gamma_k-\hat\gamma\rvert$ against $\ln k$, where $\gamma_k$ are the
+consecutive slopes. Under eq. (232), $\gamma_k-\gamma\propto\rho^{-\omega_1k}$. This
+experiment's studies are pilot-only, with no final run, so it has its own driver,
+`omega_loglog_top.py`, as a case separate from the general `src/estimate/omega_loglog.py`:
+- $\hat\gamma$ is the slope of the top pair, the same draw as the $\gamma_k$. The covariance
+  of $D_k=\gamma_k-\hat\gamma$ is exact, and the fit is a GLS on it (delta method for the log).
+- The window starts at the argmax of $\gamma_k$ after its last rise resolved at 3 se, so a
+  resolved hump is cut off. Without one, the window is the whole ladder.
+- Inside the window, the points with $\lvert D_k\rvert>3$ sd and the majority sign are fitted.
+
+Two rules were tried and dropped with the user (2026-10-16):
+- A 2-sd cut let one noise point at $p=\tfrac12$, $k=2^{17}$, pull $\omega$ to 0.53.
+- "The last $\gamma_k$ above both neighbours by more than 2 se" can't see a hump's flat
+  top ($z=0.0$ between $2^{10}$ and $2^{11}$ at $p=0.35$), and it fired on that same point.
+
+```bash
+python3 experiments/19_rwre_lazy_omega/omega_loglog_top.py --tag n4e6      # and --tag ap2h_fix
+```
+
+Tables: `data/omega_loglog_vs_p_<tag>.md`. Per study: `omega_loglog_top.{json,png}`.
+
+| p | n4e6: $\hat\gamma$ (top pair) | window from | points | ω ± se | χ²/dof | χ² p | ap2h_fix: ω ± se, χ² p |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.5164 ± 0.0008 | 4 | 15 | 0.247 ± 0.002 | 481.7/13 | 1e-94 | 0.244 ± 0.005, 1e-10 |
+| 0.05 | 0.5169 ± 0.0008 | 4 | 15 | 0.217 ± 0.001 | 311.8/13 | 8e-59 | 0.222 ± 0.005, 9e-9 |
+| 0.1 | 0.5207 ± 0.0008 | 4 | 15 | 0.189 ± 0.001 | 276.2/13 | 2e-51 | 0.175 ± 0.004, 5e-8 |
+| 0.15 | 0.5212 ± 0.0008 | 4 | 15 | 0.142 ± 0.001 | 489.1/13 | 3e-96 | 0.133 ± 0.003, 7e-11 |
+| 0.2 | 0.5257 ± 0.0008 | 4 | 15 | 0.102 ± 0.001 | 930.6/13 | 1e-190 | 0.083 ± 0.003, 4e-25 |
+| 0.25 | 0.5306 ± 0.0008 | 4 | 14 | 0.042 ± 0.001 | 984.2/12 | 5e-203 | 0.043 ± 0.002, 3e-40 |
+| 0.3 | 0.5368 ± 0.0008 | 256 | 9 | 0.160 ± 0.005 | 227.7/7 | 2e-45 | 0.005 ± 0.002 (window from 4), 4e-64 |
+| 0.35 | 0.5343 ± 0.0008 | 2048 | 8 | 0.227 ± 0.007 | 87.2/6 | 1e-16 | 0.220 ± 0.018, 0.002 |
+| 0.4 | 0.5466 ± 0.0007 | 4096 | 7 | 0.176 ± 0.009 | 72.6/5 | 3e-14 | 0.155 ± 0.022, 3e-4 |
+| 0.45 | 0.5720 ± 0.0007 | 131072 | 2 | no fit | – | – | no fit (1 point) |
+| 0.5 | 0.5001 ± 0.0008 | 4 | 4 | 0.987 ± 0.050 | 5.3/2 | 0.072 | 0.962 ± 0.105, 0.42 |
+
+**What it shows.**
+- **$p=\tfrac12$:** the line is accepted in both tags, with $\omega=0.99\pm0.05$ and
+  $0.96\pm0.10$, matching eq. (232)'s $0.995$ and $0.987$.
+- **$p<\tfrac12$:** the line is rejected everywhere. $\omega$ falls from 0.25 at $p=0$ to
+  0.04 at $p=0.25$, then rises to 0.16–0.23 past the hump at $p=0.3$–$0.4$. The two tags
+  agree within a few se, except at $p=0.3$, where only n4e6 resolves the rise before the
+  hump.
+- The top-pair $\hat\gamma$ is still 0.516–0.572 for $p<\tfrac12$. So $D_k=C(r^k-r^{K-1})$
+  bends down near the top, and this variant can't produce a straight line there even
+  under a pure power law. This is the same picture as the earlier sections: no single
+  power-law correction describes $s_k$ on these ladders for $p\ne\tfrac12$.
+- At $p=0.35$ the GLS line sits beside the points rather than through them. That's GLS
+  with strongly correlated errors under a wrong model. χ² already rejects it.
+
+![omega from the loglog-log plot, n4e6](images/omega_loglog_vs_p_n4e6.png)
+![omega from the loglog-log plot, ap2h_fix](images/omega_loglog_vs_p_ap2h_fix.png)
