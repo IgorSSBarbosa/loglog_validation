@@ -1,0 +1,26 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "ERW_p0.75",
+  "kind": "samples",
+  "model": "erw",
+  "n": 11476,
+  "params": {
+    "p": 0.75
+  },
+  "replicates": 5,
+  "scales": [
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144
+  ],
+  "seed": null
+}
