@@ -1,0 +1,29 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "params": {
+    "p": 0.1,
+    "alpha": 0.5,
+    "window_slope": 2.0,
+    "window_offset": 100.0
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": 100000,
+  "seed": null,
+  "_note": [
+    "Pilot-only omega1 check on the linear window (user, 2026-09-30): 13's",
+    "samples_pilotn1e5_p*.json (its data/pilot_n1e5) with W = 2k + 100 in place of",
+    "12 ceil(k^(3/4)), nothing else changed. Tests whether the ceil in 13's window",
+    "made its local slopes non-smooth. Run with src/study/pilot.py --replicates 3."
+  ]
+}
