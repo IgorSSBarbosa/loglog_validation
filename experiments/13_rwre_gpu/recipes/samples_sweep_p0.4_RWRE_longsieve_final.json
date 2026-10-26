@@ -1,0 +1,28 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "sweep_p0.4_RWRE_longsieve",
+  "kind": "samples",
+  "model": "rwre_gpu",
+  "n": 50042,
+  "params": {
+    "alpha": 0.5,
+    "p": 0.4,
+    "window_exponent": 0.75
+  },
+  "replicates": 3,
+  "scales": [
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072
+  ],
+  "seed": null
+}
