@@ -1,0 +1,30 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "autopilot_gsusc_L_d4",
+  "kind": "samples",
+  "model": "percolation_susceptibility_L_gpu",
+  "n": 1831,
+  "params": {
+    "box_factor": 8.0,
+    "dim": 4,
+    "eps0": 0.09,
+    "geometry": "torus",
+    "moment": 1,
+    "nu_box": 0.69
+  },
+  "replicates": 5,
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "seed": null
+}

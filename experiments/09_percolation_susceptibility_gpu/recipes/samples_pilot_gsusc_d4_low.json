@@ -1,0 +1,26 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_gpu",
+  "params": {
+    "dim": 4,
+    "eps0": 0.09,
+    "box_factor": 4.0,
+    "nu_box": 0.69,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [
+    2,
+    4,
+    8,
+    16,
+    32,
+    64
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 1200000000.0
+  },
+  "seed": 2026091801,
+  "_comment": "omega1 pilot for d = 4: the same observable as samples_pilot_gsusc_d4.json, reaching down to x = 2 where the correction signal is largest, and dropping x = 128 to pay for it."
+}
