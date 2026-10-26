@@ -19,9 +19,9 @@
   ],
   "n": {
     "rule": "snr",
-    "budget": 1000000000.0
+    "budget": 100000000
   },
-  "seed": null,
+  "seed": 12345,
   "_note": [
     "SUPERDIFFUSIVE ARM, criterion E6. p = 0.9 > 3/4, so Bercu (2018) eqs.",
     "(3.11)-(3.12) give S_k / k^(2p-1) -> L almost surely and in L^4, hence",
