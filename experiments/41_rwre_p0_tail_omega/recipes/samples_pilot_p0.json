@@ -1,0 +1,28 @@
+{
+  "kind": "samples",
+  "model": "rwre_gpu_lazy",
+  "params": {
+    "p": 0.0,
+    "alpha": 0.5
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "snr",
+    "budget": 1000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "19_rwre_lazy_omega/recipes/samples_autopilot_p0.json unchanged (4..1024, snr rule, budget 1e9).",
+    "Only d is kept from this pilot; omega1, a1 and cv are replaced by tail_constants.py (user, 2026-10-15)."
+  ]
+}
