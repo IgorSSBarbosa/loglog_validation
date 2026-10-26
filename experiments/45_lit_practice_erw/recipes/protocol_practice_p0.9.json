@@ -1,0 +1,24 @@
+{
+  "kind": "protocol",
+  "_comment": "Experiment 45: the common practice of the ERW-type literature, not one paper's protocol (no ERW paper found states a complete one): equal M = 10^3 realizations per time (Cressoni, da Silva, Viswanathan 2007), on Avena & Thomann 2012's time grid n = 2^13..2^16. ",
+  "source": "practice: M = 10^3 (Cressoni et al. 2007, cond-mat/0611477); n = 2^13..2^16 (Avena & Thomann 2012)",
+  "model": "erw_urn_gpu",
+  "params": {
+    "p": 0.9
+  },
+  "scales": [
+    8192,
+    16384,
+    32768,
+    65536
+  ],
+  "n": [
+    1000,
+    1000,
+    1000,
+    1000
+  ],
+  "replicates": 500,
+  "seed": 202610264503,
+  "true_gamma": 0.8
+}

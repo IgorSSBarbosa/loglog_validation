@@ -4,14 +4,18 @@ A published finite-size-scaling study fixes a list of system sizes L_j and a num
 samples n_j at each (e.g. Zhang et al. 2020: L = 4..60 in 5D, 10^6 samples per L <= 20,
 10^5 above). This driver draws exactly that allocation -- the sizes and the sample counts,
 taken literally from a `protocol` recipe -- and then estimates gamma with the article's
-log-log regression instead of the paper's nonlinear fits (user, 2026-10-26). Two windows
-are reported per replicate:
+log-log regression instead of the paper's nonlinear fits (user, 2026-10-26). Three
+estimates are reported per replicate:
 
 - `full`:   the OLS slope of log Ybar on log L over every published size;
 - `window`: the same slope over L >= L_min, with L_min chosen by the published papers'
-            chi^2 rule (`tools/lmin_rule.py`).
+            chi^2 rule (`tools/lmin_rule.py`);
+- `single_point`: log Ybar_n / log n at the largest n, the estimator of Avena & Thomann
+            2012 (arXiv:1201.2890, Sec. 3.3: alpha(n) = log SD_n / log n, "approximated by
+            the value of alpha(n) with the biggest n"), applied to this repo's observable.
+            It has no error bar in the paper and gets none here: scored on bias and RMSE only.
 
-Each comes with the finite-m standard error sqrt(sum_j v_j^2 cv_j^2 / n_j)
+The two regressions come with the finite-m standard error sqrt(sum_j v_j^2 cv_j^2 / n_j)
 (`tools/wilson.py`'s `sigma_se_ols`), the only error bar that applies on a non-rho^k grid
 with non-uniform n. Eq. (720)'s bias terms are stated for uniform n on a rho^k grid and
 are NOT applied here. The interval scored is gamma-hat +/- 1.96 se.
@@ -75,6 +79,10 @@ def estimate(scales, n, y_bar, var) -> dict:
     out = {"cv2": cv2.tolist(), "sigma_log": sigma_log.tolist()}
     out["full"] = {"lmin": int(scales.min()), "gamma": gamma_all_points(scales, y_bar),
                    "se": sigma_se_ols(scales, n, cv2)}
+    top = int(np.argmax(scales))
+    out["single_point"] = {"lmin": int(scales[top]),
+                           "gamma": float(math.log(y_bar[top]) / math.log(scales[top])),
+                           "se": None}
     sel = select_lmin(scales, y_bar, sigma_log)
     out["lmin_scan"] = sel["scan"]
     if sel["lmin"] is None:
@@ -87,23 +95,27 @@ def estimate(scales, n, y_bar, var) -> dict:
 
 
 def score(replicates: list[dict], true_gamma: float) -> dict:
-    """Bias, sd, RMSE and coverage of gamma-hat +/- 1.96 se, per window."""
+    """Bias, sd, RMSE and coverage of gamma-hat +/- 1.96 se, per estimate.
+
+    `single_point` has no se, so its `mean_se` and `hits` are None.
+    """
     out = {}
-    for w in ("full", "window"):
+    for w in ("full", "window", "single_point"):
         rows = [r[w] for r in replicates if w in r and r[w].get("gamma") is not None]
         if not rows:
             out[w] = {"replicates": 0}
             continue
         g = np.array([r["gamma"] for r in rows])
-        se = np.array([r["se"] for r in rows])
         err = g - true_gamma
+        has_se = rows[0]["se"] is not None
+        se = np.array([r["se"] for r in rows]) if has_se else None
         out[w] = {
             "replicates": len(rows),
             "mean": float(g.mean()), "bias": float(err.mean()),
             "sd": float(g.std(ddof=1)) if g.size > 1 else None,
             "rmse": float(math.sqrt(np.mean(err**2))),
-            "mean_se": float(se.mean()),
-            "hits": int(np.sum(np.abs(err) <= Z95 * se)),
+            "mean_se": float(se.mean()) if has_se else None,
+            "hits": int(np.sum(np.abs(err) <= Z95 * se)) if has_se else None,
             "lmins": sorted({r["lmin"] for r in rows}),
         }
     return out
@@ -116,7 +128,10 @@ def run(cfg: dict, *, replicates: int, out_rd: Path | None, progress: bool = Tru
     if len(scales) != len(n):
         raise ValueError(f"{len(scales)} scales but {len(n)} sample counts")
     spec = get_model(model)
-    budget = float(sum(nj * spec.cost_hint(L, params) for L, nj in zip(scales, n)))
+    # A model may decline to declare its cost (rwre_gpu_lazy: its work grows with the
+    # exponent being measured). Then there is no budget in cost units, only wall clock.
+    budget = (float(sum(nj * spec.cost_hint(L, params) for L, nj in zip(scales, n)))
+              if spec.cost_hint is not None else None)
     seed_seq = np.random.SeedSequence(cfg["seed"])
     streams = spawn(seed_seq, replicates)
     result = {
@@ -169,13 +184,15 @@ def _main(argv: list[str] | None = None) -> None:
     rd = _run_dir(args.out_dir or default_out_dir(args.meta), args.tag)
     rd.mkdir(parents=True, exist_ok=True)
     res = run(cfg, replicates=reps, out_rd=rd)
-    print(f"budget per replicate = {res['budget_per_replicate']:.3e} cost units; "
+    B = res["budget_per_replicate"]
+    print(f"budget per replicate = {f'{B:.3e} cost units' if B is not None else 'n/a (model declares no cost)'}; "
           f"elapsed = {res['elapsed_seconds']:.0f}s; artifact in {rd}")
     for w, s in res.get("scores", {}).items():
         if s.get("replicates"):
-            print(f"  {w:<7} mean {s['mean']:.5f}  bias {s['bias']:+.5f}  rmse {s['rmse']:.5f}  "
-                  f"mean se {s['mean_se']:.5f}  covered {s['hits']}/{s['replicates']}  "
-                  f"L_min {s['lmins']}")
+            cov = (f"mean se {s['mean_se']:.5f}  covered {s['hits']}/{s['replicates']}"
+                   if s["mean_se"] is not None else f"no error bar, {s['replicates']} replicates")
+            print(f"  {w:<12} mean {s['mean']:.5f}  bias {s['bias']:+.5f}  rmse {s['rmse']:.5f}  "
+                  f"{cov}  L_min {s['lmins']}")
 
 
 if __name__ == "__main__":

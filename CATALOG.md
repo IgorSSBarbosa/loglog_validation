@@ -152,7 +152,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `estimate/omega_loglog.py` | 130 | `statistical tool` | $\omega_1$ from the loglog-log plot of a finished study: pilot $\gamma_k$ against the final's `answer.json` $\hat\gamma$. `omega_loglog.json` + `.png` (log-log and loglog-log panels). Pilot-only studies: exp 19's `omega_loglog_top.py`. | `loglog_log`, `artifacts` |
 | `estimate/compare_observables.py` | 265 | `experiment`, `statistical tool` | Two observables of the same $\gamma$, one budget: $R$ independent full experiments per arm, scored by bias/sd/RMSE against a reporting-only `--truth`. Written for percolation's side-vs-origin question. | `generate`, `loglog`, `models`, `rng`, `artifacts` |
 | `budget/allocation_experiment.py` | 348 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
-| `budget/protocol_arm.py` | 182 | `experiment`, `budget tool` | **Arm B** of `plans/literature_fss_protocols.md`: a published allocation (sizes and sample counts, literally) drawn with `generate()`, $\hat\gamma$ by the log-log OLS over all sizes and over the $\chi^2$-chosen window, finite-m se, $\pm1.96$ se coverage against a reporting-only truth. | `lmin_rule`, `loglog`, `wilson`, `generate`, `rng`, `artifacts` |
+| `budget/protocol_arm.py` | 199 | `experiment`, `budget tool` | **Arm B** of `plans/literature_fss_protocols.md`: a published allocation (sizes and sample counts, literally) drawn with `generate()`, $\hat\gamma$ by the log-log OLS over all sizes and over the $\chi^2$-chosen window, finite-m se, $\pm1.96$ se coverage against a reporting-only truth; also Avena & Thomann's single-point $\log\bar Y_n/\log n$ on the same draws (no error bar). | `lmin_rule`, `loglog`, `wilson`, `generate`, `rng`, `artifacts` |
 | `budget/allocation_table.py` | 630 | `budget tool`, `statistical tool` | Planning: precision vs wall clock. Discovers run groups, pools replicates, reports provenance. **Largest module — see §5.** | `allocation`, `correction`, `persistence` |
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
@@ -268,7 +268,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `run_cell` | allocation_experiment | one replicate |
 | `sweep` | allocation_experiment | the $m_0\times B$ grid, both arms |
 | `summarize` | allocation_experiment | per-budget arm scoring |
-| `estimate`, `score`, `run` | protocol_arm | one replicate's two windows; coverage; the whole arm |
+| `estimate`, `score`, `run` | protocol_arm | one replicate's three estimates (full, window, single-point); bias, RMSE, coverage; the whole arm |
 | `exact_mean`, `exact_sd` | check_coverage | srw truth (scoring only) |
 | `exact_mean_abs_srw` | check_no_leakage | $\mathbb E\lvert S_k\rvert$ at any $q$ (scoring only) |
 | `arm_gamma`, `arm_correction`, `arm_cost`, `arm_srw` | check_no_leakage | one planted grid each |

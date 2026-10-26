@@ -1,8 +1,8 @@
 # Experiment 42 — Wang et al. 2013's allocation for $d_f$, $d=3$, with the log-log estimator
 
-Part of `plans/literature_fss_protocols.md` (arm B). **Status: recipe written (2026-10-26);
-not run. The literal allocation costs ~260 GPU-hours per replicate, so a decision on
-scaling is needed before any draw (below).**
+Part of `plans/literature_fss_protocols.md` (arm B). **Status: dropped (user,
+2026-10-26). The literal allocation costs ~260 GPU-hours per replicate and is not run;
+the recipe is kept as the record of the published protocol.**
 
 ## Question
 

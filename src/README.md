@@ -209,10 +209,13 @@ plus its citation in `source`) and draws $R$ independent replicates of that allo
 through `generate()`, keeping only each size's mean and variance. Each replicate gets two
 estimates from the article's log-log regression: over every size (`full`), and over
 $L\ge L_{\min}$ with $L_{\min}$ from the papers' $\chi^2$ rule (`window`,
-`tools/lmin_rule.py`), each with the finite-m standard error `sigma_se_ols`. The
+`tools/lmin_rule.py`), each with the finite-m standard error `sigma_se_ols`; plus
+Avena & Thomann 2012's single-point estimator $\log\bar Y_n/\log n$ at the largest $n$
+on the same draws (`single_point`, no error bar, scored on bias and RMSE only). The
 budget is recorded in `autopilot.py`'s cost units, so arm A can be run at the same
-budget. `<run_dir>/protocol_arm.json` is rewritten after every replicate. Verified:
-`tools/tests/test_lmin_rule.py`; first used in experiments 42 and 43.
+budget, or as absent for a model that declares no `cost_hint` (`rwre_gpu_lazy`).
+`<run_dir>/protocol_arm.json` is rewritten after every replicate. Verified:
+`tools/tests/test_lmin_rule.py`; used in experiments 42–45.
 
 ```bash
 python3 src/budget/protocol_arm.py -meta experiments/43_lit_zhang2020_df_d4_d5/recipes/protocol_zhang2020_d5.json \

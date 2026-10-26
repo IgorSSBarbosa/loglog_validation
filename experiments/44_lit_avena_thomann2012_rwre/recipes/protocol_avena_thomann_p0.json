@@ -1,0 +1,24 @@
+{
+  "kind": "protocol",
+  "_comment": "Experiment 44, the trapping end; experiments 19 and 41's long-ladder point; Avena-Thomann p = 1. Allocation of Avena & Thomann 2012 (arXiv:1201.2890) Sec. 3.3 and Fig. 19: n = 2^13..2^16, independent samples at each n, M = 4712, 6120, 6120, 6120 (Fig. 19's legend; the pairing of M with n is assumed in increasing n). Density 1/2, environment at gamma_eff = 1 (rwre_gpu_lazy defaults).",
+  "source": "Avena & Thomann 2012, J. Stat. Phys. 147, 1041, arXiv:1201.2890, Sec. 3.3, Fig. 19",
+  "model": "rwre_gpu_lazy",
+  "params": {
+    "p": 0.0,
+    "alpha": 0.5
+  },
+  "scales": [
+    8192,
+    16384,
+    32768,
+    65536
+  ],
+  "n": [
+    4712,
+    6120,
+    6120,
+    6120
+  ],
+  "replicates": 500,
+  "seed": 202610264402
+}

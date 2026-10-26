@@ -2,8 +2,11 @@
 
 Status: **literature search done (2026-10-26). D1–D3 decided (user, 2026-10-26); arm B
 implemented (`src/budget/protocol_arm.py`, `tools/lmin_rule.py`) with one experiment per
-paper: 42 (Wang 2013) and 43 (Zhang 2020). Nothing drawn yet beyond smoke tests. D4
-open.**
+paper: 42 (Wang 2013) and 43 (Zhang 2020). Extended to `rwre` (44, Avena & Thomann
+2012) and the ERW (45, the literature's practice) the same day; their arm B is done.
+43's 5D replicate is running on purus. 42's literal run is dropped (user, 2026-10-26).
+D4 open; arm A's design for 44/45 open (their literal budgets are ~1 s per estimate,
+below what `autopilot.py` can plan).**
 
 **Arm B as decided (user, 2026-10-26), replacing the table row in §3:** the paper's
 allocation — its sizes and sample counts, literally — with *this repo's* estimator, the
@@ -124,7 +127,7 @@ eq. (720) is too conservative and that is the result instead.
 | D2 — implement the $\chi^2$/$L_{\min}$ rule in `tools/` with unit tests, citing Wang 2013 §III | **yes** (user, 2026-10-26): `tools/lmin_rule.py`, applied to the log-log line |
 | D3 — $d=5$ reproduction check (≈9 h GPU) | **yes** (user, 2026-10-26): experiment 43, step 1 |
 | D4 — get the full text of the 1992 *Physica A* paper (library access) | open |
-| D5 — experiment 42's literal allocation costs ≈260 GPU-hours per replicate: scale $n$, truncate at $L=256$, or run once | open (`experiments/42_lit_wang2013_df_d3/README.md`) |
+| D5 — experiment 42's literal allocation costs ≈260 GPU-hours per replicate | **dropped** (user, 2026-10-26): not run |
 
 ## Sources
 
