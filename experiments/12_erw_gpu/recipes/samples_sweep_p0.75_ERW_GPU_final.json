@@ -1,0 +1,26 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "sweep_p0.75_ERW_GPU",
+  "kind": "samples",
+  "model": "erw_gpu",
+  "n": 131848,
+  "params": {
+    "p": 0.75
+  },
+  "replicates": 3,
+  "scales": [
+    262144,
+    524288,
+    1048576,
+    2097152,
+    4194304,
+    8388608
+  ],
+  "seed": null
+}
