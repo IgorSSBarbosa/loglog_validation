@@ -64,13 +64,21 @@ by an amount that does not decay with s. Test queued: `recipes/samples_pilot_cut
 the same ladder at `box_exponent` = 0.6 (> 1/d_f, so the cutoff recedes; no d_f imported).
 
 **Result of the test (2026-10-09, study `pilot_cutoff`, 13 min).** At `box_exponent` = 0.6 the
-same ladder gives γ̂ = **−1.0881**, now **−0.033** off (the other sign; at 1/2 it was
-+0.0096), cv falls 0.280 → 0.222, and eq. (232) again finds no correction (ω₁ = 0.06 ± 1.3).
+log-log estimator on the same ladder (OLS slope on 256..8192) gives γ̂ = **−1.0577**, now
+**−0.0028** off (the other sign; at 1/2 it was +0.0101 by the same measure). cv falls
+0.280 → 0.222, and eq. (232) again finds no correction (ω₁ = 0.06 ± 1.3, fit not converged).
 So the slope tracks the box rule, not the estimator: below 1/d_f the cutoff closes in, above
 it the cutoff recedes as s^(−0.14), and in both cases the finite-box correction decays too
-slowly to look like a correction on this ladder. Interpolating, the bias crosses zero near
-`box_exponent` ≈ 0.52, i.e. 1/d_f = 48/91, the value the model's docstring says freezes the
-cutoff exactly.
+slowly to look like a correction on this ladder.
+
+*Correction (2026-10-26).* This paragraph first reported γ̂ = −1.0881 (−0.033 off) and, by
+interpolating, a zero crossing of the bias near `box_exponent` ≈ 0.52 = 48/91. That γ̂ was the
+non-converged eq. (232) fit's γ, not the log-log estimator. On the estimator itself the bias
+is +0.0101 at 1/2, +0.0025 at 48/91 (`pilot_box_df`, same window) and −0.0028 at 0.6: it
+decreases monotonically through the three and does not vanish at 1/d_f. What 48/91 does do is
+freeze the cutoff, which makes cv flat (Assumption 6) and leaves a bias that the bound
+absorbs (Step 4). Figure: `images/box_rule.png`, drawn by
+`experiments/plot_percolation_section.py`.
 
 **Conclusion.** The eq. (720) coverage failure in Step 2 is a property of the τ observable's
 box rule, not of the bound: eq. (232) cannot see a bias that does not decay on the ladder.
