@@ -1,0 +1,27 @@
+{
+  "kind": "cost_probe",
+  "model": "rwre_gpu_lazy",
+  "params": {
+    "p": 0.5,
+    "alpha": 0.5
+  },
+  "scales": [
+    4096,
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144
+  ],
+  "repeats": 5,
+  "seed": 20261005,
+  "_note": [
+    "Criterion E1 (plans/rwre_gpu_lazy.md \u00a76): the fitted d against",
+    "1 + max(gamma, 1/2), scored by hand in the README -- the model declares",
+    "no cost_hint (plan \u00a79 Q2), so measure_cost's own PASS/FAIL window does",
+    "not apply. skip-read reveals nothing at p = 1/2: the deque stays one cell, so d = 1.",
+    "Ladder 2**12..2**18: the deque stays one cell wide here, so the top rungs add",
+    "nothing but time (the 2**20 ladder outran a 2 h job limit on 2026-10-02)."
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "sweep",
+  "model": "percolation_zd_gpu",
+  "params": {
+    "dim": 3,
+    "anchor": "face_far",
+    "geometry": "cylinder"
+  },
+  "m": 6,
+  "rho": 2.0,
+  "d": 3.1394577764781086,
+  "omega1": 1.6716341591815111,
+  "a1": -1.2801180507974543,
+  "cv": 0.9104713689739918,
+  "budgets": [
+    200000000000.0
+  ],
+  "m0_values": [
+    2
+  ],
+  "replicates": 200,
+  "true_gamma": 2.52293,
+  "seed": 2026100921,
+  "_comment": "T1 (CLT, eq. 583) for 21: one budget, one ladder (8..256, the tuned m0 = 2 at B = 2e11), R = 200 fresh replicates. d, omega1, a1, cv copied from data/pilot/constants.json (pilot 2026-10-08). true_gamma is the literature d_f(3) = 2.52293(10), used ONLY to score bias/RMSE after the fact (ground rule 4)."
+}

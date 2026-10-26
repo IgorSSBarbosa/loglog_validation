@@ -312,7 +312,9 @@ def _main(argv: list[str] | None = None) -> None:
             pf = f"{s['penalty_factor']:.2f}x" if s["penalty_factor"] else "--"
             pt = f"{s['penalty_tuned']:.2f}x" if s["penalty_tuned"] else "--"
             tm = s["tuned_m0"] if s["tuned_m0"] is not None else "--"
-            print(f"  {B:>9.0e} {s['best_m0']:>8} | {s['prop_opt_m0']:>11} {pf:>8} "
+            # prop:opt's m0 is None when its ladder cannot be afforded at this B
+            po = s["prop_opt_m0"] if s["prop_opt_m0"] is not None else "--"
+            print(f"  {B:>9.0e} {s['best_m0']:>8} | {str(po):>11} {pf:>8} "
                   f"| {str(tm):>9} {pt:>8}")
         print()
 

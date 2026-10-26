@@ -201,6 +201,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 | `srw` | $\lvert S_k\rvert$ | $i$ | 1 | $1.0028 \pm 0.0020$ | no |
 | `rwre` | $\lvert X_k\rvert$ on an SSEP | $i\,W(i)$ | 3/2 | $1.4926$ (amortized; see below) | no |
 | `rwre_gpu` | the same, on a GPU | $i\,W(i)$ | 3/2 | $1.390\pm0.044$ (batched, saturated; see below) | no |
+| `rwre_gpu_lazy` | the same, on $\mathbb Z$, environment revealed lazily | none | — | $1.16$ on $2^{12}..2^{20}$, local 1.31 at the top (a staircase; see below) | no |
 | `erw` | $\lvert S_k\rvert$ of the elephant random walk | $i$ | 1 | $1.09\pm0.03$ / $0.92\pm0.03$ (two runs; see below) | no |
 | `percolation2d` | south-connected sites | $i^2$ | 2 | $2.029 \pm 0.018$ (box) | no |
 | `percolation_tau` | clusters at size scale $s$, per site | $L(s)^2$ | $2\,$`box_exponent` (1) | $1.049 \pm 0.019$ (torus) | no |
@@ -1155,6 +1156,28 @@ so E1's $\hat d=1.390\pm0.044$ on $2^7..2^{14}$ sits 2.3σ under the declared 3/
 counts the work and is right asymptotically. 3.6–4.6 ps per step·site against the CPU
 model's 21–39 ns (4,600–10,800×). Verified against `rwre` (KS and mean) and against
 exact references. See `experiments/13_rwre_gpu/README.md`.
+
+### `rwre_gpu_lazy.py` — `rwre` on $\mathbb Z$, the environment revealed lazily
+
+`walk`, `walk_stats` and `simulate`, as in `rwre_gpu`. The same walk, with no window: a
+site the walker never read holds an initial value nobody has observed, so it is
+Bernoulli($\alpha$) given the past, and only the cells it has revealed are simulated
+(plans/rwre_gpu_lazy.md §2). Skip-read (on by default) reads the site only when the jump
+depends on it. Per sample, a deque of $\{U,0,1\}$ cells in shared memory, both ends $U$,
+one warp per sample. Philox4x32-10 keyed by what each draw is for, so the output does not
+depend on launch chunk, `growth`, `cap` (short of an overflow, which raises) or `layout`.
+`layout="bit"` (default) uses two bit-planes swept with a masked XOR and `swap_prob` $=1/2$
+only. `layout="byte"` is the reference, for any `swap_prob`. The two layouts are
+bit-identical. Equal in distribution to `rwre`, not bit for bit.
+
+Registered with `batched_cost` and `latency_bound` and **no `cost_hint`** (Igor,
+2026-10-02, plan §9 Q2): the work is $k\,W(k)$, with $W\asymp k^{\max(\gamma,1/2)}$
+expected but not declared, because $\gamma$ is what is measured. The clock does not see
+that power law on $k\le2^{20}$. A warp sweeps 4096 cells in one pass, so the cost per
+step is $a+c\,\lceil W/4096\rceil$ ($a\approx1.1$ ns, $c\approx0.69$ ns per chunk,
+measured by forcing the width). The batched probe's $\hat d$ is 1.16 on $2^{12}..2^{20}$ and the
+local slope reaches 1.31 at the top; $p=1/2$, where nothing is revealed, gives $1.0013$.
+A $k=N=2^{20}$ rung takes ≈ 0.6 h. See `experiments/18_rwre_gpu_lazy/README.md`.
 
 `rwre`'s `window_exponent` (default ½, added 2026-09-24) sets
 $W=\texttt{window\_c}\cdot\lceil k^{\texttt{window\_exponent}}\rceil$, so cost is

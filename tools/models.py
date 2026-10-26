@@ -39,6 +39,7 @@ from models import percolation_zd_gpu as model_percolation_zd_gpu
 from models import percolation_zd_stream as model_percolation_zd_stream
 from models import rwre as model_rwre
 from models import rwre_gpu as model_rwre_gpu
+from models import rwre_gpu_lazy as model_rwre_gpu_lazy
 from models import srw as model_srw
 from models import synthetic as model_synthetic
 
@@ -164,6 +165,24 @@ MODELS: dict[str, ModelSpec] = {
         # One CUDA block walks one sample's k steps in series, so a call of
         # few samples costs one sample's latency. See ModelSpec.latency_bound.
         latency_bound=True,
+    ),
+    "rwre_gpu_lazy": ModelSpec(
+        simulate=model_rwre_gpu_lazy.simulate,
+        # rwre's walk on Z itself, the environment simulated only where the
+        # walker has looked (plans/rwre_gpu_lazy.md §2): exact, no window, so
+        # no max_steps either -- a sample that outgrows `cap` raises. A
+        # different random stream from rwre_gpu (Philox keyed by what each
+        # draw is for), equal to rwre in DISTRIBUTION. See
+        # models/rwre_gpu_lazy.py, experiments/18_rwre_gpu_lazy.
+        #
+        # No cost_hint (Igor, 2026-10-02, plan §9 Q2): the work is
+        # k * W(k) with W the deque width, which grows like
+        # k**max(gamma, 1/2) only as an expectation about the very exponent
+        # being measured. Declaring it would be a guessed formula; d is fitted
+        # by the pilot's clock and scored by hand (E1) against
+        # 1 + max(gamma, 1/2) in the experiment README.
+        batched_cost=True,              # as rwre_gpu
+        latency_bound=True,             # one warp walks one sample in series
     ),
     "erw": ModelSpec(
         simulate=model_erw.simulate,

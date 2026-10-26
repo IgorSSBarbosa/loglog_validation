@@ -67,6 +67,20 @@ ARTIFACTS: dict[str, str] = {
                                                   # consecutive-point slopes s_k
                                                   # below a finished study, and
                                                   # the cells drawn to fill them
+    "theorem_scores":   "theorem_scores.json",    # calibration/score_theorems.py --
+                                                  # eq. (583), eq. (720) and the
+                                                  # prop:opt rate scored on an
+                                                  # allocation_sweep; analysis only
+    "theorem_scores_figure": "theorem_scores.png",  # the same, as QQ / RMSE(B) /
+                                                    # coverage panels
+    "omega_loglog":     "omega_loglog.json",      # src/estimate/omega_loglog.py --
+                                                  # omega_1 from the loglog-log plot:
+                                                  # pilot gamma_k vs the final's gamma-hat
+    "omega_loglog_figure": "omega_loglog.png",    # the same: log-log and loglog-log panels
+    "omega_loglog_top": "omega_loglog_top.json",  # experiments/19_rwre_lazy_omega/
+                                                  # omega_loglog_top.py -- pilot-only
+                                                  # variant, gamma-hat = top pair's slope
+    "omega_loglog_top_figure": "omega_loglog_top.png",
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
