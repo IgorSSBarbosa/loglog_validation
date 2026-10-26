@@ -13,6 +13,7 @@ src/
   estimate/   measure_cost.py  estimate_omega1.py         measure the constants
               compare_observables.py                      two observables, one budget
   budget/     allocation_experiment.py  allocation_table.py    spend a budget well
+              protocol_arm.py                          a published allocation, our estimator
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
   study/      pilot.py  plan.py  run.py  report.py    the whole thing, end to end
               local_slope.py                          below a finished study: s_k per pair
@@ -201,6 +202,22 @@ $\hat\gamma$ values in `<run_dir>/allocation_sweep.json` are the result (the bas
 is recorded and spawning is deterministic, so any cell regenerates exactly).
 Verified: `tools/tests/test_allocation_experiment.py`. Result and interpretation in
 `experiments/01_srw/README.md`.
+
+`protocol_arm.py` — arm B of `plans/literature_fss_protocols.md`. Reads a `protocol`
+recipe (a published study's system sizes and per-size sample counts, taken literally,
+plus its citation in `source`) and draws $R$ independent replicates of that allocation
+through `generate()`, keeping only each size's mean and variance. Each replicate gets two
+estimates from the article's log-log regression: over every size (`full`), and over
+$L\ge L_{\min}$ with $L_{\min}$ from the papers' $\chi^2$ rule (`window`,
+`tools/lmin_rule.py`), each with the finite-m standard error `sigma_se_ols`. The
+budget is recorded in `autopilot.py`'s cost units, so arm A can be run at the same
+budget. `<run_dir>/protocol_arm.json` is rewritten after every replicate. Verified:
+`tools/tests/test_lmin_rule.py`; first used in experiments 42 and 43.
+
+```bash
+python3 src/budget/protocol_arm.py -meta experiments/43_lit_zhang2020_df_d4_d5/recipes/protocol_zhang2020_d5.json \
+    --tag zhang2020_d5 --replicates 1
+```
 
 `allocation_table.py` — the budget-planning table: given the measured constants, how
 long must a run take for a target precision on $\hat\gamma$? One row per integer $m_0$,

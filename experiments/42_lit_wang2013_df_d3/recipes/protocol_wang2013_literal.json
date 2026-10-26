@@ -1,0 +1,12 @@
+{
+  "kind": "protocol",
+  "_comment": "Experiment 42, arm B: Wang, Zhou, Zhang, Garoni, Deng, PRE 87 052107 (2013), Sec. II, taken literally: L = 8..512, 2.5e7 samples at each L ('at least 2.5 x 10^7'). Our model and observable (site, face_far, cylinder), not theirs (site/bond, largest cluster, periodic). About 3.8e15 cost units, ~250 GPU-hours, PER REPLICATE: do not run without a decision (README).",
+  "source": "Wang et al. 2013, PRE 87, 052107, arXiv:1302.0421, Sec. II",
+  "model": "percolation_zd_gpu",
+  "params": {"dim": 3, "anchor": "face_far", "geometry": "cylinder"},
+  "scales": [8, 12, 16, 24, 32, 48, 64, 128, 256, 512],
+  "n": [25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000],
+  "replicates": 5,
+  "seed": 2026102642,
+  "true_gamma": 2.52293
+}

@@ -113,6 +113,37 @@ def sigma_se_per_scale(n_per_scale: Sequence, m: int, rho: float,
     return se / math.log(rho) if for_gamma else se
 
 
+def sigma_se_ols(scales: Sequence, n_per_scale: Sequence,
+                 cv2_per_scale: Sequence) -> float:
+    """Finite-m standard error of the log-log OLS slope on ANY grid of scales.
+
+    NOT in the article, which states the estimator on a consecutive rho^k grid.
+    Published finite-size-scaling protocols use grids like L = 8, 12, 16, 24, ...
+    (experiments 42, 43), so the slope is the plain OLS slope of log Ybar_j on
+    x_j = log L_j, gamma_hat = sum_j v_j log Ybar_j with
+    v_j = (x_j - xbar) / sum_k (x_k - xbar)^2, and to first order
+    Var log Ybar_j = cv_j^2 / n_j, so
+
+        se = sqrt(sum_j v_j^2 cv2_j / n_j).
+
+    On a rho^k grid v_j = w_{j,m} / log(rho), so this equals
+    `sigma_se_per_scale(..., for_gamma=True)` exactly (tested). The result is
+    already in units of gamma; there is no rho to divide by.
+    """
+    x = np.log(np.asarray(scales, dtype=float))
+    n = np.asarray(n_per_scale, dtype=float)
+    cv2 = np.asarray(cv2_per_scale, dtype=float)
+    if not (x.size == n.size == cv2.size):
+        raise ValueError(f"length mismatch: scales {x.size}, n {n.size}, cv2 {cv2.size}")
+    if x.size < 2:
+        raise ValueError("need at least 2 scales for a slope")
+    if np.any(n <= 0) or np.any(cv2 < 0):
+        raise ValueError("n must be positive and cv2 non-negative")
+    dx = x - x.mean()
+    v = dx / float(np.sum(dx**2))
+    return math.sqrt(float(np.sum(v**2 * cv2 / n)))
+
+
 def finite_size_bias(m: int, m0: int, rho: float, a1: float, omega1: float,
                      *, omega2: float | None = None, phi_plus: float = 0.0,
                      for_gamma: bool = True) -> float:

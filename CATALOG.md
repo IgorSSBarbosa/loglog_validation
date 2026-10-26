@@ -129,7 +129,8 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `loglog_log.py` | 150 | `statistical tool` | The loglog-log plot (user, 2026-10-16): $\omega_1$ as minus the slope of $\ln\lvert\gamma_k-\hat\gamma\rvert$ against $\ln k$, GLS on the exact delta-method covariance (shared $\hat\gamma$, shared scales); points resolved at 3 sd with the majority sign. $\hat\gamma$ external (independent draw) or linear in the same means. No I/O. | — |
 | `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
 | `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model, walked on to a full device for a `latency_bound` one. | `loglog` |
-| `wilson.py` | 276 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. | `loglog` |
+| `wilson.py` | 321 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. `sigma_se_ols`: the finite-m standard error on any grid of scales. | `loglog` |
+| `lmin_rule.py` | 91 | `statistical tool` | The published FSS papers' $L_{\min}$ rule (smallest acceptable, stable $\chi^2$), applied to the straight log-log line; thresholds set by the user, 2026-10-26. No I/O. | — |
 | `coverage.py` | 356 | `statistical tool` | Calibration harness: do our stated error bars cover? `coverage_test`, `coverage_multi`, `rescore`, `combine_se`, Welch–Satterthwaite dof. | — |
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
 | `rng.py` | 89 | `tool` | Seeding + `seed_record`. Exists to close one trap: a spawned child carries its **parent's** entropy, so passing it as an int collapses every replicate onto one stream. | — |
@@ -151,6 +152,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `estimate/omega_loglog.py` | 130 | `statistical tool` | $\omega_1$ from the loglog-log plot of a finished study: pilot $\gamma_k$ against the final's `answer.json` $\hat\gamma$. `omega_loglog.json` + `.png` (log-log and loglog-log panels). Pilot-only studies: exp 19's `omega_loglog_top.py`. | `loglog_log`, `artifacts` |
 | `estimate/compare_observables.py` | 265 | `experiment`, `statistical tool` | Two observables of the same $\gamma$, one budget: $R$ independent full experiments per arm, scored by bias/sd/RMSE against a reporting-only `--truth`. Written for percolation's side-vs-origin question. | `generate`, `loglog`, `models`, `rng`, `artifacts` |
 | `budget/allocation_experiment.py` | 348 | `experiment`, `budget tool` | **Experiment C**: sweep $m_0\times B$; paired `prop:opt` / tuned arms. | `allocation`, `loglog`, `models`, `persistence` |
+| `budget/protocol_arm.py` | 182 | `experiment`, `budget tool` | **Arm B** of `plans/literature_fss_protocols.md`: a published allocation (sizes and sample counts, literally) drawn with `generate()`, $\hat\gamma$ by the log-log OLS over all sizes and over the $\chi^2$-chosen window, finite-m se, $\pm1.96$ se coverage against a reporting-only truth. | `lmin_rule`, `loglog`, `wilson`, `generate`, `rng`, `artifacts` |
 | `budget/allocation_table.py` | 630 | `budget tool`, `statistical tool` | Planning: precision vs wall clock. Discovers run groups, pools replicates, reports provenance. **Largest module — see §5.** | `allocation`, `correction`, `persistence` |
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
@@ -224,6 +226,8 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `median_ci` | cost_model | order-statistic CI |
 | `sigma_se` | wilson | eq. (720) 4th term |
 | `sigma_se_per_scale` | wilson | non-uniform $n$ (**not** in the article) |
+| `sigma_se_ols` | wilson | non-uniform $n$ on any grid of scales (**not** in the article); equals `sigma_se_per_scale` on a $\rho^k$ grid |
+| `line_chi2`, `acceptable`, `scan`, `select_lmin` | lmin_rule | $\chi^2$ of the weighted log-log line; the $L_{\min}$ rule |
 | `finite_size_bias` | wilson | $\mathcal B_{\rm fs}$ |
 | `good_event_bias` | wilson | $\mathcal B_{\rm good}$ |
 | `bad_event_bias` | wilson | $\mathcal B_{\rm bad}$ |
@@ -264,6 +268,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `run_cell` | allocation_experiment | one replicate |
 | `sweep` | allocation_experiment | the $m_0\times B$ grid, both arms |
 | `summarize` | allocation_experiment | per-budget arm scoring |
+| `estimate`, `score`, `run` | protocol_arm | one replicate's two windows; coverage; the whole arm |
 | `exact_mean`, `exact_sd` | check_coverage | srw truth (scoring only) |
 | `exact_mean_abs_srw` | check_no_leakage | $\mathbb E\lvert S_k\rvert$ at any $q$ (scoring only) |
 | `arm_gamma`, `arm_correction`, `arm_cost`, `arm_srw` | check_no_leakage | one planted grid each |

@@ -1,0 +1,12 @@
+{
+  "kind": "protocol",
+  "_comment": "Experiment 43, arm B, d = 4: Zhang et al. 2020's 4D list, 1e6 samples for L <= 64 and 1e5 above, TRUNCATED at L = 128 because L = 176, 192 exceed the int32 label space of percolation_zd_gpu (128^4 is the largest box it labels). Not the published protocol: their top two sizes carry ~80% of the budget. About 6.2e13 cost units, ~4 GPU-hours per replicate.",
+  "source": "Zhang et al. 2020, arXiv:2004.11289, Sec. II (4D), truncated at L = 128",
+  "model": "percolation_zd_gpu",
+  "params": {"dim": 4, "anchor": "face_far", "geometry": "cylinder"},
+  "scales": [4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48, 64, 96, 128],
+  "n": [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 100000, 100000],
+  "replicates": 5,
+  "seed": 2026102644,
+  "true_gamma": 3.0446
+}

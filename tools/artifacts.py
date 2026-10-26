@@ -81,6 +81,10 @@ ARTIFACTS: dict[str, str] = {
                                                   # omega_loglog_top.py -- pilot-only
                                                   # variant, gamma-hat = top pair's slope
     "omega_loglog_top_figure": "omega_loglog_top.png",
+    "protocol_arm":     "protocol_arm.json",      # src/budget/protocol_arm.py -- a
+                                                  # published allocation drawn
+                                                  # literally, scored with the
+                                                  # log-log estimator
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
@@ -302,6 +306,8 @@ RECIPES: dict[str, tuple[str, str, tuple[str, ...]]] = {
                    ("model", "scales", "repeats")),
     "sweep":      ("sweep", "src/budget/allocation_experiment.py",
                    ("model", "budgets", "m0_values", "m", "rho")),
+    "protocol":   ("protocol", "src/budget/protocol_arm.py",
+                   ("model", "scales", "n", "replicates", "seed", "source")),
 }
 
 

@@ -1,7 +1,17 @@
 # Plan — published finite-size-scaling protocols as baselines for the allocation rule
 
-Status: **literature search done (2026-10-26); comparison experiment proposed, not
-started. Decisions D1–D4 below are open.**
+Status: **literature search done (2026-10-26). D1–D3 decided (user, 2026-10-26); arm B
+implemented (`src/budget/protocol_arm.py`, `tools/lmin_rule.py`) with one experiment per
+paper: 42 (Wang 2013) and 43 (Zhang 2020). Nothing drawn yet beyond smoke tests. D4
+open.**
+
+**Arm B as decided (user, 2026-10-26), replacing the table row in §3:** the paper's
+allocation — its sizes and sample counts, literally — with *this repo's* estimator, the
+log-log OLS slope and its finite-m standard error $\sqrt{\sum_j v_j^2\text{cv}_j^2/n_j}$.
+Not the papers' nonlinear ansatz fits or their judgement-based error bars. The papers'
+$L_{\min}$ rule is kept as the way to choose the regression window, with the two vague
+phrases made numeric by the user: accept $\chi^2/\text{DF}\le1+2\sqrt{2/\text{DF}}$, and
+require $\Delta\chi^2\le2$ per DF dropped for every larger $L_{\min}$.
 
 Question (user, 2026-10-26): how do published percolation studies spread their compute
 over system sizes and turn it into an exponent with an error bar, and can we race those
@@ -106,14 +116,15 @@ already shows a replicate interval excluding the truth at $d=4$. If B under-cove
 where A covers, that is the result for the paper. If B covers with a tighter interval,
 eq. (720) is too conservative and that is the result instead.
 
-## 4. Decisions (open)
+## 4. Decisions
 
-| decision | proposed |
+| decision | status |
 |---|---|
-| D1 — run the arms on our sampler and observable, not reproduce the papers' codes | yes: the only comparison that isolates the method |
-| D2 — implement arm B's $\chi^2$/$L_m$ rule as a function in `tools/` with unit tests, citing Wang 2013 §III for the rule's wording | yes (ground rule 3: the rule is taken from the paper, not invented) |
-| D3 — $d=5$ reproduction check (≈9 h GPU) | yes, before trusting arm B |
-| D4 — get the full text of the 1992 *Physica A* paper (library access) | needed before the paper claims novelty for Prop. (932) |
+| D1 — run the arms on our sampler and observable, not reproduce the papers' codes | **yes** (user, 2026-10-26) |
+| D2 — implement the $\chi^2$/$L_{\min}$ rule in `tools/` with unit tests, citing Wang 2013 §III | **yes** (user, 2026-10-26): `tools/lmin_rule.py`, applied to the log-log line |
+| D3 — $d=5$ reproduction check (≈9 h GPU) | **yes** (user, 2026-10-26): experiment 43, step 1 |
+| D4 — get the full text of the 1992 *Physica A* paper (library access) | open |
+| D5 — experiment 42's literal allocation costs ≈260 GPU-hours per replicate: scale $n$, truncate at $L=256$, or run once | open (`experiments/42_lit_wang2013_df_d3/README.md`) |
 
 ## Sources
 

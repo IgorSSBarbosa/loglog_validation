@@ -1,0 +1,12 @@
+{
+  "kind": "protocol",
+  "_comment": "Experiment 43, arm B, d = 5: Zhang, Hou, Fang, Hu, Deng, arXiv:2004.11289 (2020), Sec. II, taken literally: L = 4..60, 1e6 samples for L <= 20 and 1e5 for L = 24..60 (the stated minima, 'more than 10^6' and 'at least 10^5'). Our model and observable (site, face_far, cylinder), not theirs (bond, largest cluster, periodic). About 1.2e14 cost units, ~9 GPU-hours per replicate.",
+  "source": "Zhang et al. 2020, arXiv:2004.11289, Sec. II (5D)",
+  "model": "percolation_zd_gpu",
+  "params": {"dim": 5, "anchor": "face_far", "geometry": "cylinder"},
+  "scales": [4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48, 60],
+  "n": [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 100000, 100000, 100000, 100000, 100000],
+  "replicates": 5,
+  "seed": 2026102643,
+  "true_gamma": 3.5260
+}
