@@ -65,6 +65,13 @@ Local slopes $\Delta\log\bar Y/\Delta\log L$ never level off:
 16-20 3.712   20-24 3.704   24-32 3.663   32-40 3.665   40-48 3.616   48-60 3.613   (±0.003..0.010)
 ```
 
+![5D log-log plot and local slopes](images/d5_loglog.png)
+
+*(a) On the log-log plot the 13 means look like a straight line, and the all-size fit
+($\hat d_f=3.765$) and the $L\ge40$ fit (3.614) are hard to tell apart by eye. (b) The
+local slopes show the curvature that (a) hides. Zhang's ansatz fitted on $L\ge6$ (green)
+follows them and still sits at 3.57 at $L=240$, four times the largest simulated size.*
+
 The last pair is still 0.087 above the literature value and falling. **D3 fails: on
 this observable, Zhang et al.'s allocation does not give $d_f(5)$ through a log-log
 slope.** The full fit's interval is 0.0008 wide and 0.24 off. At $10^5$–$10^6$ samples
@@ -101,6 +108,23 @@ Refitting **our** $\bar Y$ with their ansatz (`diagnose_d5.py`, same χ² rule a
 | Zhang eq. (5), $y_1=-2$ fixed | 20 | 3.6033(46) | — | 8.3/3 | +0.077 |
 | article eq. (232), $J=1$ | 10 | 3.5538(214) | $\omega_1=0.80(12)$ | 15.0/6 rejected | +0.028 |
 | | 12 | 3.4612(914) | $\omega_1=0.46(19)$ | 10.5/5 | −0.065 |
+
+Fixing $y_1$ (to leading order $y_1=-\omega_1$: $\log[L^{d_f}(a_0+a_1L^{y_1})] =
+\log a_0 + d_f\log L + (a_1/a_0)L^{y_1} + O(L^{2y_1})$, which is eq. (232) with $J=1$),
+at the first $L_m$ that passes the χ² rule:
+
+| fixed $y_1$ | $L_m$ | $\hat d_f$ | error vs 3.5260 |
+|---|---|---|---|
+| −0.44, −0.57 (our free fits) | 8, 6 | 3.5156(17), 3.5418(12) | −0.010, +0.016 |
+| **−0.72 (universal 5D ω, experiment 30 README)** | 20 | **3.5358(89)** | +0.010 (1.1 se) |
+| −0.96, −1.0 | 20 | 3.5594(76), 3.5625(74) | +0.033, +0.037 |
+| −1.35 (experiment 30's pilot $\omega_1$) | 20 | 3.5829(60) | +0.057 |
+| **−2 (Zhang's value for $C_1$)** | 32 | **3.5671(143)** | +0.041 (2.9 se) |
+
+The answer moves by ±0.03 across plausible $y_1$, far more than any fixed-$y_1$ se. That
+is why Zhang add the spread over $y_1$ to their error bar. Their $y_1$ is an effective
+exponent for each observable: in their 5D tables it is −2 for $C_1$, −2.4 for $C_{lf}$,
+−1.7 for $\chi'$ and −0.4(3) for $Q_s$.
 
 So **the data are consistent with $d_f=3.526$**: their estimator applied to our data
 recovers it within 1.3 se. **The observable and the sampler are fine.** The failure
