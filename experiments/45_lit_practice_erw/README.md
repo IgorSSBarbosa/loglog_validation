@@ -47,6 +47,14 @@ Run 2026-10-26 on xingu, seeds 202610264500–3, 14 s per point. Logs:
 
 ## Result — arm B (2026-10-26)
 
+![ERW log-log plot and local slopes](images/erw_loglog.png)
+
+*(a) The log-log plot of the means pooled over the 500 replicates. (b) Local slope minus
+the exact exponent. For $p=0.25$, $0.6$ and $0.9$ it is within ±0.004 of zero at every time.
+At $p=\tfrac34$ it sits near +0.047, the size of the log correction
+$1/(2\log n)$ in the local slope of $\sqrt{n\log n}$ at these midpoints (+0.053 to
++0.047), and does not fall to zero within the window. Drawn by `experiments/plot_lit_walks.py`.*
+
 $R=500$ independent replicates per point. Coverage is of $\hat\gamma\pm1.96$ se.
 
 | $p$ | truth | `full`: bias / RMSE / coverage | `window`: bias / RMSE / coverage | `single_point`: bias / RMSE |

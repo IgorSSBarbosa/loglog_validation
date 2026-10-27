@@ -62,6 +62,13 @@ artifacts: `data/avena_thomann_*/protocol_arm.json`.
 
 ## Result — arm B (2026-10-26)
 
+![RWRE log-log plot and local slopes](images/rwre_loglog.png)
+
+*(a) The log-log plot of the means pooled over the 500 replicates. (b) Local slopes. At
+$p=\tfrac12$ the slopes are flat at 0.5000. At $p=\tfrac13$ and $p=0$ they still fall
+across $2^{13}..2^{16}$ (0.566 → 0.553 and 0.530 → 0.522), so neither estimate has
+settled. Drawn by `experiments/plot_lit_walks.py`.*
+
 Means and spreads over $R=500$ independent replicates of the published allocation.
 
 | $p$ (ours) | `full`: mean ± sd | mean finite-m se | `window`: mean ± sd | `single_point`: mean ± sd |
