@@ -112,6 +112,15 @@ class ModelSpec:
     #: saturated (tools/cost_model.py's `_saturate`); every other model's probe
     #: is unchanged.
     latency_bound: bool = False
+    #: device_fill() -> how many samples one call runs at once (one "wave"),
+    #: for a latency_bound model that knows it. `probe_batched` then rounds n
+    #: up to whole waves, so that neither of its two timed calls ends in a
+    #: part-empty wave. Without it, on erw_urn_gpu (261,120 resident threads)
+    #: n = 131,072 paired with 4n = 524,288, two waves plus 2,048 samples,
+    #: and the marginal cost read ~3x high at every scale where the walk
+    #: stopped there: d = 0.96 to 1.75 between probes of one machine (user,
+    #: 2026-10-28, experiment 46). None leaves the probe as it was.
+    device_fill: Callable[[], int] | None = None
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -223,6 +232,7 @@ MODELS: dict[str, ModelSpec] = {
         # samples than the device holds costs one sample's latency. See
         # ModelSpec.latency_bound.
         latency_bound=True,
+        device_fill=model_erw_urn_gpu.resident_threads,
     ),
     "percolation2d": ModelSpec(
         simulate=model_percolation2d.simulate,

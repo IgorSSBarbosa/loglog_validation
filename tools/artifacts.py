@@ -43,6 +43,8 @@ ARTIFACTS: dict[str, str] = {
     "coverage":         "coverage.json",          # check_coverage --json
     "pilot":            "pilot.json",             # src/study/pilot.py
     "plan":             "plan.json",              # src/study/plan.py
+    "cost_refit":       "cost_refit.json",        # src/study/refit_cost.py -- eq. (cost)
+                                                  # re-fitted on the planned window
     "final":            "final.json",             # src/study/run.py
     "final_partial":    "final_partial.json",     # src/study/run.py -- the replicates
                                                   # drawn so far, rewritten after each

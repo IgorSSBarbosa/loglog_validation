@@ -160,6 +160,11 @@ python3 src/study/plan.py --study mystudy --data-root $D --time 90s
 python3 src/study/plan.py --study mystudy --data-root $D --target-se 1e-4
 python3 src/study/plan.py --study mystudy --data-root $D --time 90s --accept
 
+# 2b. if the planned window ends above the pilot's scales: re-fit eq. (cost) on a
+#     short run over that window, then re-plan with the budget left (autopilot does both)
+python3 src/study/refit_cost.py --study mystudy --data-root $D
+python3 src/study/plan.py --study mystudy --data-root $D --time 85s --accept
+
 # 3. execute the accepted plan
 python3 src/study/run.py --study mystudy --data-root $D
 
@@ -269,6 +274,23 @@ the gate is judged at the capped $m_0$. A capped plan is usually **bias-limited*
 read `|bias|` against the precision you need, because a bigger budget then buys
 samples and not depth. The tools do not learn *why* the ceiling is there, and nothing
 model-specific was added to them.
+
+**When the planned window ends above the pilot's scales, the cost is re-fitted there
+(user, 2026-10-31).** The article's Step 2, "Re-fitting the cost": the plan's seconds
+rest on `d` and a throughput measured on the pilot's ladder, and the cost at large
+scales can differ (memory, cache, fixed costs). Experiment 49's 9 h plans, extrapolated
+from 8..1024, drew at 3.3x their prediction in $d=2$ and 1.6x in $d=3$.
+`refit_cost.py` draws `REFIT_SHARE` (1%) of the planned draws at each window scale,
+times each call, fits $t(i)=\kappa_0+\kappa_1 i^d$, and replaces `d` in
+`constants.json` and the throughput (`cost_refit.json`, which `plan.py` then prefers;
+a re-fit made against an earlier pilot in the same directory is ignored).
+`autopilot.py` does this by default and re-plans with the budget left, up to
+`MAX_REFITS` (3) rounds while the window keeps climbing above every scale timed;
+`--no-refit-cost` turns it off. A latency-bound model draws at least a full device
+(one replicate's $n$ when its device size is unknown), and a short run that would take
+more than 10% of the budget left is skipped and says so. The draws are timed and
+discarded, from their own stream. Measured on `srw` (2026-10-31): the re-fit moved the
+throughput 4.52 -> 5.35e8/s and the run then took 1.00x its prediction.
 
 `run.py` also **pre-flights** the plan before its first replicate: one sample at the
 smallest and at the largest planned scale through `generate()`, discarded, so a scale

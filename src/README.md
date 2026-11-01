@@ -15,7 +15,7 @@ src/
   budget/     allocation_experiment.py  allocation_table.py    spend a budget well
               protocol_arm.py                          a published allocation, our estimator
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
-  study/      pilot.py  plan.py  run.py  report.py    the whole thing, end to end
+  study/      pilot.py  plan.py  refit_cost.py  run.py  report.py    the whole thing, end to end
               local_slope.py                          below a finished study: s_k per pair
 ```
 
