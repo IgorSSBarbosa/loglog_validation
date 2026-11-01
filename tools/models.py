@@ -33,6 +33,7 @@ from models import percolation_tau_gpu as model_percolation_tau_gpu
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
 from models import percolation_susceptibility_L_gpu as model_percolation_susceptibility_L_gpu
+from models import percolation_c1_gpu as model_percolation_c1_gpu
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_gpu as model_percolation_zd_gpu
@@ -305,6 +306,14 @@ MODELS: dict[str, ModelSpec] = {
         # See models/percolation_zd_gpu.py, experiments/08_percolation_zd_gpu.
         cost_hint=model_percolation_zd_gpu.cost_hint,
         batched_cost=True,              # as percolation2d_gpu
+    ),
+    "percolation_c1_gpu": ModelSpec(
+        simulate=model_percolation_c1_gpu.simulate,
+        # Largest cluster C1 on percolation_zd_gpu's lattice (Zhang et al.
+        # 2020's observable, site not bond), torus by default. Same draw, label
+        # and merge, imported, so the same cost_hint (i**dim). Experiment 47.
+        cost_hint=model_percolation_c1_gpu.cost_hint,
+        batched_cost=True,              # as percolation_zd_gpu
     ),
     "percolation_zd_stream": ModelSpec(
         simulate=model_percolation_zd_stream.simulate,
