@@ -305,12 +305,16 @@ GEOMETRIES = ("box", "cylinder", "torus")
 _ANCHOR_ALIASES = {"south": "face"}
 
 #: Safety cap on `_wrap_roots`' pointer-jumping loop. The loop provably
-#: terminates (every entry of `root` is non-increasing and bounded below by 0)
-#: and doubles its reach each pass, so 64 is astronomically more than any real
-#: block needs. It raises rather than breaking out: a merge that has not
-#: converged returns silently wrong cluster sizes, which is exactly the class
-#: of bug this repo exists to not have.
-_MAX_MERGE_PASSES = 64
+#: terminates (every entry of `root` is non-increasing and bounded below by 0),
+#: and its fixed point does not depend on the cap, so raising it changes no
+#: result. It raises rather than breaking out: a merge that has not converged
+#: returns silently wrong cluster sizes, which is exactly the class of bug this
+#: repo exists to not have. It was 64, on the belief that each pass doubles the
+#: reach. It does not: dim = 5, cylinder, L = 64 needed 17 passes at the median
+#: and 50 at most over 300 samples, and one sample in the zhang_w070_8h run
+#: (experiment 43, 2026-10-30) passed 64 and crashed it. 4096 leaves room for
+#: that tail at a few ms per pass (user, 2026-10-31).
+_MAX_MERGE_PASSES = 4096
 
 #: Working-set budget for one (block_n, i, dim) draw, in bytes, so
 #: block_n = budget // (bytes_per_site * i**dim) bounds the transient arrays
@@ -453,8 +457,10 @@ def _wrap_roots(lab: np.ndarray, i: int, axes: tuple[int, ...]) -> np.ndarray:
 
     Vectorized by pointer jumping rather than a Python `find` loop: each pass
     pushes every pair's minimum across every edge in both directions and then
-    squares the pointer array (`root[root]`), so a chain of length C resolves
-    in O(log C) passes. `root[x] <= x` is an invariant (both operations only
+    squares the pointer array (`root[root]`). The squaring only shortens
+    pointer chains; a minimum still crosses one wrap edge per pass, so the pass
+    count grows with the chain of labels a cluster is cut into, not with its
+    log (see _MAX_MERGE_PASSES). `root[x] <= x` is an invariant (both operations only
     ever assign a smaller value), which is what makes the loop terminate and
     makes the fixed point the component's smallest label.
 
