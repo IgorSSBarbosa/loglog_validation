@@ -83,6 +83,20 @@ One warp per sample (plan §5): every lane computes every per-step draw itself
 (the same counter gives the same value, at no extra latency), so there is no
 thread 0 and no barrier but `__syncwarp`.
 
+The pooled kernel (`kernel` "pool", user, 2026-11-02)
+----------------------------------------------------
+A sample's deque only grows, so in the warp kernel every sample reserves the
+buffer its widest moment needs, and samples launched together peak together.
+In `lazy_walk_pool` the `warps` warps of a block share a pool of 512-byte
+pages (2048 cells in both bit-planes), mapped per sample through a page table
+that covers the same [-cap/2, cap/2) as the warp kernel's buffer (so the same
+samples overflow); warp w starts its first sample once warp 0 is
+`stagger` * w / warps of the way through its own, and each warp then claims the
+next sample as it finishes one, so the warps' ages stay spread. A warp that
+finds no free page waits; if every holder waits, the block aborts and its
+unfinished samples are rerun with half the warps. Bits, blocks and Philox
+counters are BitEnv's, so the output is bit-identical to `layout` "bit".
+
 No GPU present: as models/rwre_gpu.py, importing never imports cupy and `walk`
 raises RuntimeError naming MODELS["rwre"].
 """
@@ -106,13 +120,21 @@ _DEFAULTS = {
     "cap": 1 << 15,
     "growth": 32,
     "layout": "bit",
+    # kernel "pool" (user, 2026-11-02): `warps` samples per block share `pool`
+    # bytes of pages (0: as many as the block may have), first samples delayed
+    # by stagger * w / warps of a sample (`lazy_walk_pool`). Same draws.
+    "kernel": "warp",
+    "warps": 32,
+    "pool": 0,
+    "stagger": 1.0,
 }
 
 #: Per-sample output columns of `walk_stats`, in order.
 STATS = ("x", "reveals", "ones", "reads", "width", "left", "right", "error")
 
-#: error codes in the "error" column. DEBUG is only ever set by a debug build.
-_OK, _OVERFLOW, _DEBUG_FAILED = 0, 1, 2
+#: error codes in the "error" column. DEBUG is only ever set by a debug build;
+#: POOL (a block's pool ran dry with every warp waiting) is rerun, never returned.
+_OK, _OVERFLOW, _DEBUG_FAILED, _POOL = 0, 1, 2, 3
 
 #: The most a block gets without opting in, and the fixed opt-in ceiling (fits
 #: the RTX 5090's 99 KiB), as in models/rwre_gpu.py.
@@ -124,6 +146,13 @@ _BYTES_PER_CELL = {"byte": 1.0, "bit": 0.25}
 
 #: Samples per launch. Only memory and responsiveness depend on it.
 _CHUNK = 1 << 16
+
+#: The pooled kernel's page (cells), its bytes (two planes), the block's
+#: bookkeeping (sizeof PoolMeta) and the most pages a free map of 8 words holds.
+_PAGE_CELLS = 2048
+_PAGE_BYTES = _PAGE_CELLS // 4
+_POOL_META = 80
+_MAX_PAGES = 256
 
 _SOURCE = r"""
 #define TAG_STEP   1u
@@ -438,6 +467,321 @@ extern "C" __global__ void lazy_walk_bit(ARGS) {
     if (blockIdx.x >= n) return;
     lazy_walk(BitEnv{(unsigned*)smem, (unsigned*)smem + cap / 32}, PASS);
 }
+
+// ------------------------------------------------------------ pooled bit layout
+// kernel = "pool" (user, 2026-11-02): the warps of a block share one pool of
+// pages, and start their first samples staggered, so their widths (which only
+// grow) do not peak together. Same cells, same bits, same Philox counters as
+// BitEnv; only where a block's 128 cells live differs.
+#define PAGE_SHIFT 11                    // 2048 cells = 16 blocks of 128 per page
+#define PAGE_WORDS 128                   // 64 words of K, then 64 of V: 512 bytes
+#define NO_PAGE 0xffu
+#define POOL_ABORT 3
+
+struct PoolMeta {
+    long long lead;                      // steps warp 0 has made in its first sample
+    long long sum, cnt;                  // pages in use, sampled by warp 0
+    int used, peak, stalled, holders, abort, pad;
+    unsigned free[8];                    // bit set = page free; at most 256 pages
+};
+
+// A warp's view: absolute cell j lives in logical page j >> PAGE_SHIFT, which
+// tab maps to a pool page. tab covers cells [-cap/2, cap/2), the warp kernel's
+// buffer, so both kernels overflow on exactly the same samples.
+struct PoolEnv {
+    unsigned* pool;
+    unsigned char* tab;
+    int half;                            // logical page lp is tab[lp + half]
+
+    __device__ __forceinline__ unsigned* pg(const int lp) const {
+        return pool + PAGE_WORDS * tab[lp + half];
+    }
+    __device__ __forceinline__ uint4* kb(const int B) const {     // K of block B; V is +16
+        return (uint4*)pg(B >> 4) + (B & 15);
+    }
+    __device__ unsigned known(const int j) const {
+        const unsigned o = j & 2047;
+        return (pg(j >> PAGE_SHIFT)[o >> 5] >> (o & 31)) & 1u;
+    }
+    __device__ unsigned one(const int j) const {
+        const unsigned o = j & 2047;
+        return (pg(j >> PAGE_SHIFT)[64 + (o >> 5)] >> (o & 31)) & 1u;
+    }
+    __device__ void reveal(const int j, const unsigned one) const {
+        const unsigned o = j & 2047;
+        unsigned* q = pg(j >> PAGE_SHIFT);
+        q[o >> 5] |= 1u << (o & 31);
+        q[64 + (o >> 5)] |= one << (o & 31);
+    }
+
+    // BitEnv::sweep with absolute blocks: K4[B] -> kb(B), and the counter's
+    // block is B itself (BitEnv's B - c/128).
+    __device__ void sweep(const int L, const int R, const int b, const unsigned s,
+                          const unsigned sample, const uint2 key, const unsigned lane) const {
+        const int B0 = L >> 7, B1 = R >> 7;
+        unsigned pk = 0u, pv = 0u, pm = 0u;
+        for (int base = B0; base <= B1; base += 32) {
+            const int B = base + (int)lane;
+            const bool on = B <= B1;
+            uint4 k = make_uint4(0u, 0u, 0u, 0u), v = k, m = k;
+            uint4* kp = nullptr;
+            if (on) {
+                kp = kb(B);
+                k = kp[0];
+                v = kp[16];
+                m = philox(make_uint4((unsigned)B, s, sample, TAG_SWAP), key);
+            }
+            unsigned prevk = __shfl_up_sync(FULL, k.w, 1), prevv = __shfl_up_sync(FULL, v.w, 1);
+            unsigned prevm = __shfl_up_sync(FULL, m.w, 1);
+            unsigned nextk = __shfl_down_sync(FULL, k.x, 1), nextv = __shfl_down_sync(FULL, v.x, 1);
+            if (lane == 0) { prevk = pk; prevv = pv; prevm = pm; }
+            if (lane == 31) {
+                nextk = B < B1 ? kb(B + 1)[0].x : 0u;
+                nextv = B < B1 ? kb(B + 1)[16].x : 0u;
+            }
+            pk = __shfl_sync(FULL, k.w, 31);
+            pv = __shfl_sync(FULL, v.w, 31);
+            pm = __shfl_sync(FULL, m.w, 31);
+            if (b) {
+                BitEnv::swap_across(prevk, k.x, prevm);
+                BitEnv::swap_across(prevv, v.x, prevm);
+                BitEnv::swap_across(k.w, nextk, m.w);
+                BitEnv::swap_across(v.w, nextv, m.w);
+            }
+            BitEnv::swap_block(k, m, b);
+            BitEnv::swap_block(v, m, b);
+            if (on) { kp[0] = k; kp[16] = v; }
+            __syncwarp();
+        }
+    }
+
+    __device__ void count(const int L, const int R, const unsigned lane, int& known,
+                          int& one) const {
+        known = one = 0;
+        const int B0 = L >> 7;
+        for (int w = (int)lane; w < 4 * ((R >> 7) - B0 + 1); w += 32) {
+            const unsigned* q = (const unsigned*)kb(B0 + w / 4);
+            known += __popc(q[w & 3]);
+            one += __popc(q[64 + (w & 3)]);
+        }
+    }
+};
+
+// A free page, or -1 once the block aborts. Lane 0 claims a bit of the free
+// map; while none is free the warp waits. If every warp holding pages waits,
+// none will ever free one: the block aborts and the host reruns its unfinished
+// samples with fewer warps (the same draws: they are keyed by sample, not slot).
+// A finishing warp frees its pages before it stops counting as a holder, so a
+// wait that sees stalled == holders four times running is a real deadlock.
+__device__ int pool_alloc(PoolMeta* m, const unsigned lane) {
+    int pg = -1;
+    if (lane == 0) {
+        volatile PoolMeta* v = m;
+        bool stalled = false;
+        int strikes = 0;
+        for (;;) {
+            for (int w = 0; w < 8 && pg < 0; ++w) {
+                unsigned f = v->free[w];
+                while (f) {
+                    const unsigned bit = f & (0u - f);
+                    const unsigned old = atomicAnd(&m->free[w], ~bit);
+                    if (old & bit) { pg = 32 * w + __ffs(bit) - 1; break; }
+                    f = old & ~bit;
+                }
+            }
+            if (pg >= 0 || v->abort) break;
+            if (!stalled) { atomicAdd(&m->stalled, 1); stalled = true; }
+            __threadfence_block();
+            if (v->stalled == v->holders) {
+                if (++strikes == 4) { atomicExch(&m->abort, 1); break; }
+            } else {
+                strikes = 0;
+            }
+            __nanosleep(1000);
+        }
+        if (stalled) atomicSub(&m->stalled, 1);
+        if (pg >= 0) atomicMax(&m->peak, atomicAdd(&m->used, 1) + 1);
+    }
+    return __shfl_sync(FULL, pg, 0);
+}
+
+// Map every unmapped logical page of [L, R], each zeroed (U). 0 or POOL_ABORT.
+__device__ int pool_map(PoolMeta* m, const PoolEnv& env, const int L, const int R,
+                        int& PL, int& PR, const unsigned lane) {
+    for (int lp = L >> PAGE_SHIFT; lp <= (R >> PAGE_SHIFT); ++lp) {
+        if (env.tab[lp + env.half] != NO_PAGE) continue;
+        const int pg = pool_alloc(m, lane);
+        if (pg < 0) return POOL_ABORT;
+        unsigned* q = env.pool + PAGE_WORDS * pg;
+        for (int w = (int)lane; w < PAGE_WORDS; w += 32) q[w] = 0u;
+        __syncwarp();
+        if (lane == 0) env.tab[lp + env.half] = (unsigned char)pg;
+        __syncwarp();
+    }
+    PL = L >> PAGE_SHIFT;
+    PR = R >> PAGE_SHIFT;
+    return 0;
+}
+
+// Return every page in the table (a map cut short by an abort leaves holes).
+__device__ void pool_free(PoolMeta* m, const PoolEnv& env, const int T, const unsigned lane) {
+    int freed = 0;
+    for (int i = (int)lane; i < T; i += 32) {
+        const unsigned pg = env.tab[i];
+        if (pg != NO_PAGE) {
+            atomicOr(&m->free[pg >> 5], 1u << (pg & 31));
+            env.tab[i] = NO_PAGE;
+            ++freed;
+        }
+    }
+    freed = __reduce_add_sync(FULL, freed);
+    if (lane == 0) atomicSub(&m->used, freed);
+    __threadfence_block();
+    __syncwarp();
+}
+
+// Persistent: each warp claims samples ids[i] from a global counter until none
+// are left. Rows of out are indexed by sample; error -1 (set by the host) marks
+// a row not reached. lazy_walk's step loop, in absolute coordinates: the same
+// overflow tests (|x|, L, R against cap/2), growth and order of draws.
+#define POOL_ARGS const unsigned long long seed, const unsigned* ids, const long long rows, \
+        const long long k, const int sweeps, const double p, const float alpha, \
+        const int skip_read, const int cap, const int growth, const int debug, \
+        const float stagger, const int npages, unsigned long long* next, long long* out, \
+        long long* bstat
+#define POOL_PASS seed, ids, rows, k, sweeps, p, alpha, skip_read, cap, growth, debug, \
+        stagger, npages, next, out, bstat
+
+__device__ __forceinline__ void pool_walk(POOL_ARGS) {
+    PoolMeta* m = (PoolMeta*)smem;
+    volatile PoolMeta* vm = m;
+    unsigned* pool = (unsigned*)(m + 1);
+    const int T = cap >> PAGE_SHIFT;
+    const unsigned lane = threadIdx.x & 31, warp = threadIdx.x >> 5, W = blockDim.x >> 5;
+    unsigned char* tabs = (unsigned char*)(pool + PAGE_WORDS * npages);
+    if (threadIdx.x == 0) {
+        m->lead = m->sum = m->cnt = 0;
+        m->used = m->peak = m->stalled = m->holders = m->abort = 0;
+        for (int w = 0; w < 8; ++w) {
+            const int left = npages - 32 * w;
+            m->free[w] = left >= 32 ? FULL : left > 0 ? (1u << left) - 1u : 0u;
+        }
+    }
+    for (int i = (int)threadIdx.x; i < (int)W * T; i += (int)blockDim.x) tabs[i] = NO_PAGE;
+    __syncthreads();
+
+    const PoolEnv env{pool, tabs + warp * T, T / 2};
+    const uint2 key = make_uint2((unsigned)seed, (unsigned)(seed >> 32));
+    const int c = cap / 2;
+    const double lo = fmin(p, 1.0 - p), hi = fmax(p, 1.0 - p);
+
+    // The delay: warp w starts once warp 0 is stagger * w / W of the way
+    // through its first sample, so the first wave's ages are spread over a
+    // sample's length, and later waves keep the spread.
+    if (lane == 0 && warp > 0) {
+        const long long wait = (long long)((double)stagger * warp / W * (double)k);
+        while (vm->lead < wait && !vm->abort) __nanosleep(4096);
+    }
+    __syncwarp();
+
+    bool leader = warp == 0;
+    for (;;) {
+        unsigned long long i = (unsigned long long)rows;
+        if (lane == 0 && !vm->abort) i = atomicAdd(next, 1ull);
+        i = __shfl_sync(FULL, i, 0);
+        if (i >= (unsigned long long)rows) break;
+        const unsigned sample = ids[i];
+        if (lane == 0) atomicAdd(&m->holders, 1);
+
+        long long x = 0, reveals = 0, ones = 0, reads = 0;
+        int L = 0, R = 0, PL = 0, PR = -1;
+        int err = pool_map(m, env, L, R, PL, PR, lane);
+        unsigned s = 0;
+        uint4 pr;
+        for (long long t = 0; t < k && !err; ++t) {
+            if (!(t & 63)) {
+                if (__shfl_sync(FULL, lane == 0 ? vm->abort : 0, 0)) { err = POOL_ABORT; break; }
+                if (lane == 0 && warp == 0 && !(t & 1023)) {
+                    if (leader) vm->lead = t;
+                    m->sum += vm->used;
+                    ++m->cnt;
+                }
+            }
+            const uint4 r = philox(make_uint4((unsigned)t, (unsigned)(t >> 32), sample, TAG_STEP), key);
+            const double u = ((r.x >> 5) * 67108864.0 + (r.y >> 6)) * (1.0 / 9007199254740992.0);
+            bool left;
+            if (skip_read && u < lo) {
+                left = true;
+            } else if (skip_read && u >= hi) {
+                left = false;
+            } else {
+                if (x < -c || x >= c) { err = 1; break; }
+                const int j = (int)x;
+                while (j <= L) L -= growth;
+                while (j >= R) R += growth;
+                if (L < -c || R >= c) { err = 1; break; }
+                if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
+                    err = pool_map(m, env, L, R, PL, PR, lane);
+                    if (err) break;
+                }
+                unsigned one;
+                if (env.known(j)) {
+                    one = env.one(j);
+                } else {
+                    one = unit24(r.z) < alpha;
+                    ++reveals;
+                    ones += one;
+                    __syncwarp();
+                    if (lane == 0) env.reveal(j, one);
+                }
+                ++reads;
+                left = u < (one ? p : 1.0 - p);
+            }
+            x += left ? -1 : 1;
+            __syncwarp();
+            if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
+            for (int i = 0; i < sweeps; ++i, ++s) {
+                if (!(s & 127)) pr = philox(make_uint4(s >> 7, 0u, sample, TAG_PARITY), key);
+                const int b = (word(pr, (s >> 5) & 3) >> (s & 31)) & 1u;
+                env.sweep(L, R, b, s, sample, key, lane);
+                __syncwarp();
+                if (env.known(L)) L -= growth;
+                if (env.known(R)) R += growth;
+                if (L < -c || R >= c) { err = 1; break; }
+                if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
+                    err = pool_map(m, env, L, R, PL, PR, lane);
+                    if (err) break;
+                }
+                if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
+            }
+        }
+        pool_free(m, env, T, lane);
+        if (lane == 0) {
+            atomicSub(&m->holders, 1);
+            if (leader) vm->lead = 0x7fffffffffffffffLL;
+            long long* o = out + (long long)sample * NSTAT;
+            o[0] = x; o[1] = reveals; o[2] = ones; o[3] = reads;
+            o[4] = R - L + 1; o[5] = L; o[6] = R; o[7] = err;
+        }
+        leader = false;
+    }
+    if (lane == 0 && warp == 0) vm->lead = 0x7fffffffffffffffLL;
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        long long* b = bstat + 4 * (long long)blockIdx.x;
+        b[0] = m->peak; b[1] = m->sum; b[2] = m->cnt; b[3] = m->abort;
+    }
+}
+
+// Two register budgets for one body (80 registers unbounded allow only 24
+// warps): up to 32 warps in one block per SM (64 registers), or up to 16
+// warps in each of three (40 registers, 48 warps per SM, a small spill).
+extern "C" __global__ void __launch_bounds__(1024, 1) lazy_walk_pool(POOL_ARGS) {
+    pool_walk(POOL_PASS);
+}
+extern "C" __global__ void __launch_bounds__(512, 3) lazy_walk_pool3(POOL_ARGS) {
+    pool_walk(POOL_PASS);
+}
 """
 
 
@@ -464,13 +808,30 @@ def _check(params: dict) -> dict:
         raise ValueError(f"layout 'bit' needs swap_prob = 0.5; got {q['swap_prob']}. "
                          "Use layout 'byte' for any other swap_prob.")
     # cap/2 must be a multiple of 128 so the swap blocks align in the buffer.
-    top = int(_MAX_SHARED / _BYTES_PER_CELL[q["layout"]])
+    top = (int(_MAX_SHARED / _BYTES_PER_CELL[q["layout"]]) if q.get("kernel") != "pool"
+           else 1 << 21)
     if int(q["cap"]) != q["cap"] or q["cap"] < 256 or q["cap"] % 256 or q["cap"] > top:
         raise ValueError(f"cap must be a multiple of 256 in [256, {top}] for layout "
                          f"{q['layout']!r}; got {q['cap']}")
     if int(q["growth"]) != q["growth"] or not 1 <= q["growth"] <= q["cap"] // 4:
         raise ValueError(f"growth must be an integer in [1, cap/4]; got {q['growth']}")
     q["cap"], q["growth"] = int(q["cap"]), int(q["growth"])
+    if q["kernel"] not in ("warp", "pool"):
+        raise ValueError(f"kernel must be 'warp' or 'pool'; got {q['kernel']!r}")
+    if q["kernel"] == "pool":
+        if q["layout"] != "bit":
+            raise ValueError("kernel 'pool' has the bit layout only")
+        # The page table covers [-cap/2, cap/2) in whole pages, an even number.
+        if q["cap"] % (2 * _PAGE_CELLS):
+            raise ValueError(f"kernel 'pool' needs cap a multiple of {2 * _PAGE_CELLS}; "
+                             f"got {q['cap']}")
+        if int(q["warps"]) != q["warps"] or not 1 <= q["warps"] <= 32:
+            raise ValueError(f"warps must be an integer in [1, 32]; got {q['warps']}")
+        if not 0.0 <= q["stagger"] <= 1.0:
+            raise ValueError(f"stagger must be in [0, 1]; got {q['stagger']}")
+        if int(q["pool"]) != q["pool"] or q["pool"] < 0:
+            raise ValueError(f"pool must be a non-negative integer (bytes); got {q['pool']}")
+        q["warps"], q["pool"] = int(q["warps"]), int(q["pool"])
     return q
 
 
@@ -516,8 +877,64 @@ def philox(ctr: np.ndarray, key: np.ndarray) -> np.ndarray:
     return out.get()
 
 
+def _walk_pool(cp, q: dict, k: int, n: int, seed: int, debug: bool,
+               report: list | None) -> np.ndarray:
+    """All n samples through `lazy_walk_pool`: (n, len(STATS)) int64.
+
+    A block whose pool runs dry with every warp waiting aborts; its unfinished
+    samples are rerun with half the warps, the same seed and sample indices, so
+    the same draws. One warp that still runs dry needs more than the pool alone.
+    Each launch appends its memory figures to `report`.
+    """
+    attr = cp.cuda.Device().attributes
+    optin, per_sm = attr["MaxSharedMemoryPerBlockOptin"], attr["MaxSharedMemoryPerMultiprocessor"]
+    T = q["cap"] // _PAGE_CELLS
+    out = cp.full((n, len(STATS)), -1, dtype=cp.int64)
+    todo = np.arange(n, dtype=np.uint32)
+    warps = q["warps"]
+    while todo.size:
+        blocks = 3 if warps <= 16 else 1            # the variant's launch bounds
+        kernel = _compiled(cp).get_function("lazy_walk_pool3" if blocks == 3 else "lazy_walk_pool")
+        tables = warps * T
+        room = (min(optin, per_sm // blocks - 1024) - _POOL_META - tables) // _PAGE_BYTES
+        npages = min(_MAX_PAGES, room, q["pool"] // _PAGE_BYTES if q["pool"] else room)
+        if npages < 1:
+            raise RuntimeError(f"no room for a page: {warps} page tables of {T} entries")
+        shared = _POOL_META + npages * _PAGE_BYTES + tables
+        kernel.max_dynamic_shared_size_bytes = shared
+        # Blocks per SM: the shared memory (1 KiB reserved per block), 48 warps,
+        # and the kernel's register budget.
+        per = max(1, min(attr["MaxThreadsPerMultiProcessor"] // (32 * warps),
+                         per_sm // (shared + 1024),
+                         attr["MaxRegistersPerMultiprocessor"] // (kernel.num_regs * 32 * warps)))
+        grid = attr["MultiProcessorCount"] * per
+        bstat = cp.zeros((grid, 4), dtype=cp.int64)
+        kernel((grid,), (32 * warps,),
+               (cp.uint64(seed), cp.asarray(todo), cp.int64(todo.size), cp.int64(k),
+                cp.int32(q["env_sweeps"]), cp.float64(q["p"]), cp.float32(q["alpha"]),
+                cp.int32(q["skip_read"]), cp.int32(q["cap"]), cp.int32(q["growth"]),
+                cp.int32(debug), cp.float32(q["stagger"]), cp.int32(npages),
+                cp.zeros(1, dtype=cp.uint64), out, bstat),
+               shared_mem=shared)
+        err = out[:, STATS.index("error")].get()[todo]
+        rerun = todo[(err == _POOL) | (err == -1)]
+        b = bstat.get()
+        if report is not None:
+            report.append({"warps": warps, "pages": int(npages), "page_bytes": _PAGE_BYTES,
+                           "shared": int(shared), "blocks_per_sm": int(per), "samples": int(todo.size),
+                           "peak_pages": b[:, 0].tolist(),
+                           "mean_pages": (b[:, 1] / np.maximum(b[:, 2], 1)).tolist(),
+                           "aborted_blocks": int(b[:, 3].sum()), "rerun": int(rerun.size)})
+        if rerun.size and warps == 1:
+            raise RuntimeError(f"sample {int(rerun[0])} at k = {k} needs more than a pool of "
+                               f"{npages} pages ({npages * _PAGE_CELLS} cells)")
+        todo, warps = rerun, max(1, warps // 2)
+    return out.get()
+
+
 def walk_stats(k: int, n: int = 1, params: dict | None = None,
-               rng: np.random.Generator | None = None, *, debug: bool = False) -> dict:
+               rng: np.random.Generator | None = None, *, debug: bool = False,
+               report: list | None = None) -> dict:
     """n i.i.d. samples of the walk, with the deque's bookkeeping. dict of int64 (n,).
 
     Keys are `STATS`: the signed displacement x = X_k; reveals (values drawn),
@@ -525,7 +942,8 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
     deque width = R - L + 1 and its ends in absolute coordinates; error (0).
     With debug=True every read and sweep also asserts the deque invariants
     (plan §6, L3) -- an O(width) scan each time, for tests only. Raises on an
-    overflow of `cap` or a failed assertion, naming the first sample.
+    overflow of `cap` or a failed assertion, naming the first sample. With
+    kernel "pool", each launch appends its memory figures to `report` if given.
     """
     q = _check(dict(params or {}))
     if k < 1:
@@ -537,6 +955,10 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
                          f"{q['env_sweeps']}")
 
     cp = _cupy()
+    rng = rng if rng is not None else np.random.default_rng()
+    if q["kernel"] == "pool":
+        out = _walk_pool(cp, q, k, n, int(rng.integers(0, 2 ** 63)), debug, report)
+        return _checked(out, q, k, n)
     kernel = _compiled(cp).get_function(f"lazy_walk_{q['layout']}")
     shared = int(q["cap"] * _BYTES_PER_CELL[q["layout"]])
     if shared > _DEFAULT_SHARED:
@@ -545,7 +967,6 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
             raise RuntimeError(f"cap = {q['cap']} cells is {shared} bytes of shared memory "
                                f"per sample; this device allows {optin}")
         kernel.max_dynamic_shared_size_bytes = shared
-    rng = rng if rng is not None else np.random.default_rng()
     seed = int(rng.integers(0, 2 ** 63))
 
     out = np.empty((n, len(STATS)), dtype=np.int64)
@@ -559,7 +980,11 @@ def walk_stats(k: int, n: int = 1, params: dict | None = None,
                 cp.int32(q["growth"]), cp.int32(debug), dev),
                shared_mem=shared)
         out[first:first + rows] = dev[:rows].get()
+    return _checked(out, q, k, n)
 
+
+def _checked(out: np.ndarray, q: dict, k: int, n: int) -> dict:
+    """walk_stats' columns, or the error of the first sample that failed."""
     err = out[:, STATS.index("error")]
     bad = np.flatnonzero(err)
     if bad.size:
