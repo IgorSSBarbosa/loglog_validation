@@ -11,7 +11,10 @@
    `pipeline_extrapolation`: the pilot correction extended over the planned window.
 3. `pipeline_longrun`: the long run's log-log plot with the fitted slope gamma-hat.
 4. `pipeline_checks`: the Step 4 checks on the long-run data, one panel each for
-   (A2), (A4), (A5), (A6), (A8) and (A1)+(A3). (A8) compares the long run's time
+   the local slopes, (A4), (A5), (A6), (A8) and (A1)+(A3). The local slopes come from
+   `src/study/local_slope.py` (local_slope.json), which brings every scale from the
+   pilot's smallest to the window's top to the final's n. (A4)-(A6) are drawn as
+   points, not lines: they are estimates at separate scales. (A8) compares the long run's time
    with the planner's cost model; (A1)+(A3) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window.
 
@@ -60,7 +63,7 @@ plt.rcParams.update({"font.size": 9, "axes.grid": True, "grid.color": "#e6e6e6",
 
 def load(sd: Path) -> dict:
     d = {name: json.loads((sd / f"{name}.json").read_text())
-         for name in ("pilot", "plan", "final", "answer")}
+         for name in ("pilot", "plan", "final", "answer", "local_slope")}
     # Only a study planned on a re-fitted cost has one (src/study/refit_cost.py).
     rf = sd / "cost_refit.json"
     d["cost_refit"] = json.loads(rf.read_text()) if rf.exists() else None
@@ -241,31 +244,40 @@ def fig_checks(d: dict, rho: float):
     R, n = len(reps), final["n"]
     fig, axs = plt.subplots(2, 3, figsize=(7.2, 4.4), constrained_layout=True)
 
-    def per_rep(ax, field, label):
-        for r in reps:
-            ax.plot(k, r[field], "o", color=DATA, alpha=0.45, ms=3.5)
-        ax.plot(k, pooled(reps, field), "-", color=DATA, label=label)
+    def per_rep(ax, values, label):
+        """Each replicate a light point, their mean a bar; scales are not joined."""
+        for v in values:
+            ax.plot(k, v, "o", color=DATA, alpha=0.45, ms=3.5)
+        mean = np.mean(values, axis=0)
+        ax.plot(k, mean, "_", color=DATA, ms=11, mew=1.8, label=label)
+        return mean
 
     ax = axs[0, 0]
-    frac = np.sum([r["n_nonpos"] for r in reps], axis=0) / (R * n)
-    ax.semilogy(k, frac, "o-", color=DATA, label=r"fraction of $Y_i \leq 0$")
-    ax.set_title(r"(A2) positivity", fontsize=9, loc="left")
-    ax.legend(loc="lower left")
+    ls = d["local_slope"]["analysis"]
+    # s_k is the slope between rho^k and rho^(k+1), so it sits between them.
+    ks = np.log(ls["scales"][:-1]) / math.log(rho) + 0.5
+    ax.axvspan(k[0], k[-1], color=WINDOW, label="long-run window")
+    ax.errorbar(ks, ls["s"], yerr=ls["se_s"], fmt="o", color=DATA, ms=3.5,
+                label=r"$s_k \pm$ se")
+    ax.axhline(d["answer"]["gamma"], color=REF, ls="--", lw=1,
+               label=rf"$\hat\gamma={d['answer']['gamma']:.5f}$")
+    ax.set_ylabel(r"$s_k$")
+    ax.set_title(r"(A1) local slopes $s_k$", fontsize=9, loc="left")
+    ax.legend(loc="upper right", fontsize=7)
 
-    per_rep(axs[0, 1], "abs_moment", r"$\overline{|\xi_i|^{3}}$")
+    per_rep(axs[0, 1], [r["abs_moment"] for r in reps], r"$\overline{|\xi_i|^{3}}$")
     axs[0, 1].set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
     axs[0, 1].ticklabel_format(axis="y", useOffset=False)
 
-    per_rep(axs[0, 2], "log_moment", r"$\overline{|\log\xi_i|^{3}}$")
-    L = max(np.max(r["log_moment"]) for r in reps)
+    # report.py's Lambda: the largest over scales of the replicate mean.
+    L = per_rep(axs[0, 2], [r["log_moment"] for r in reps],
+                r"$\overline{|\log\xi_i|^{3}}$").max()
+    assert math.isclose(L, d["answer"]["Lambda"], rel_tol=1e-12), (L, d["answer"]["Lambda"])
     axs[0, 2].axhline(L, color=REF, ls="--", lw=1, label=rf"$\hat L={L:.2f}$")
     axs[0, 2].set_title(r"(A5) $\mathbb{E}|\log\xi_i|^{2+\delta}$", fontsize=9, loc="left")
 
     ax = axs[1, 0]
-    for r in reps:
-        ax.plot(k, np.square(r["cv"]), "o", color=DATA, alpha=0.45, ms=3.5)
-    s2 = np.mean([np.square(r["cv"]) for r in reps], axis=0)
-    ax.plot(k, s2, "-", color=DATA, label=r"$\hat\sigma_i^2$")
+    s2 = per_rep(ax, [np.square(r["cv"]) for r in reps], r"$\hat\sigma_i^2$")
     ax.axhline(s2.max(), color=REF, ls="--", lw=1, label=rf"$\hat\sigma^2_{{\max}}={s2.max():.4f}$")
     ax.set_title(r"(A6) $\hat\sigma_i^2=\widehat{\mathbb{V}}\,\xi_i$", fontsize=9, loc="left")
 
@@ -309,8 +321,9 @@ def fig_checks(d: dict, rho: float):
 
     for ax in (axs[0, 0], axs[0, 1], axs[0, 2], axs[1, 0], axs[1, 2]):
         ax.set_xlabel(r"$k=\log_\rho i$")
-    for ax in (axs[0, 1], axs[0, 2], axs[1, 0]):
-        ax.legend(loc="best", fontsize=7)
+    for ax, loc in ((axs[0, 1], "upper right"), (axs[0, 2], "lower right"),
+                    (axs[1, 0], "upper right")):
+        ax.legend(loc=loc, fontsize=7)
     return fig
 
 
