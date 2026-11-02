@@ -23,8 +23,12 @@ gap wherever the final ladder doesn't start at 8192.
     (`src/estimate/omega_loglog.py`, the loglog-log plot: pilot gamma_k against the
     final's gamma-hat) ± se, next to the pilot's eq. (232) omega1 and the conjecture.
     Run that driver on every study first; a missing file raises.
+  - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
+    appendix (user, 2026-11-02), without titles. The gamma figure adds a panel of
+    gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
+    --omega-loglog's inputs.
 
-    python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h [--omega-loglog]
+    python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h [--omega-loglog] [--article DIR]
 """
 
 from __future__ import annotations
@@ -202,6 +206,63 @@ def plot_omega_loglog(res: dict, data_root: Path, tag: str, out: Path, plt) -> N
     fig.savefig(out, dpi=130)
 
 
+def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> None:
+    ps = np.array(sorted(res))
+    g = np.array([res[p]["answer"]["gamma"] for p in ps])
+    lo = np.array([res[p]["answer"]["wilson"]["interval"][0] for p in ps])
+    hi = np.array([res[p]["answer"]["wilson"]["interval"][1] for p in ps])
+    gt = np.array([gamma_true(p) for p in ps])
+    hit = (lo <= gt) & (gt <= hi)
+    blue, grey = "#2a6fdb", "#7a7a7a"
+    rc = {"font.size": 9, "axes.spines.top": False, "axes.spines.right": False,
+          "legend.frameon": False, "axes.grid": True, "grid.color": "#e6e6e6"}
+    with plt.rc_context(rc):
+        fig, (ax, axd) = plt.subplots(1, 2, figsize=(7.2, 3.0), constrained_layout=True)
+        ax.plot([0, 0.75], [0.5, 0.5], color=grey, lw=1.2, label=r"$\gamma=1/2$")
+        ax.plot([0.75, 1], [0.5, 1], color=grey, lw=1.2, ls="--", label=r"$\gamma=2p-1$")
+        ax.plot(ps, g, "o", color=blue, ms=4, label=r"$\hat\gamma$")
+        ax.set(xlabel="$p$", ylabel=r"$\gamma$", xlim=(0, 1))
+        ax.legend(loc="upper left")
+        ax.set_title(r"(a) $\hat\gamma$ against $p$", fontsize=9, loc="left")
+        d = g - gt
+        for sel, face, lab in ((hit, blue, "interval contains $\\gamma$"),
+                               (~hit, "white", "interval misses $\\gamma$")):
+            axd.errorbar(ps[sel], d[sel], yerr=[g[sel] - lo[sel], hi[sel] - g[sel]], fmt="o",
+                         color=blue, mfc=face, ms=4, capsize=2, lw=0, elinewidth=1, label=lab)
+        axd.axhline(0, color=grey, lw=0.8)
+        axd.set_yscale("symlog", linthresh=1e-4)
+        axd.set_ylim(top=0.08)
+        axd.set(xlabel="$p$", ylabel=r"$\hat\gamma-\gamma$", xlim=(0, 1))
+        axd.legend(loc="upper left")
+        axd.set_title(r"(b) error, with its 95% interval", fontsize=9, loc="left")
+        for a in (ax, axd):
+            a.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+        fig.savefig(out_dir / "erw_gamma_vs_p.pdf")
+        plt.close(fig)
+
+        ll = [json.loads((data_root / f"sweep_p{label(p)}_{tag}" / "omega_loglog.json").read_text())
+              for p in ps]
+        om = np.array([r["omega"] for r in ll], float)
+        se = np.array([r["se"] for r in ll], float)
+        bad = np.array([r["p_value"] < 0.01 for r in ll])
+        fig, ax = plt.subplots(figsize=(5.4, 3.4), constrained_layout=True)
+        pp = np.linspace(0, 1, 801)
+        ax.plot(pp, omega_conjecture(pp), color=grey, lw=1.2,
+                label=r"conjecture $\omega=\min\{1,|4p-3|\}$")
+        ax.errorbar(ps, [res[p]["omega1"]["value"] for p in ps],
+                    yerr=[res[p]["omega1"]["se"] for p in ps], fmt="o", color="#e8622c",
+                    ms=4, capsize=2, elinewidth=1, label=r"pilot fit $\hat\omega_1$")
+        for sel, face, lab in ((~bad, blue, r"loglog-log $\hat\omega$"),
+                               (bad, "white", r"loglog-log $\hat\omega$, line rejected")):
+            ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="s", color=blue, mfc=face, ms=4.5,
+                        capsize=2, elinewidth=1, label=lab)
+        ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+        ax.set(xlabel="$p$", ylabel=r"$\omega$", xlim=(0, 1), ylim=(0, None))
+        ax.legend(loc="lower left", fontsize=8)
+        fig.savefig(out_dir / "erw_omega_vs_p.pdf")
+        plt.close(fig)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--tag", required=True, help="the sweep's tag: studies sweep_p<p>_<tag>")
@@ -209,6 +270,8 @@ def main() -> int:
                     help="where the studies live (default: this experiment's data/)")
     ap.add_argument("--omega-loglog", action="store_true",
                     help="also draw omega_loglog_vs_p_<tag>.png from each study's omega_loglog.json")
+    ap.add_argument("--article", type=Path, default=None, metavar="DIR",
+                    help="also write the article's erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf into DIR")
     args = ap.parse_args()
 
     pat = re.compile(rf"sweep_p([0-9.]+)_{re.escape(args.tag)}")
@@ -236,6 +299,10 @@ def main() -> int:
     if args.omega_loglog:
         outs["omega_loglog_vs_p"] = args.data_root / f"omega_loglog_vs_p_{args.tag}.png"
         plot_omega_loglog(res, args.data_root, args.tag, outs["omega_loglog_vs_p"], plt)
+    if args.article:
+        args.article.mkdir(parents=True, exist_ok=True)
+        plot_article(res, args.data_root, args.tag, args.article, plt)
+        print(f"[plot] -> {args.article}/erw_gamma_vs_p.pdf, erw_omega_vs_p.pdf", flush=True)
     print(f"[plot] p = {sorted(res)}", flush=True)
     for o in outs.values():
         print(f"[plot] -> {o}", flush=True)
