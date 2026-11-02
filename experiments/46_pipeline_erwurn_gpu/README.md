@@ -107,7 +107,7 @@ Readings:
    planner's. Both give $m_0^\star=14$, and `plot_pipeline.py` asserts that. The pilot
    correction's extrapolation is now its own figure.
 
-Figures were copied to `images/` here (PNG) and to the repo-root `images/` (PDF, for `article.tex`).
+Figures were copied to `images/` here (PNG) and to `../article_writting/images/` (PDF, for the article on Overleaf).
 
 ### Superseded runs (in `data/`, gitignored)
 
