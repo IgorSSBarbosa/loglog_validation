@@ -198,7 +198,8 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     per-probe affine exponents and the spread across them. That block is what
     `_resolve_d` prefers, and the reason is measured rather than assumed -- see
     D_PROBES. The last probe's own scales, timings and affine fit are returned
-    alongside it so the record still shows one complete window.
+    alongside it so the record still shows one complete window, and `probes`
+    lists every probe's scales, timings and affine fit.
 
     A model with `batched_cost` (the *_gpu ones) is timed by `probe_batched`
     on the pilot's own scales instead of by `probe_window`. On a GPU the
@@ -251,6 +252,11 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     out["d_probes"] = ds
     out["probe_seconds"] = float(time.perf_counter() - t0)
     out["probe_seeds"] = [COST_PROBE_SEED + j for j in range(len(fits))]
+    # Every probe's timings, not just the last one's: on a shared GPU one probe
+    # can be disturbed (2026-10-28: d = 1.16 against four at 0.96), and the
+    # last alone then shows a curve the mean d was not built from.
+    out["probes"] = [{"scales": f.get("scales"), "elapsed": f.get("elapsed"),
+                      "affine": f.get("affine")} for f in fits]
     if len(ds) >= 2:
         sd_ = float(np.std(ds, ddof=1))
         out["d_across_probes"] = {"d": float(np.mean(ds)), "sd": sd_,
