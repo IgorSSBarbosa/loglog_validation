@@ -205,6 +205,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `gamma_mle` | loglog | Gaussian MLE, with `trustworthy` diagnostics |
 | `compare_methods` | loglog | all four, bundled |
 | `fit_correction` | correction | eq. (232) fit → $(a_0,\gamma,a_1,\omega_1)$ |
+| `fit_correction_pinned` | correction | the same fit with $\gamma$ pinned to the long run's $\hat\gamma$, with $\chi^2$ p-value; feeds $B_{fs}$ in `report.py` |
 | `omega1_from_bias_decay` | correction | $\omega_1$ from how $\hat\gamma_i$ drifts |
 | `local_slopes` | local_slope | $s_k$, $\Delta s_k$, $w_k$ with Jacobian-propagated se and resolved flags |
 | `fit_power`, `fit_log` | local_slope | (P) $\gamma + c\,i^{-\omega}$ and (L) $\gamma + c/\ln i$ on $s_k$, with $\chi^2$, dof, $p$ |

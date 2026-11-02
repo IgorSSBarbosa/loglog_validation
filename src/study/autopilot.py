@@ -830,7 +830,7 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     # the run's bar has filled and closed, which is the worst possible moment
     # for the console to look finished when it is not.
     with P.phase("analysing the run (eq. (526) refit + the eq. (720) bound)"):
-        res = report_mod.analyse(final)
+        res = report_mod.analyse(final, pilot=report_mod._pilot(sd))
     with P.phase("writing report.md and details.md"):
         report_mod.write_report(sd, res, final, consts, plan)
         report_mod.write_details(sd, res, final, consts, plan)
