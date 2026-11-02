@@ -173,7 +173,10 @@ def fig_allocation(d: dict, rho: float):
                       r"\dfrac{|\hat a_1|\,\rho^{-\hat\omega_1 m_0}}{\rho^{\hat\omega_1}-1}$")
     ax.semilogy(t["m0"], t["se"], "s-", color=DATA,
                 label=r"$\hat b_{\rm SE}(m_0)=\sqrt{\dfrac{12\,\hat\sigma^2_\infty}{n(m_0)\,m^3}}$")
-    ax.axvline(j, color=REF, ls="--", lw=1)
+    # Stops at the crossing, so it never runs behind the formulas in the legend.
+    lo = min(t["fs"].min(), t["se"].min()) / 2
+    ax.set_ylim(bottom=lo)
+    ax.vlines(j, lo, max(t["fs"][j], t["se"][j]), color=REF, ls="--", lw=1)
     ax.annotate(rf"$m_0^\star={j}$" "\n" rf"$n(m_0^\star)={thin(t['n'][j])}$",
                 (j, t["se"][0]), xytext=(-5, 4), textcoords="offset points",
                 ha="right", fontsize=8)
