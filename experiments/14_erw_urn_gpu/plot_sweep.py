@@ -24,7 +24,9 @@ gap wherever the final ladder doesn't start at 8192.
     final's gamma-hat) ± se, next to the pilot's eq. (232) omega1 and the conjecture.
     Run that driver on every study first; a missing file raises.
   - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
-    appendix (user, 2026-11-02), without titles. The gamma figure adds a panel of
+    appendix (user, 2026-11-02), without titles. The omega figure also draws the pilot
+    refitted with gamma pinned to gamma-hat (answer.json's pilot_refit), open where its chi2
+    warns. The gamma figure adds a panel of
     gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
     --omega-loglog's inputs.
 
@@ -252,6 +254,15 @@ def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> No
         ax.errorbar(ps, [res[p]["omega1"]["value"] for p in ps],
                     yerr=[res[p]["omega1"]["se"] for p in ps], fmt="o", color="#e8622c",
                     ms=4, capsize=2, elinewidth=1, label=r"pilot fit $\hat\omega_1$")
+        # The refit with gamma pinned to the final's gamma-hat: the omega1 of B_fs (report.py,
+        # user 2026-11-02). Open where its chi2 warns.
+        rf = [res[p]["answer"]["pilot_refit"] for p in ps]
+        warn = np.array([r["warn"] for r in rf])
+        for sel, face, lab in ((~warn, "#2e8b57", r"pilot refit, $\gamma=\hat\gamma$"),
+                               (warn, "white", r"pilot refit, $\chi^2$ warning")):
+            ax.errorbar(ps[sel], [r["omega1"] for r, s_ in zip(rf, sel) if s_],
+                        yerr=[r["omega1_se"] for r, s_ in zip(rf, sel) if s_], fmt="D",
+                        color="#2e8b57", mfc=face, ms=4, capsize=2, elinewidth=1, label=lab)
         for sel, face, lab in ((~bad, blue, r"loglog-log $\hat\omega$"),
                                (bad, "white", r"loglog-log $\hat\omega$, line rejected")):
             ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="s", color=blue, mfc=face, ms=4.5,
