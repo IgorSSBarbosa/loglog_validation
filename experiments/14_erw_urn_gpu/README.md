@@ -209,3 +209,28 @@ python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h --omega-loglog
 - **Pilot ladder (user's call).** At this speed a pilot on e.g. 64..65536 costs ~0.5 s
   and would give the planner a clean $d$ and throughput. But it changes where
   $\omega_1$ is measured, and it breaks the like-for-like with 12's pilots.
+
+## Wilson interval with the pinned pilot refit, tag `2h` (2026-11-02)
+
+**Change (user, 2026-11-02).** `report.py` now builds $B_{fs}$ of eq. (720) from the pilot
+refitted with $\gamma$ pinned to the final's $\hat\gamma$ (`tools/correction.py`'s
+`fit_correction_pinned`), not from the plan's $\gamma$-free fit. Its $\chi^2$ (N − 3 dof)
+is a warning only, at p < 0.01. Every study was re-reported; nothing was redrawn.
+
+| p | Wilson 95% (new) | contains γ | refit $\omega_1$ | refit χ² p | old Wilson 95% |
+|---|---|---|---|---|---|
+| 0.05 | [0.500005, 0.500050] | no | 1.227 | 4e-19 | [0.50001, 0.50005] (no) |
+| 0.1 | [0.500003, 0.500051] | no | 1.205 | 3e-14 | [0.50001, 0.50005] (no) |
+| 0.15 | [0.499996, 0.500045] | yes | 1.185 | 4e-12 | [0.50000, 0.50004] (no) |
+| 0.65 | [0.49978, 0.50100] | yes | 0.486 | 2e-8 | [0.50015, 0.50063] (no) |
+| 0.7 | [0.49893, 0.50717] | yes | 0.338 | 4e-28 | [0.50199, 0.50410] (no) |
+| 0.725 | [0.50036, 0.52059] | no | 0.293 | 2e-41 | [0.50885, 0.51210] (no) |
+| 0.775 | [0.54996, 0.57041] | yes | 0.293 | 1e-47 | [0.55853, 0.56184] (no) |
+| 0.8 | [0.59838, 0.60759] | yes | 0.332 | 1e-31 | [0.60176, 0.60421] (no) |
+
+The other 12 non-critical p contain γ before and after. Coverage 12/20 → 17/20. All three
+misses warn. The warning also fires at 0.15, 0.2, 0.65–0.85 (7 covered values) and at
+p = 3/4. At p = 0.05 the miss is bias, not noise: exact $E|S_i|$ (DP to $2^{17}$, the
+last point extended with local exponent 1.000) gives $\hat\gamma-\tfrac12=2.80\times10^{-5}$
+on $2^{13}..2^{18}$, against the measured $2.76\times10^{-5}$, with $B_{fs}=0.93\times10^{-5}$.
+

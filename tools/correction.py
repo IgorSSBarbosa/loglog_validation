@@ -147,6 +147,87 @@ def fit_correction(
         "converged": bool(best.success),
     }
 
+
+def fit_correction_pinned(
+    scales: Sequence,
+    y_bar: Sequence,
+    sigma_log: Sequence,
+    gamma: float,
+    gamma_se: float,
+    *,
+    omega1_grid: Sequence[float] = (0.25, 0.5, 1.0, 2.0, 4.0),
+) -> dict:
+    """`fit_correction`'s model with gamma tied to an independent estimate.
+
+    Decision (user, 2026-11-02): the pilot is refitted with gamma pinned to the
+    long run's gamma-hat, and this (omega1, a1) feeds B_fs. With gamma free, the
+    fit trades gamma against the correction across the pilot's few scales; the
+    long run's gamma-hat is far more precise and an independent draw. Pinning
+    is a penalty (gamma - gamma_hat)/gamma_se added to the residuals, so the
+    fit carries gamma-hat's own error and the chi2 has len(scales) - 3 dof.
+
+    Measured on this repo's finished studies (scratch study, 2026-11-02): ERW
+    coverage of eq. (720) went from 21/35 to 32/35, with omega1 closer to the
+    exact value. It fails when the long run sits on the pilot's own scales
+    (percolation d = 4, 5): gamma-hat is then biased, the pinned fit sees a
+    correction that dies too fast, and omega1 comes out too large. The chi2
+    p-value flagged both (3e-8, 1e-35), which is why it is returned: a small
+    p says the pilot is not one power-law correction around gamma-hat.
+    """
+    from scipy.optimize import least_squares
+    from scipy.stats import chi2 as _chi2
+
+    i = np.asarray(scales, dtype=float)
+    y = np.asarray(y_bar, dtype=float)
+    s = np.asarray(sigma_log, dtype=float)
+    if not (i.size == y.size == s.size):
+        raise ValueError(f"scales, y_bar, sigma_log differ in length: {i.size}, {y.size}, {s.size}")
+    if i.size < 4:
+        raise ValueError("need at least 4 scales for 3 free parameters and 1 dof")
+    if np.any(i <= 0) or np.any(y <= 0) or np.any(s <= 0):
+        raise ValueError("scales, y_bar and sigma_log must be strictly positive")
+    if not gamma_se > 0:
+        raise ValueError(f"gamma_se must be positive; got {gamma_se}")
+
+    log_i, log_y, w = np.log(i), np.log(y), 1.0 / s
+
+    def residual(theta):
+        log_a0, g, a1, omega1 = theta
+        r = w * (log_a0 + g * log_i + a1 * i ** (-omega1) - log_y)
+        return np.append(r, (g - gamma) / gamma_se)
+
+    log_a00 = float(np.mean(log_y - gamma * log_i))
+    best = None
+    for omega0 in omega1_grid:
+        for a10 in (-1.0, 1.0):   # a1 = 0 is a saddle when omega1 is free
+            fit = least_squares(
+                residual, x0=[log_a00, gamma, a10, omega0],
+                bounds=([-np.inf, -np.inf, -np.inf, _OMEGA1_BOUNDS[0]],
+                        [np.inf, np.inf, np.inf, _OMEGA1_BOUNDS[1]]))
+            if best is None or fit.cost < best.cost:
+                best = fit
+
+    log_a0, g, a1, omega1 = best.x
+    J = best.jac
+    cov = np.linalg.pinv(J.T @ J)
+    chi2 = float(2.0 * best.cost)
+    dof = int(i.size - 3)
+    at_bound = bool(np.isclose(omega1, _OMEGA1_BOUNDS, rtol=1e-6).any())
+    return {
+        "gamma": float(g),
+        "omega1": float(omega1),
+        "omega1_se": float(np.sqrt(cov[3, 3])),
+        "a0": float(np.exp(log_a0)),
+        "a1": float(a1),
+        "a1_se": float(np.sqrt(cov[2, 2])),
+        "chi2": chi2,
+        "dof": dof,
+        "p_value": float(_chi2.sf(chi2, dof)),
+        "omega1_at_bound": at_bound,
+        "converged": bool(best.success),
+    }
+
+
 def omega1_from_bias_decay(
     scales: Sequence,
     gamma_hats: Sequence,

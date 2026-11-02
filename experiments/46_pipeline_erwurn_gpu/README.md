@@ -66,7 +66,8 @@ Launched over ssh on missouri (shared home, same checkout), under `nohup`.
 | pilot | 3 × 488,519 samples per scale. $\hat\gamma_{\rm pilot}=0.5018$, $\hat\omega_1=0.809\pm0.005$, $\hat a_1=-0.320$, $\hat d=0.997\pm0.010$ (5 probes, all clean: 0.96–1.02) |
 | plan | $m_0^\star=14$, $m=6$ (scales $2^{15}..2^{20}$), $n=102{,}166{,}094$, predicted bias $1.8\times10^{-5}$, sd $2.6\times10^{-5}$ per replicate |
 | long run | 3 replicates, 1577 s, 0.44× the plan's 3595 s |
-| estimate | $\hat\gamma=0.50009$, eq. (720) 95% $[0.49999, 0.50019]$ (without the $\omega_2$ piece). Contains 1/2 |
+| estimate | $\hat\gamma=0.50009$, eq. (720) 95% $[0.49992, 0.50026]$ (without the $\omega_2$ piece). Contains 1/2. Before 2026-11-02, with the plan's $\omega_1=0.809$ in $B_{fs}$: $[0.49999, 0.50019]$ |
+| pilot refit, $\gamma$ pinned to $\hat\gamma$ | $\omega_1=0.707\pm0.009$, $a_1=-0.304$, the $\omega_1,a_1$ of $B_{fs}=1.0\times10^{-4}$. $\chi^2=31.9$ on 8 dof, p = 1e-4: **warning** (one correction does not explain the pilot around $\hat\gamma$) |
 | replicate-$t$ | $[0.50004, 0.50014]$: scatter only, **excludes** 1/2 (bias ≈ $1\times10^{-4}$) |
 
 ![pilot](images/pipeline_pilot.png)

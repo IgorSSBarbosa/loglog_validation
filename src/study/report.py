@@ -42,6 +42,14 @@ the span is reported whenever it exceeds `_BFS_SPAN_LIMIT`. A bound whose bias
 term moves two orders of magnitude inside its own input's error bar is a
 statement about the pilot, not about gamma.
 
+Which omega1 (user, 2026-11-02). B_fs uses the PILOT refitted with gamma pinned
+to this run's gamma-hat (`correction.fit_correction_pinned`), not the plan's
+gamma-free pilot fit, which is kept in answer.json for comparison only. The
+refit's chi2 p-value is reported as a warning: below `REFIT_WARN_P` the pilot
+is not one power-law correction around gamma-hat, and B_fs, which assumes it
+is, may be wrong in either direction. No rule replaces B_fs when that happens;
+the warning is the answer.
+
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/report.py --study mystudy --data-root ... --budget-analysis
@@ -68,9 +76,9 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.artifacts import artifact_path, write_artifact  # noqa: E402
+from tools.artifacts import artifact_path, read_artifact, write_artifact  # noqa: E402
 from tools.constants import format_table, load, measured  # noqa: E402
-from tools.correction import fit_correction  # noqa: E402
+from tools.correction import fit_correction, fit_correction_pinned  # noqa: E402
 from tools.coverage import interval  # noqa: E402
 from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
 from tools.loglog_plot import fit_plot, loglog_plot  # noqa: E402
@@ -82,6 +90,11 @@ from src.budget.allocation_table import human_time  # noqa: E402
 
 LEVEL = 0.95
 
+#: Below this chi2 p-value the pinned pilot refit is flagged: the pilot is not
+#: one power-law correction around gamma-hat. Same threshold as the loglog-log
+#: line in experiment 14's sweep table.
+REFIT_WARN_P = 0.01
+
 #: How far B_fs may swing across omega1 +/- 1 se before the bound is called
 #: undetermined. 10x is generous -- a bound is allowed to be loose -- but past
 #: it the number being printed is the pilot's guess about an exponent, not a
@@ -89,7 +102,7 @@ LEVEL = 0.95
 _BFS_SPAN_LIMIT = 10.0
 
 
-def wilson_inputs(final: dict, cv: np.ndarray, reps: list) -> dict:
+def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = None) -> dict:
     """The eq. (720) constants, each from the only place it can honestly come from.
 
     omega1 and a1 come from the PILOT, never from a refit on the final data,
@@ -104,17 +117,25 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list) -> dict:
     mean and so survives summarization; Lambda comes from the log_moment field
     (`tools/summary.py`), absent from any run drawn before that field existed.
 
+    `refit` is the pilot refitted with gamma pinned to this run's gamma-hat
+    (user, 2026-11-02): still pilot data, so the reason above stands; only
+    gamma is borrowed from the run. When it is given, its omega1/a1 are used.
+
     Returns the kwargs `wilson_interval` wants, plus `why` naming whatever is
     missing. A missing piece is reported, never defaulted: eq. (720) with a
     term silently set to zero is not a bound.
     """
     why = []
-    c = (final.get("plan") or {}).get("constants_at_plan_time") or {}
-    omega1 = (c.get("omega1") or {}).get("value")
-    a1 = (c.get("a1") or {}).get("value")
-    omega1_se = (c.get("omega1") or {}).get("se")
-    if omega1 is None or a1 is None:
-        why.append("omega1/a1 (the plan recorded no constants_at_plan_time)")
+    if refit is not None:
+        omega1, a1, omega1_se = refit["omega1"], refit["a1"], refit["omega1_se"]
+    else:
+        c = (final.get("plan") or {}).get("constants_at_plan_time") or {}
+        omega1 = (c.get("omega1") or {}).get("value")
+        a1 = (c.get("a1") or {}).get("value")
+        omega1_se = (c.get("omega1") or {}).get("se")
+        why.append("the pinned pilot refit (no pilot.json beside final.json)")
+        if omega1 is None or a1 is None:
+            why.append("omega1/a1 (the plan recorded no constants_at_plan_time)")
 
     lm = [r.get("log_moment") for r in reps]
     if any(x is None for x in lm):
@@ -134,8 +155,21 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list) -> dict:
     }
 
 
-def analyse(final: dict, level: float = LEVEL) -> dict:
-    """gamma-hat and its error from a completed run's per-replicate summaries."""
+def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
+    """The pilot's eq. (232) fit with gamma pinned to the run's gamma-hat, plus its warning."""
+    r = fit_correction_pinned(pilot["scales"], pilot["y_bar"], pilot["sigma_log"],
+                              gamma, gamma_se)
+    r["warn"] = bool(r["p_value"] < REFIT_WARN_P or r["omega1_at_bound"])
+    r["warn_p"] = REFIT_WARN_P
+    return r
+
+
+def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dict:
+    """gamma-hat and its error from a completed run's per-replicate summaries.
+
+    `pilot` (pilot.json) enables the pinned refit that B_fs is built from; without
+    it the eq. (720) bound is not assembled, and `wilson_why` says so.
+    """
     scales = final["scales"]
     rho, m, m0, n = final["rho"], final["m"], final["m0"], final["n"]
     reps = final["per_replicate"]
@@ -168,9 +202,12 @@ def analyse(final: dict, level: float = LEVEL) -> dict:
     # definition and Assumption 6's honest finite-sample stand-in for the
     # limit -- not a mean over scales, which would average the limit together
     # with the scales still converging to it.
-    wi = wilson_inputs(final, cv, reps)
-    sigma_inf2 = wi["sigma_inf2"]
+    sigma_inf2 = float(cv[-1] ** 2)
     w_sd = sigma_se(n, m, rho, sigma_inf2)      # (n, m, rho, sigma_inf2) -- not cv first
+    # gamma-hat's error for the pin: the replicate se, or with one replicate the
+    # closed-form sd (which is then the same thing, without the spread).
+    refit = None if pilot is None else pinned_refit(pilot, gamma, se if se else w_sd)
+    wi = wilson_inputs(final, cv, reps, refit)
 
     # Theorem thm:wilson (eq. 720). A BOUND on |gamma_hat - gamma|, so it
     # overcovers; unlike the replicate interval it carries the finite-size
@@ -207,7 +244,10 @@ def analyse(final: dict, level: float = LEVEL) -> dict:
             "cv": cv.tolist(), "sigma_inf2": sigma_inf2, "wilson_sd": w_sd,
             "sigma_max2": wi["sigma_max2"], "Lambda": wi["Lambda"],
             "wilson": wilson, "wilson_why": wilson_why,
-            "wilson_bfs_span": b_span, "omega1_se": wi["omega1_se"]}
+            "wilson_bfs_span": b_span, "omega1_se": wi["omega1_se"],
+            "pilot_refit": refit,
+            "omega1_pilot_fit": ((final.get("plan") or {}).get("constants_at_plan_time")
+                                 or {}).get("omega1")}
 
 
 def _fmt(v, se=None, digits=4):
@@ -276,8 +316,9 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
         lines += [
             "| term | value | what it is |",
             "|---|---|---|",
-            f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot's "
-            f"omega1/a1 |",
+            f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot "
+            f"refitted with gamma pinned to gamma-hat (omega1 = "
+            f"{res['pilot_refit']['omega1']:.3g}) |",
             f"| B_good | {w['B_good']:.3g} | Jensen bias of the log |",
             f"| B_bad | {w['B_bad']:.3g} | the stray-sample-mean event, needs "
             f"Lambda = {res['Lambda']:.3g} |",
@@ -291,6 +332,7 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
             f"bias is real. Disagreement between them is informative, not "
             f"alarming -- it is the size of the bias.", "",
         ]
+        lines += _refit_lines(res)
         if not w["complete"]:
             lines += [f"> Incomplete bound: {', '.join(w['missing_terms'])}. "
                       f"A bound missing a term is not a bound -- the half-width "
@@ -355,6 +397,28 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
     p = sd / "report.md"
     p.write_text("\n".join(lines))
     return p
+
+
+def _refit_lines(res: dict) -> list[str]:
+    """report.md's paragraph on the pinned refit, with its warning when it fires."""
+    r = res.get("pilot_refit")
+    if r is None:
+        return []
+    o0 = (res.get("omega1_pilot_fit") or {}).get("value")
+    out = [f"B_fs comes from the pilot refitted with gamma pinned to gamma-hat: "
+           f"omega1 = {_fmt(r['omega1'], r['omega1_se'])}, a1 = {r['a1']:+.4g}, "
+           f"chi2 = {r['chi2']:.3g} on {r['dof']} dof, p = {r['p_value']:.3g}"
+           + (f" (the plan's gamma-free pilot fit had omega1 = {o0:.4g})." if o0 is not None else "."),
+           ""]
+    if r["warn"]:
+        why = ("omega1 sits at its fit bound" if r["omega1_at_bound"] else
+               f"chi2 p = {r['p_value']:.2g} < {r['warn_p']}")
+        out += [f"> **Warning: one correction to scaling does not explain the pilot "
+                f"around gamma-hat** ({why}). B_fs assumes it does, so the bound "
+                f"above may be wrong in either direction. Seen in this repo near "
+                f"the ERW's critical p = 3/4 and when the long run sits on the "
+                f"pilot's own scales (gamma-hat itself biased).", ""]
+    return out
 
 
 def _d_check_section(sd: Path) -> list[str]:
@@ -553,6 +617,12 @@ def print_answer(res: dict, *, log=print) -> None:
         log(f"  {pct}% [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
               f"Student t({res['dof']}), {res['replicates']} replicates "
               f"-- scatter only, no bias term")
+    r = res.get("pilot_refit")
+    if r is not None and r["warn"]:
+        log(f"  !! pilot refit with gamma pinned: chi2 = {r['chi2']:.3g}/{r['dof']}, "
+            f"p = {r['p_value']:.2g}"
+            + (", omega1 at its bound" if r["omega1_at_bound"] else "")
+            + " -- one correction to scaling does not explain the pilot; B_fs may be wrong")
     if w is not None:
         sp = res.get("wilson_bfs_span")
         if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
@@ -561,6 +631,11 @@ def print_answer(res: dict, *, log=print) -> None:
     elif res.get("wilson_why"):
         log(f"  no eq. (720) bound ({', '.join(res['wilson_why'])}) -- the "
               f"interval above has no bias term")
+
+
+def _pilot(sd: Path) -> dict | None:
+    """pilot.json, or None for a study that has none (a reused or hand-made plan)."""
+    return read_artifact(sd, "pilot") if artifact_path(sd, "pilot").exists() else None
 
 
 def _main(argv=None) -> None:
@@ -590,7 +665,7 @@ def _main(argv=None) -> None:
         if done < 2:
             print("  one replicate has no spread: the replicate interval is "
                   "unavailable until the second finishes")
-        print_answer(analyse(partial, level=a.level))
+        print_answer(analyse(partial, level=a.level, pilot=_pilot(sd)))
         return
 
     fj = artifact_path(sd, "final")
@@ -603,7 +678,7 @@ def _main(argv=None) -> None:
     plan = final.get("plan", {})
     consts = load(sd)
 
-    res = analyse(final, level=a.level)
+    res = analyse(final, level=a.level, pilot=_pilot(sd))
 
     fig_path = _plot(sd, res, final)
     fit_path = _plot_fit(sd, res, final)

@@ -24,7 +24,9 @@ gap wherever the final ladder doesn't start at 8192.
     final's gamma-hat) ± se, next to the pilot's eq. (232) omega1 and the conjecture.
     Run that driver on every study first; a missing file raises.
   - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
-    appendix (user, 2026-11-02), without titles. The gamma figure adds a panel of
+    appendix (user, 2026-11-02), without titles. The omega figure draws only the pilot
+    refitted with gamma pinned to gamma-hat (answer.json's pilot_refit), open where its chi2
+    warns; the other two estimates are in the article's table. The gamma figure adds a panel of
     gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
     --omega-loglog's inputs.
 
@@ -240,21 +242,20 @@ def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> No
         fig.savefig(out_dir / "erw_gamma_vs_p.pdf")
         plt.close(fig)
 
-        ll = [json.loads((data_root / f"sweep_p{label(p)}_{tag}" / "omega_loglog.json").read_text())
-              for p in ps]
-        om = np.array([r["omega"] for r in ll], float)
-        se = np.array([r["se"] for r in ll], float)
-        bad = np.array([r["p_value"] < 0.01 for r in ll])
+        # Only the refit with gamma pinned to the final's gamma-hat: the omega1 of B_fs
+        # (report.py). The pilot fit and the loglog-log stay in the article's table (user,
+        # 2026-11-02). Open where its chi2 warns.
         fig, ax = plt.subplots(figsize=(5.4, 3.4), constrained_layout=True)
         pp = np.linspace(0, 1, 801)
         ax.plot(pp, omega_conjecture(pp), color=grey, lw=1.2,
                 label=r"conjecture $\omega=\min\{1,|4p-3|\}$")
-        ax.errorbar(ps, [res[p]["omega1"]["value"] for p in ps],
-                    yerr=[res[p]["omega1"]["se"] for p in ps], fmt="o", color="#e8622c",
-                    ms=4, capsize=2, elinewidth=1, label=r"pilot fit $\hat\omega_1$")
-        for sel, face, lab in ((~bad, blue, r"loglog-log $\hat\omega$"),
-                               (bad, "white", r"loglog-log $\hat\omega$, line rejected")):
-            ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="s", color=blue, mfc=face, ms=4.5,
+        rf = [res[p]["answer"]["pilot_refit"] for p in ps]
+        om = np.array([r["omega1"] for r in rf])
+        se = np.array([r["omega1_se"] for r in rf])
+        warn = np.array([r["warn"] for r in rf])
+        for sel, face, lab in ((~warn, blue, r"pilot refit $\hat\omega_1$, $\gamma=\hat\gamma$"),
+                               (warn, "white", r"pilot refit, $\chi^2$ warning")):
+            ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="o", color=blue, mfc=face, ms=4.5,
                         capsize=2, elinewidth=1, label=lab)
         ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
         ax.set(xlabel="$p$", ylabel=r"$\omega$", xlim=(0, 1), ylim=(0, None))
