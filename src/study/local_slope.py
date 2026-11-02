@@ -197,7 +197,7 @@ def draw(plan: dict, model: str, params: dict, seed, on_cell) -> list[dict]:
         t = time.perf_counter()
         (i, stat), = generate(model, [a["scale"]], a["draw"], params, seed=ss,
                               reduce=summarize_scale).items()
-        y_new, _, cv_new, _ = stat
+        y_new, _, cv_new, *_ = stat
         rec = seed_record(ss)
         if a["action"] == "top-up":
             b = a["base"]
