@@ -245,11 +245,11 @@ def fig_checks(d: dict, rho: float):
     fig, axs = plt.subplots(2, 3, figsize=(7.2, 4.4), constrained_layout=True)
 
     def per_rep(ax, values, label):
-        """Each replicate a light point, their mean a bar; scales are not joined."""
+        """Each replicate a light point, their mean a full one; scales are not joined."""
         for v in values:
-            ax.plot(k, v, "o", color=DATA, alpha=0.45, ms=3.5)
+            ax.plot(k, v, "o", color=DATA, alpha=0.35, ms=3.5)
         mean = np.mean(values, axis=0)
-        ax.plot(k, mean, "_", color=DATA, ms=11, mew=1.8, label=label)
+        ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
         return mean
 
     ax = axs[0, 0]
