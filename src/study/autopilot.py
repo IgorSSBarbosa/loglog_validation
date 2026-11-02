@@ -112,6 +112,7 @@ from tools.wilson import finite_size_bias  # noqa: E402
 from src.budget.allocation_table import human_time  # noqa: E402
 from src.study import pilot as pilot_mod  # noqa: E402
 from src.study import plan as plan_mod  # noqa: E402
+from src.study.refit_cost import refit_cost as refit_cost_round  # noqa: E402
 from src.study import report as report_mod  # noqa: E402
 from src.study.local_slope import local_slope  # noqa: E402
 from src.study import run as run_mod  # noqa: E402
@@ -131,6 +132,11 @@ MAX_ROUNDS = 6
 #: 0.05): this gate refuses to spend a budget, so it should fire only when the
 #: correction is genuinely invisible, not merely weak. See `ladder_check`.
 LADDER_P_MAX = 0.01
+
+#: Cost re-fit rounds (src/study/refit_cost.py) before drawing anyway. Each
+#: round re-plans; another is needed only if the new window climbs above every
+#: scale timed so far, which a cost model that is already right does not do.
+MAX_REFITS = 3
 
 
 def ladder_check(reps, scales) -> dict:
@@ -489,7 +495,7 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
               target_se: float | None = None, pilot_seconds_cap: float | None = None,
               reuse_from: Path | None = None, reuse_cache: bool = False,
               yes: bool = False, max_scale: float | None = None,
-              slopes: bool = True, log=print) -> dict:
+              slopes: bool = True, refit_cost: bool = True, log=print) -> dict:
     """pilot -> plan -> run -> report, deciding in between. Returns the record.
 
     Two ways to say how big the study is, and exactly one of them is required.
@@ -503,6 +509,11 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
 
     `slopes` ends a drawn study with src/study/local_slope.py. Its draws (top-ups
     and gaps, at the final's n) are NOT inside --time: it prints its own prediction.
+
+    `refit_cost` re-fits eq. (cost) on a short run over the planned window when
+    the plan's ladder ends above the pilot's, and re-plans on it before drawing
+    (the article, Step 2, "Re-fitting the cost"; src/study/refit_cost.py). Its
+    draws ARE inside --time.
     """
     t0 = time.perf_counter()
     if (seconds is None) == (target_se is None):
@@ -524,9 +535,11 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
     # Independent streams for the three draws. The pilot's samples must not
     # reappear in the run it sized -- that would be the same duplication
     # tools/rng.py's spawn(skip=) exists to prevent, one level up. Children 0
-    # and 1 are what spawn(seed, 2) gave before the local slopes were added.
-    pilot_seed, run_seed, slope_seed = spawn(
-        seed if seed is not None else recipe.get("seed"), 3)
+    # and 1 are what spawn(seed, 2) gave before the local slopes were added,
+    # and 0-2 what spawn(seed, 3) gave before the cost re-fit was: children are
+    # fixed by their index, so adding one changes no earlier stream.
+    pilot_seed, run_seed, slope_seed, refit_seed = spawn(
+        seed if seed is not None else recipe.get("seed"), 4)
     if reused:
         _refuse_seed_collision(reused["entropy"], run_seed, reused["source_dir"])
         pilot_mod.write_reused(sd, reused, log=log)
@@ -609,6 +622,7 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
     rec = _plan_run_report(recipe, sd, consts, rounds, lc, seconds=left,
                            replicates=replicates, seed=run_seed, rho=rho, m=m,
                            max_scale=max_scale,
+                           refit_seed=refit_seed if refit_cost else None,
                            progress=progress, pilot_seconds=pilot_seconds,
                            log=log, forced=not ok, target_se=target_se,
                            draw=yes or not target_se,
@@ -713,7 +727,7 @@ def _record_give_up(consts, rounds, sd, pilot_seconds, lc) -> dict:
 def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
                      seed, rho, m, progress, pilot_seconds, log,
                      forced=False, target_se=None, draw=True,
-                     resume="", max_scale=None) -> dict:
+                     resume="", max_scale=None, refit_seed=None) -> dict:
     """Steps 2-4, with the plan accepted automatically and a bar over the run.
 
     `forced` means the gate failed and --force overrode it. It changes nothing
@@ -725,19 +739,34 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     invoked WITHOUT --accept, so no plan.json is written -- the file means "a
     decision was taken", and the user has not taken it yet. What they get is
     the proposal, the wall clock it needs, and the command that runs it.
+
+    `refit_seed` (None = off) runs the cost re-fit loop between plan and draw;
+    see `_refit_and_replan`.
     """
-    constraint = (["--target-se", repr(float(target_se))] if target_se
-                  else ["--time", f"{seconds:.0f}s"])
-    argv = (["--study", sd.name, "--data-root", str(sd.parent)] + constraint +
-            ["--replicates", str(replicates), "--rho", str(rho), "--m", str(m)]
-            + (["--max-scale", repr(float(max_scale))] if max_scale is not None else [])
-            + (["--accept"] if draw else []))
-    # plan.py prints its own tables, but the bisection that precedes them
-    # (plan.budget_for_seconds: up to 200 allocations) prints nothing, so on a
-    # wide ladder the step opens with a silent pause.
-    P.say("")
-    with P.phase("planning: searching for the allocation that fits the budget"):
-        plan_mod._main(argv)
+    t_enter = time.perf_counter()
+
+    def make_plan(secs):
+        constraint = (["--target-se", repr(float(target_se))] if target_se
+                      else ["--time", f"{secs:.0f}s"])
+        argv = (["--study", sd.name, "--data-root", str(sd.parent)] + constraint +
+                ["--replicates", str(replicates), "--rho", str(rho), "--m", str(m)]
+                + (["--max-scale", repr(float(max_scale))] if max_scale is not None else [])
+                + (["--accept"] if draw else []))
+        # plan.py prints its own tables, but the bisection that precedes them
+        # (plan.budget_for_seconds: up to 200 allocations) prints nothing, so on a
+        # wide ladder the step opens with a silent pause.
+        P.say("")
+        with P.phase("planning: searching for the allocation that fits the budget"):
+            plan_mod._main(argv)
+
+    make_plan(seconds)
+    refits = []
+    if draw and refit_seed is not None:
+        refits = _refit_and_replan(
+            sd, make_plan, refit_seed,
+            seconds_left=lambda: (None if seconds is None else
+                                  seconds - (time.perf_counter() - t_enter)),
+            log=log)
     if not draw:
         log(f"\n  --target-se answers a question and stops. To draw it:"
             f"\n      {resume} --yes")
@@ -816,7 +845,7 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
 
     rec = {"ok": True, "drawn": True, "forced": bool(forced),
            "rounds": rounds, "ladder": lc,
-           "pilot_seconds": pilot_seconds, "plan": plan,
+           "pilot_seconds": pilot_seconds, "plan": plan, "cost_refits": refits,
            "constants": {k: vars(v) for k, v in consts.items()},
            "gamma": res["gamma"], "wilson": res.get("wilson"),
            "ci": res["ci"], "seed": seed_record(seed)}
@@ -826,6 +855,43 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
     write_artifact(sd, "autopilot", rec, produced_by="src/study/autopilot.py")
     return rec
 
+
+
+def _refit_and_replan(sd: Path, make_plan, seed, *, seconds_left, log) -> list[dict]:
+    """Re-fit eq. (cost) on the planned window and re-plan, until the window stays put.
+
+    Triggered when the accepted plan's ladder ends above the largest scale the
+    cost was timed at -- the pilot's, then each re-fit's. Each round draws from
+    its own child of `seed` and is charged to the budget: `seconds_left()` is
+    re-read before every round and every re-plan. Returns the rounds' records.
+    """
+    pilot = read_artifact(sd, "pilot")
+    timed_top = max(int(i) for i in pilot["scales"])
+    out = []
+    for k, ss in enumerate(spawn(seed, MAX_REFITS)):
+        plan = read_artifact(sd, "plan")
+        top = int(plan["scales"][-1])
+        if top <= timed_top:
+            if k == 0:
+                log(f"\ncost re-fit: not needed, the planned window ends at {top}, "
+                    f"inside the scales the cost was timed at (<= {timed_top})")
+            break
+        rec = refit_cost_round(sd, seed=ss, seconds_left=seconds_left(), log=log)
+        out.append(rec)
+        if rec["skipped"]:
+            break
+        timed_top = max(timed_top, top)
+        left = seconds_left()
+        log(f"\nre-planning on the re-fitted cost"
+            + (f" with {human_time(left)} of the budget left" if left is not None else ""))
+        make_plan(left)
+    else:
+        top = int(read_artifact(sd, "plan")["scales"][-1])
+        if top > timed_top:
+            log(f"\n  !! cost re-fit: after {MAX_REFITS} round(s) the window still "
+                f"climbs (now ending at {top}, timed up to {timed_top}); drawing "
+                f"on the last re-fit")
+    return out
 
 
 def _main(argv=None) -> None:
@@ -884,6 +950,10 @@ def _main(argv=None) -> None:
     p.add_argument("--no-local-slope", action="store_false", dest="slopes",
                    help="skip src/study/local_slope.py at the end. It runs by default "
                         "on a drawn study, and its draws are outside --time")
+    p.add_argument("--no-refit-cost", action="store_false", dest="refit_cost",
+                   help="skip the cost re-fit on the planned window (src/study/"
+                        "refit_cost.py). It runs by default whenever the plan's "
+                        "ladder ends above the pilot's, and its draws are inside --time")
     p.add_argument("--no-progress", action="store_false", dest="progress",
                    help="no progress bar (also off automatically when not a TTY)")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -920,7 +990,8 @@ def _main(argv=None) -> None:
                     pilot_cap=a.pilot_cap, max_rounds=a.max_rounds,
                     force=a.force, progress=a.progress, yes=a.yes,
                     reuse_from=reuse_from, reuse_cache=a.reuse_cost,
-                    max_scale=a.max_scale, slopes=a.slopes)
+                    max_scale=a.max_scale, slopes=a.slopes,
+                    refit_cost=a.refit_cost)
     raise SystemExit(0 if rec["ok"] else 1)
 
 

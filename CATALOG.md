@@ -157,6 +157,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `report/plot_allocation.py` | 326 | `plot tool` | Experiment C's two panels: $m_0$ tradeoff, and measured vs predicted decay rate. | `allocation_experiment`, `allocation_table`, `coverage` |
 | `report/plot_loglog.py` | 162 | `plot tool` | Raw data + estimator comparison for any run. | `loglog`, `loglog_plot`, `models`, `persistence` |
 | `report/plot_cost.py` | 88 | `plot tool` | Cost-probe timings. | `loglog_plot` |
+| `study/refit_cost.py` | 200 | `experiment` | Step 2b: when the plan's window ends above the pilot's scales, times a short run (1% of the planned draws) at each window scale, re-fits eq. (cost) $t(i)=\kappa_0+\kappa_1 i^d$, replaces `d` in `constants.json` and writes the window's throughput to `cost_refit.json`, which `plan.py` prefers. `autopilot.py` runs it and re-plans by default (`--no-refit-cost`). | `cost_model`, `constants`, `artifacts`, `models`, `rng` |
 | `study/local_slope.py` | 415 | `experiment`, `statistical tool` | Below a finished study: brings every stored replicate mean to the final's $n$ (reuse / top-up / drop+redraw), draws the gap scales, then $s_k$, $w_k$ and the two fits, `local_slope.json` + `.png`. `--truth` is reporting only. | `local_slope`, `generate`, `rng`, `summary`, `artifacts`, `constants` |
 
 ### `calibration/` — checks on our own machinery, not on a model

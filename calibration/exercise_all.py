@@ -351,15 +351,18 @@ def sec_summary(a: Audit) -> None:
 
     rng = np.random.default_rng(0)
     draws = rng.lognormal(0.0, 0.3, size=20000)
-    y, slog, cv, lm = summarize_scale(draws)
+    y, slog, cv, lm, am, nn = summarize_scale(draws)
     a.close("y_bar is the sample mean", lambda: y, float(draws.mean()), 1e-12)
     a.close("cv is sd/mean", lambda: cv,
             float(draws.std(ddof=1) / draws.mean()), 1e-12)
     a.close("sigma_log is cv/sqrt(n)", lambda: slog, cv / math.sqrt(draws.size), 1e-12)
     a.check("log_moment is finite and positive", lambda: math.isfinite(lm) and lm > 0)
-    a.check("four fields, in the declared order",
+    a.close("abs_moment is the sample E|xi|^3", lambda: am,
+            float(np.mean((draws / draws.mean()) ** 3)), 1e-12)
+    a.check("lognormal draws are all positive", lambda: nn, expect=0)
+    a.check("six fields, in the declared order",
             lambda: SUMMARY_FIELDS,
-            expect=("y_bar", "sigma_log", "cv", "log_moment"))
+            expect=("y_bar", "sigma_log", "cv", "log_moment", "abs_moment", "n_nonpos"))
     a.check("delta is pinned at 1 to match eq. (720)'s B_bad",
             lambda: LOG_MOMENT_DELTA, expect=1.0)
 
@@ -373,8 +376,9 @@ def sec_summary(a: Audit) -> None:
     mixed = summarize_scale([0.0, 1.0, 2.0, 3.0])
     a.check("zeros among positives are dropped from log_moment, not fatal",
             lambda: math.isfinite(mixed[3]))
+    a.check("...and counted in n_nonpos", lambda: mixed[5], expect=1)
 
-    stats = {8: (1.0, 0.1, 0.2, 0.3), 16: (2.0, 0.2, 0.3, 0.4)}
+    stats = {8: (1.0, 0.1, 0.2, 0.3, 1.1, 0), 16: (2.0, 0.2, 0.3, 0.4, 1.2, 0)}
     a.check("replicate_summary transposes to column-major",
             lambda: replicate_summary(stats, [8, 16])["y_bar"], expect=[1.0, 2.0])
     a.check("...ordered by the ladder, not by the mapping's key order",
@@ -2764,6 +2768,7 @@ def sec_study(a: Audit, sc: Scratch) -> None:
     """src/study/ -- the four-step workflow: pilot -> plan -> run -> report"""
     from src.study.plan import parse_duration, unidentified
     from tools.constants import measured
+    from tools.summary import SUMMARY_FIELDS
 
     a.begin("src/study/", "the four-step workflow: pilot -> plan -> run -> report")
 
@@ -3008,9 +3013,9 @@ def sec_study(a: Audit, sc: Scratch) -> None:
             fin = json.loads((sd / "final.json").read_text())
             a.check("...keeping only the summaries by default",
                     lambda: fin["samples_kept"], expect=False)
-            a.check("...one per replicate, with all four summary fields",
+            a.check("...one per replicate, with every summary field",
                     lambda: sorted(fin["per_replicate"][0]),
-                    expect=["cv", "log_moment", "sigma_log", "y_bar"])
+                    expect=sorted(SUMMARY_FIELDS))
             a.check("...and recording every replicate's seed, so any one can be redrawn",
                     lambda: len(fin["seeds"]), expect=fin["replicates"])
         cli_ok(a, "--keep-samples persists the draws as well",

@@ -406,7 +406,19 @@ def _main(argv=None) -> None:
 
     pj = artifact_path(sd, "pilot")
     pilot = json.loads(pj.read_text()) if pj.exists() else {}
-    tp = a.throughput if a.throughput is not None else pilot.get("throughput")
+    # A cost re-fit on the planned window (src/study/refit_cost.py) supersedes
+    # the pilot's throughput: it was timed at the scales the run will draw.
+    rj = artifact_path(sd, "cost_refit")
+    refit = json.loads(rj.read_text()) if rj.exists() else None
+    if a.throughput is not None:
+        tp, tp_source = a.throughput, "--throughput"
+    elif (refit and refit.get("scales")
+          and refit.get("pilot_created") == pilot.get("created")):
+        tp = refit["throughput"]
+        tp_source = (f"the cost re-fit on {refit['scales'][0]}..{refit['scales'][-1]}, "
+                     f"{artifact_path(sd, 'cost_refit').name}")
+    else:
+        tp, tp_source = pilot.get("throughput"), pilot.get("throughput_source")
     if tp is None:
         raise SystemExit(
             "no throughput measured. The pilot records one from its own draw;\n"
@@ -425,9 +437,7 @@ def _main(argv=None) -> None:
     if ratio_note:
         print(ratio_note)
     print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s"
-          + ("  (--throughput)" if a.throughput is not None else
-             f"  (from {pilot['throughput_source']})"
-             if pilot.get("throughput_source") else ""))
+          + (f"  (from {tp_source})" if tp_source else ""))
 
     print("\nerror budget -- how far each constant's own uncertainty moves the plan")
     print(f"  {'constant':<11}{'+/- 1 se':>12}{'moves m0 by':>14}{'worst-case RMSE':>18}")
@@ -439,6 +449,7 @@ def _main(argv=None) -> None:
             # actions: a declared constant is EXACT, a single replicate has
             # simply not been measured enough times.
             why = ("exact -- declared, not fitted" if "declared" in c.source
+                   else "no spread: one short run" if "cost re-fit" in c.source
                    else "no spread: only 1 replicate")
             print(f"  {row['name']:<11}{'--':>12}{why:>32}")
         else:
@@ -523,6 +534,7 @@ def _main(argv=None) -> None:
                 f"  Re-run the pilot with -meta <recipe> to record it.")
         pl["constants_at_plan_time"] = {k: vars(v) for k, v in consts.items()}
         pl["rho"], pl["m"], pl["throughput"] = a.rho, a.m, tp
+        pl["throughput_source"] = tp_source
         pl["max_scale"] = a.max_scale
         rp = write_final_recipe(a.data_root, a.study, pilot["recipe"], pl)
         pl["recipe_path"] = str(rp)

@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "_comment": "Experiment 43: re-measure the cost exponent d on the zhang_w070_8h ladder (2..64), 100 samples per size, through generate() so each size is timed as the long run draws it. Not for estimating d_f.",
+  "model": "percolation_zd_gpu",
+  "params": {"dim": 5, "anchor": "face_far", "geometry": "cylinder"},
+  "scales": [2, 4, 8, 16, 32, 64],
+  "n": 100,
+  "seed": 2026103101
+}

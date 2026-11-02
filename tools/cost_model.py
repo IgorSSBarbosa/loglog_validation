@@ -870,6 +870,8 @@ def probe_batched(spec, params: dict, rng, scales,
          keep (t(4n) - t(n)) / (3n) from each pair. The fixed cost of a call
          is in both timings and cancels, so what is left is the cost of one
          sample and nothing else.
+         For a model with `device_fill`, n is first rounded up to whole waves
+         of the device (`_whole_waves`), so neither call ends part-empty.
 
     `elapsed` is then that marginal cost per scale, the same shape as every
     other probe's, and `fit_cost_probe` fits it unchanged.
@@ -924,6 +926,8 @@ def probe_batched(spec, params: dict, rng, scales,
         if spec.latency_bound:
             n = _saturate(spec, k, params, rng, repeats, aggregator, n,
                           batch_factor, max_n)
+        if spec.device_fill is not None:
+            n = _whole_waves(n, spec.device_fill(), k, batch_factor, max_n)
         big = batch_factor * n
         spec.simulate(k, big, params, rng)               # warm the larger call
         marginal, calls = [], []
@@ -963,6 +967,20 @@ def probe_batched(spec, params: dict, rng, scales,
     if spec.latency_bound:
         out["saturation_ratio"] = SATURATION_RATIO
     return out
+
+
+def _whole_waves(n: int, wave: int, k: int, batch_factor: int, max_n: int) -> int:
+    """n rounded UP to a multiple of `wave`, so n and batch_factor * n both fill
+    the device exactly (see ModelSpec.device_fill). Up, not to the nearest: the
+    walk already found n large enough, and rounding down could undo that."""
+    if wave < 1:
+        raise ValueError(f"device_fill() returned {wave}; it must be >= 1")
+    n = -(-n // wave) * wave
+    if batch_factor * n > max_n:
+        raise RuntimeError(
+            f"probe_batched: at scale {k}, whole waves of {wave} samples make "
+            f"the larger call {batch_factor * n}, above max_n = {max_n}.")
+    return n
 
 
 def _saturate(spec, k: int, params: dict, rng, repeats: int, aggregator: str,

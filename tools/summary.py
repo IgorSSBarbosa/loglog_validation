@@ -16,6 +16,11 @@ over a ladder of scales -- and keeps the same four numbers per scale:
                the other three it cannot be recovered afterwards from a
                summary. Without it eq. (720) is missing B_bad and stops being
                a bound (see tools/wilson.py's `complete` flag).
+    abs_moment E|xi|^(2+delta), the per-scale ingredient of the moment
+               assumption (A4). Kept for the same reason as log_moment:
+               an expectation over individual draws (user, 2026-10-28).
+    n_nonpos   how many draws were <= 0, the positivity check (A2). Those
+               draws are the ones log_moment drops.
 
 Those four are the entire interface between drawing and fitting: nothing
 downstream -- correction.fit_correction, report.analyse, plan.py -- ever looks
@@ -41,7 +46,7 @@ import numpy as np
 #: The per-scale summary, in order. `replicate_summary` transposes a
 #: {scale: tuple} mapping into one list per name, which is the shape the
 #: pilot/final artifacts store and the fitters read.
-SUMMARY_FIELDS = ("y_bar", "sigma_log", "cv", "log_moment")
+SUMMARY_FIELDS = ("y_bar", "sigma_log", "cv", "log_moment", "abs_moment", "n_nonpos")
 
 #: The delta in Lambda = max_k E|log xi_k|^(2+delta). Fixed at 1 rather than
 #: exposed: it must match the delta eq. (720)'s B_bad is evaluated with, and a
@@ -51,8 +56,8 @@ SUMMARY_FIELDS = ("y_bar", "sigma_log", "cv", "log_moment")
 LOG_MOMENT_DELTA = 1.0
 
 
-def summarize_scale(draws) -> tuple[float, float, float, float]:
-    """(y_bar, sigma_log, cv, log_moment) for one scale's draws, in a single pass.
+def summarize_scale(draws) -> tuple[float, float, float, float, float, int]:
+    """SUMMARY_FIELDS for one scale's draws, in a single pass.
 
     `ddof=1` because these are estimates from a sample, not a population --
     which is also why a single draw is refused rather than summarized: two of
@@ -83,7 +88,9 @@ def summarize_scale(draws) -> tuple[float, float, float, float]:
     pos = xi > 0
     log_moment = (float(np.mean(np.abs(np.log(xi[pos])) ** (2 + LOG_MOMENT_DELTA)))
                   if pos.any() else float("nan"))
-    return mean, float(sd / (np.sqrt(s.size) * mean)), float(sd / mean), log_moment
+    abs_moment = float(np.mean(np.abs(xi) ** (2 + LOG_MOMENT_DELTA)))
+    return (mean, float(sd / (np.sqrt(s.size) * mean)), float(sd / mean), log_moment,
+            abs_moment, int(np.count_nonzero(~pos)))
 
 
 def replicate_summary(stats: dict, scales: Sequence[int]) -> dict:
@@ -93,5 +100,5 @@ def replicate_summary(stats: dict, scales: Sequence[int]) -> dict:
     order, so a replicate lines up positionally with the ladder it was drawn
     on however the generator happened to iterate.
     """
-    return {name: [float(stats[i][j]) for i in scales]
+    return {name: [(int if name == "n_nonpos" else float)(stats[i][j]) for i in scales]
             for j, name in enumerate(SUMMARY_FIELDS)}
