@@ -1,7 +1,7 @@
 # Log-Log Plot Technique — Simulation Validation
 
 Companion simulation project for the paper **"The Log-Log Plot Technique"**
-(`../article_writting/article.tex`). Purpose: **validate or refute** the paper's
+(`../article_writting/main.tex`, a git clone of the Overleaf project). Purpose: **validate or refute** the paper's
 assumptions and theorems by simulation, across a ladder of testbeds of increasing
 complexity. Writing/review of the paper itself happens in `article_writting/`, not here.
 

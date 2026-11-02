@@ -1,7 +1,7 @@
 # loglog_validation
 
 Simulation validation for the paper **"The Log-Log Plot Technique"**
-(`../article_writting/article.tex`). The paper's theorems say what $\hat\gamma$ should
+(`../article_writting/main.tex`, a git clone of the Overleaf project). The paper's theorems say what $\hat\gamma$ should
 cost and how accurate it should be; this repo runs the simulations that check whether
 they do. Writing and review of the paper happen in `article_writting/`, not here.
 

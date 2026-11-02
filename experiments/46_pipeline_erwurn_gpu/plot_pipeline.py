@@ -3,7 +3,7 @@
 1. `pipeline_pilot`: (a) the pilot's eq. (pilot-fit) fit to ln Y_bar against k, with the
    correction left after the asymptote is subtracted; (b) the cost probe with its affine
    fit cost(i) = kappa0 + kappa1 i^d, eq. (cost).
-   All the pilot's cost probes are drawn, with one affine fit to their per-scale median.
+   Only the per-scale median over the pilot's cost probes is drawn, with one affine fit to it.
 2. `pipeline_allocation`: the estimated finite-size bias and estimated standard error of
    gamma-hat against m0, eqs. (bFS) and (bSE) with the pilot estimates plugged in and
    n(m0) from the plan's budget, with the m0 the plan chose. These are estimates, not
