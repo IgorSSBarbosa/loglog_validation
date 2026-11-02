@@ -102,7 +102,9 @@ def plot_slopes(res: dict, out: Path, plt) -> None:
 
 
 def plot_loglog(res: dict, out: Path, plt) -> None:
-    fig, ax = plt.subplots(figsize=(8, 6))
+    # Wide, legend outside the axes: with 21 p's inside it covered the final's points
+    # (user, 2026-11-02).
+    fig, ax = plt.subplots(figsize=(14, 8))
     cmap = plt.get_cmap("viridis")
     ps = sorted(res)
     for t, p in enumerate(ps):
@@ -129,7 +131,7 @@ def plot_loglog(res: dict, out: Path, plt) -> None:
            title=r"$\log_2\overline{Y}_i$ (± se), pilot ● final ■, and the pilot's "
                  r"$f(i)=\gamma i+a_0+a_1 2^{-\omega_1 i}$")
     ax.grid(True, color="#e1e0d9", lw=0.6)
-    ax.legend(fontsize=7)
+    ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0)
     fig.tight_layout()
     fig.savefig(out, dpi=130)
 
