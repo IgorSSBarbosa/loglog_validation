@@ -11,10 +11,12 @@
    `pipeline_extrapolation`: the pilot correction extended over the planned window.
 3. `pipeline_longrun`: the long run's log-log plot with the fitted slope gamma-hat.
 4. `pipeline_checks`: the Step 4 checks on the long-run data, one panel each for
-   the local slopes, (A4), (A5), (A6), (A8) and (A1)+(A3). The local slopes come from
+   the local slopes, (A4), (A5), (A6) and (A1)+(A3), labelled as in the article's
+   Step 4 list. The 2026-11-04 article revision dropped the log-moment assumption, so
+   its panel is gone and sigma^2 is (A5), the cost (A6) (user). The local slopes come from
    `src/study/local_slope.py` (local_slope.json), which brings every scale from the
-   pilot's smallest to the window's top to the final's n. (A4)-(A6) are drawn as
-   points, not lines: they are estimates at separate scales. (A8) compares the long run's time
+   pilot's smallest to the window's top to the final's n. (A4)-(A5) are drawn as
+   points, not lines: they are estimates at separate scales. (A6) compares the long run's time
    with the planner's cost model; (A1)+(A3) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window and the pilot
    refitted with gamma pinned to gamma-hat (the omega1, a1 of B_fs), with its chi2.
@@ -47,6 +49,7 @@ import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 from tools.allocation import allocation_constants, max_m0_for_scale  # noqa: E402
 from tools.cost_model import fit_cost_probe  # noqa: E402
@@ -163,7 +166,7 @@ def tradeoff(d: dict) -> dict:
     assert math.isclose(c["Cb"] * rho ** (-j * w), plan["bias"], rel_tol=1e-9)
     assert math.isclose(c["Cs"] / math.sqrt(n[j]), plan["sd"], rel_tol=1e-9)
     fs = 6 / (m * (m + 1)) * abs(a1) * rho ** (-w * m0) / (rho ** w - 1)
-    se = np.sqrt(12 * cst["cv"] ** 2 / (n * m ** 3))
+    se = np.sqrt(12 * cst["cv"] ** 2 / (n * m * (m ** 2 - 1)))
     assert int(m0[np.argmin(np.maximum(fs, se))]) == j, "eq. (m0-star) disagrees with the plan"
     return {"m0": m0, "n": n, "fs": fs, "se": se, "chosen": j, "cst": cst, "m": m}
 
@@ -176,7 +179,7 @@ def fig_allocation(d: dict, rho: float):
                 label=r"$\hat b_{\rm FS}(m_0)=\dfrac{6}{m(m+1)}\,"
                       r"\dfrac{|\hat a_1|\,\rho^{-\hat\omega_1 m_0}}{\rho^{\hat\omega_1}-1}$")
     ax.semilogy(t["m0"], t["se"], "s-", color=DATA,
-                label=r"$\hat b_{\rm SE}(m_0)=\sqrt{\dfrac{12\,\hat\sigma^2_\infty}{n(m_0)\,m^3}}$")
+                label=r"$\hat b_{\rm SE}(m_0)=\sqrt{\dfrac{12\,\hat\sigma^2_\infty}{n(m_0)\,m(m^2-1)}}$")
     # Stops at the crossing, so it never runs behind the formulas in the legend.
     lo = min(t["fs"].min(), t["se"].min()) / 2
     ax.set_ylim(bottom=lo)
@@ -243,7 +246,10 @@ def fig_checks(d: dict, rho: float):
     i = np.asarray(final["scales"], float)
     k = np.log(i) / math.log(rho)
     R, n = len(reps), final["n"]
-    fig, axs = plt.subplots(2, 3, figsize=(7.2, 4.4), constrained_layout=True)
+    # Five panels: three on top, the two wider ones (cost, extrapolation) below.
+    fig = plt.figure(figsize=(7.2, 4.4), constrained_layout=True)
+    ax_ = fig.subplot_mosaic([["A1", "A1", "A4", "A4", "A5", "A5"],
+                              ["A6", "A6", "A6", "X", "X", "X"]])
 
     def per_rep(ax, values, label):
         """Each replicate a light point, their mean a full one; scales are not joined."""
@@ -253,7 +259,7 @@ def fig_checks(d: dict, rho: float):
         ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
         return mean
 
-    ax = axs[0, 0]
+    ax = ax_["A1"]
     ls = d["local_slope"]["analysis"]
     # s_k is the slope between rho^k and rho^(k+1), so it sits between them.
     ks = np.log(ls["scales"][:-1]) / math.log(rho) + 0.5
@@ -264,25 +270,19 @@ def fig_checks(d: dict, rho: float):
                label=rf"$\hat\gamma={d['answer']['gamma']:.5f}$")
     ax.set_ylabel(r"$s_k$")
     ax.set_title(r"(A1) local slopes $s_k$", fontsize=9, loc="left")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True, steps=[1, 2, 5, 10]))   # k is an integer (user, 2026-11-03)
     ax.legend(loc="upper right", fontsize=7)
 
-    per_rep(axs[0, 1], [r["abs_moment"] for r in reps], r"$\overline{|\xi_i|^{3}}$")
-    axs[0, 1].set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
-    axs[0, 1].ticklabel_format(axis="y", useOffset=False)
+    per_rep(ax_["A4"], [r["abs_moment"] for r in reps], r"$\overline{|\xi_i|^{3}}$")
+    ax_["A4"].set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
+    ax_["A4"].ticklabel_format(axis="y", useOffset=False)
 
-    # report.py's Lambda: the largest over scales of the replicate mean.
-    L = per_rep(axs[0, 2], [r["log_moment"] for r in reps],
-                r"$\overline{|\log\xi_i|^{3}}$").max()
-    assert math.isclose(L, d["answer"]["Lambda"], rel_tol=1e-12), (L, d["answer"]["Lambda"])
-    axs[0, 2].axhline(L, color=REF, ls="--", lw=1, label=rf"$\hat L={L:.2f}$")
-    axs[0, 2].set_title(r"(A5) $\mathbb{E}|\log\xi_i|^{2+\delta}$", fontsize=9, loc="left")
-
-    ax = axs[1, 0]
+    ax = ax_["A5"]
     s2 = per_rep(ax, [np.square(r["cv"]) for r in reps], r"$\hat\sigma_i^2$")
     ax.axhline(s2.max(), color=REF, ls="--", lw=1, label=rf"$\hat\sigma^2_{{\max}}={s2.max():.4f}$")
-    ax.set_title(r"(A6) $\hat\sigma_i^2=\widehat{\mathbb{V}}\,\xi_i$", fontsize=9, loc="left")
+    ax.set_title(r"(A5) $\hat\sigma_i^2=\widehat{\mathbb{V}}\,\xi_i$", fontsize=9, loc="left")
 
-    ax = axs[1, 1]
+    ax = ax_["A6"]
     c = pilot["cost"]
     ps = np.asarray(c["probes"][0]["scales"], float)
     med = np.median([pr["elapsed"] for pr in c["probes"]], axis=0)
@@ -304,10 +304,10 @@ def fig_checks(d: dict, rho: float):
               label=rf"long run ($\times{ratio:.2f}$)")
     ax.set_xlabel("scale $i$")
     ax.set_ylabel("s per sample")
-    ax.set_title("(A8) cost", fontsize=9, loc="left")
+    ax.set_title("(A6) cost", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    ax = axs[1, 2]
+    ax = ax_["X"]
     full, _ = pilot_curve(pilot["direct_fit"], rho)
     kp = np.log(pilot["scales"]) / math.log(rho)
     kin = np.linspace(kp[0] - 0.3, kp[-1], 100)
@@ -329,11 +329,10 @@ def fig_checks(d: dict, rho: float):
     ax.set_title("(A1)+(A3) extrapolation", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    for ax in (axs[0, 0], axs[0, 1], axs[0, 2], axs[1, 0], axs[1, 2]):
-        ax.set_xlabel(r"$k=\log_\rho i$")
-    for ax, loc in ((axs[0, 1], "upper right"), (axs[0, 2], "lower right"),
-                    (axs[1, 0], "upper right")):
-        ax.legend(loc=loc, fontsize=7)
+    for name in ("A1", "A4", "A5", "X"):
+        ax_[name].set_xlabel(r"$k=\log_\rho i$")
+    for name in ("A4", "A5"):
+        ax_[name].legend(loc="upper right", fontsize=7)
     return fig
 
 

@@ -109,8 +109,7 @@ def local_slopes(scales, log_y, se_log, rho: float) -> dict:
 def clt_se(cv, n, R, rho: float) -> np.ndarray:
     """se(s_k) the CLT predicts, eq. (583) at m = 2 with the exact weights of eq. (526).
 
-    eq. (583)'s 12/m^3 is the large-m form of sum_k w_k^2 = 12/(m(m^2 - 1)), which is 2
-    at m = 2; per scale the variance of log Ybar is cv^2/n (delta method, sigma_inf^2
+    thm:CLT's 12/(m(m^2 - 1)) = sum_k w_k^2 is 2 at m = 2; per scale the variance of log Ybar is cv^2/n (delta method, sigma_inf^2
     read as cv^2), and mean log Ybar over R replicates divides it by R.
     """
     v = np.asarray(cv, float) ** 2 / (np.asarray(n, float) * np.asarray(R, float))

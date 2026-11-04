@@ -45,7 +45,6 @@ from tools.artifacts import artifact_path  # noqa: E402
 from tools.constants import load, require  # noqa: E402
 from tools.loglog import closed_form_weights, gamma_closed_form  # noqa: E402
 from tools.models import get_model  # noqa: E402
-from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
 from tools.wilson import sigma_se_per_scale, wilson_interval  # noqa: E402
 
 INT32_SITES = 2**31 - 1
@@ -149,37 +148,33 @@ class Ladder:
 class Source:
     """Pooled per-scale summaries of one draw (a pilot or a run) on the ladder."""
 
-    def __init__(self, name: str, replicates: int, scales, y_bar, n_pool, cv, log_moment_by_rep):
+    def __init__(self, name: str, replicates: int, scales, y_bar, n_pool, cv):
         self.name, self.R = name, replicates
         self.scales = [int(s) for s in scales]
         self.y = np.array(y_bar, float)
         self.n = np.array(n_pool, float)
         self.cv = np.array(cv, float)
-        self.lm = np.mean(np.array(log_moment_by_rep, float), axis=0)
 
     @classmethod
     def from_pilot(cls, L: Ladder) -> "Source":
         pl = L.pilot
         return cls(f"pilot ({pl['replicates']} reps, Neyman n)", pl["replicates"],
                    pl["scales"], pl["y_bar"],
-                   np.array(pl["n"], float) * pl["replicates"], pl["cv_per_scale"],
-                   [r["log_moment"] for r in pl["per_replicate"]])
+                   np.array(pl["n"], float) * pl["replicates"], pl["cv_per_scale"])
 
     @classmethod
     def from_run(cls, run_sd: Path) -> "Source":
         a = json.loads(artifact_path(run_sd, "answer").read_text())
-        f = json.loads(artifact_path(run_sd, "final").read_text())
         return cls(f"run ({a['replicates']} reps, n = {a['n']:,})", a["replicates"],
                    a["scales"], a["y_bar"],
-                   np.full(len(a["scales"]), a["n"] * a["replicates"], float), a["cv"],
-                   [r["log_moment"] for r in f["per_replicate"]])
+                   np.full(len(a["scales"]), a["n"] * a["replicates"], float), a["cv"])
 
 
 def window_row(L: Ladder, src: Source, m: int, reference: float, start: int | None = None) -> dict:
     """gamma_susc on the deepest m rungs of `src`, against the literature, and what the
-    pilot's own (omega_L, a1) predicted that gap would be. eq. (720) as
+    pilot's own (omega_L, a1) predicted that gap would be. eq:wilson as
     exponents_report.md extends it: per-scale variance, harmonic-mean n, and the mean
-    of R replicates shrinks only the statistical term -- B_good and B_bad keep the
+    of R replicates shrinks only the statistical term -- B_good keeps the
     per-replicate n. The window is the deepest m rungs unless `start` says where it begins."""
     rho = L.rho
     first = len(src.scales) - m if start is None else start
@@ -191,8 +186,7 @@ def window_row(L: Ladder, src: Source, m: int, reference: float, start: int | No
     n_rep = n / src.R
     w = wilson_interval(g, float(len(n_rep) / np.sum(1.0 / n_rep)), m, m0, rho,
                         sigma_inf2=float(cv2[-1]), sigma_max2=float(cv2.max()),
-                        a1=L.a1, omega1=L.omega1.value, Lambda=float(src.lm[sl].max()),
-                        delta=LOG_MOMENT_DELTA, se_override=se)
+                        a1=L.a1, omega1=L.omega1.value, se_override=se)
     return {"scales": scales, "m0": m0, "gamma_susc": L.nu * g, "se": L.nu * se,
             "half": L.nu * w["half_width"], "gap": L.nu * g - reference,
             "predicted": L.nu * predicted_bias(m, m0, rho, L.a1, L.omega1.value)}

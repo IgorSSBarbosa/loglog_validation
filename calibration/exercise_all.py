@@ -363,7 +363,7 @@ def sec_summary(a: Audit) -> None:
     a.check("six fields, in the declared order",
             lambda: SUMMARY_FIELDS,
             expect=("y_bar", "sigma_log", "cv", "log_moment", "abs_moment", "n_nonpos"))
-    a.check("delta is pinned at 1 to match eq. (720)'s B_bad",
+    a.check("delta is pinned at 1, the article's (A4) delta",
             lambda: LOG_MOMENT_DELTA, expect=1.0)
 
     a.raises("a single draw is refused, not summarized", ValueError,
@@ -666,21 +666,20 @@ def sec_coverage(a: Audit) -> None:
 
 
 def sec_wilson(a: Audit) -> None:
-    """tools/wilson -- article eq. (720), the four-term bound -- gamma only"""
-    from tools.wilson import (C0, bad_event_bias, finite_size_bias, format_interval,
-                              good_event_bias, moment_bounds, sigma_se,
-                              sigma_se_per_scale, wilson_interval)
+    """tools/wilson -- article eq:wilson, the three-term bound -- gamma only"""
+    from tools.wilson import (finite_size_bias, format_interval, good_event_bias,
+                              moment_bounds, sigma_se, sigma_se_per_scale,
+                              wilson_interval)
 
-    a.begin("tools/wilson", "article eq. (720), the four-term bound -- gamma only")
+    a.begin("tools/wilson", "article eq:wilson, the three-term bound -- gamma only")
 
-    a.close("C0 = 4 log 2 - 2", lambda: C0, 4 * math.log(2) - 2, 1e-15)
     n, m, rho, s2 = 100_000.0, 6, 2.0, 0.5708
-    a.close("sigma_se is sqrt(12 sigma_inf2/(n m^3)) / log rho",
+    a.close("sigma_se is sqrt(12 sigma_inf2/(n m(m^2-1))) / log rho",
             lambda: sigma_se(n, m, rho, s2),
-            math.sqrt(12 * s2 / (n * m ** 3)) / math.log(rho), 1e-15)
+            math.sqrt(12 * s2 / (n * m * (m ** 2 - 1))) / math.log(rho), 1e-15)
     a.close("for_gamma=False leaves it on the beta scale",
             lambda: sigma_se(n, m, rho, s2, for_gamma=False),
-            math.sqrt(12 * s2 / (n * m ** 3)), 1e-15)
+            math.sqrt(12 * s2 / (n * m * (m ** 2 - 1))), 1e-15)
     a.check("sigma_se falls like 1/sqrt(n)",
             lambda: math.isclose(sigma_se(4 * n, m, rho, s2),
                                  sigma_se(n, m, rho, s2) / 2, rel_tol=1e-12))
@@ -688,28 +687,16 @@ def sec_wilson(a: Audit) -> None:
              lambda: sigma_se(0, m, rho, s2), contains="bad input")
     a.raises("rho <= 1 is refused", ValueError,
              lambda: sigma_se(n, m, 1.0, s2), contains="bad input")
+    a.raises("m < 2 is refused (m(m^2-1) = 0)", ValueError,
+             lambda: sigma_se(n, 1, rho, s2), contains="bad input")
 
-    # NOT equal to sigma_se at finite m, and the difference is exactly the
-    # gap between the weights' true norm 12/(m(m^2-1)) and eq. (720)'s 12/m^3.
+    # With the article's exact m(m^2-1) the two coincide at uniform n and cv.
     a.close("sigma_se_per_scale is the exact sqrt(sum w_j^2 cv2_j/n_j)",
             lambda: sigma_se_per_scale([n] * m, m, rho, [s2] * m),
             math.sqrt(12 * s2 / (n * m * (m ** 2 - 1))) / math.log(rho), 1e-15)
-    ratio = sigma_se_per_scale([n] * m, m, rho, [s2] * m) / sigma_se(n, m, rho, s2)
-    a.close("...which exceeds eq. (720)'s sigma_se by exactly sqrt(m^2/(m^2-1))",
-            lambda: ratio, math.sqrt(m ** 2 / (m ** 2 - 1)), 1e-12)
-    a.check("...and the docstring says so, rather than claiming they are equal",
-            lambda: "does NOT equal" in sigma_se_per_scale.__doc__
-            and "verbatim" in sigma_se_per_scale.__doc__,
-            detail=f"at m = {m} the article's sigma_se is "
-                   f"{100 * (ratio - 1):.1f}% below the exact variance; the "
-                   f"formula stays as eq. (720) writes it (Igor, 2026-09-04) "
-                   f"and the gap is documented instead")
-    a.check("...and is smaller when the big scales get more samples",
-            lambda: sigma_se_per_scale([n, n, n, n, n, 10 * n], m, rho, [s2] * m)
-            < sigma_se(n, m, rho, s2))
-    a.raises("a length mismatch is named", ValueError,
-             lambda: sigma_se_per_scale([n] * 5, m, rho, [s2] * m), contains="expected 6")
-
+    a.close("...which equals sigma_se at uniform n and cv",
+            lambda: sigma_se_per_scale([n] * m, m, rho, [s2] * m) / sigma_se(n, m, rho, s2),
+            1.0, 1e-12)
     b_fs = finite_size_bias(m, 2, rho, -0.25, 1.0)
     a.check("B_fs is positive", lambda: b_fs > 0)
     a.check("B_fs decays in m0 like rho^(-omega1 m0)",
@@ -729,12 +716,9 @@ def sec_wilson(a: Audit) -> None:
     a.raises("m0 < 0 is refused", ValueError,
              lambda: finite_size_bias(m, -1, rho, -0.25, 1.0), contains="m0")
 
-    a.close("B_good = 6(c0+2) sigma_max2 / (n(m+1)) / log rho",
+    a.close("B_good = 6 sigma_max2 / (n(m+1)) / log rho (lem:Q-prob b)",
             lambda: good_event_bias(n, m, 0.6, rho),
-            6 * (C0 + 2) * 0.6 / (n * (m + 1)) / math.log(rho), 1e-15)
-    a.check("B_bad needs delta > 0", lambda: bad_event_bias(n, m, 0.6, 2.0, 1.0, rho) > 0)
-    a.raises("delta <= 0 is refused", ValueError,
-             lambda: bad_event_bias(n, m, 0.6, 2.0, 0.0, rho), contains="bad input")
+            6 * 0.6 / (n * (m + 1)) / math.log(rho), 1e-15)
 
     rng = np.random.default_rng(0)
     samples = {k: rng.lognormal(0, 0.3, size=20000) * k ** 0.5
@@ -746,7 +730,7 @@ def sec_wilson(a: Audit) -> None:
             lambda: mb["sigma_max2"] >= mb["sigma_inf2"])
     a.close("...and sigma^2 matches the planted lognormal variance",
             lambda: mb["sigma_inf2"], math.expm1(0.09), 0.02)
-    a.check("per-scale detail is returned, since Assumption 6 is worth seeing",
+    a.check("per-scale detail is returned, since Assumption sigma_converges is worth seeing",
             lambda: len(mb["per_scale"]), expect=4)
     a.raises("no samples at all is an error", ValueError,
              lambda: moment_bounds({}), contains="no samples")
@@ -755,29 +739,30 @@ def sec_wilson(a: Audit) -> None:
 
     incomplete = wilson_interval(0.5, n, m, 2, rho, sigma_inf2=s2, sigma_max2=0.6,
                                  a1=-0.25, omega1=1.0)
-    a.check("a bound missing B_bad is flagged incomplete",
+    a.check("a bound missing the omega2 piece is flagged incomplete",
             lambda: incomplete["complete"], expect=False)
-    a.check("...and says which terms are missing",
-            lambda: len(incomplete["missing_terms"]), expect=2)
+    a.check("...and says which term is missing",
+            lambda: len(incomplete["missing_terms"]), expect=1)
+    a.check("...and there is no B_bad any more",
+            lambda: "B_bad" in incomplete, expect=False)
     a.check("format_interval leads with the incompleteness warning",
             lambda: format_interval(incomplete).startswith("INCOMPLETE"))
     full = wilson_interval(0.5, n, m, 2, rho, sigma_inf2=s2, sigma_max2=0.6,
-                           a1=-0.25, omega1=1.0, Lambda=2.0, delta=1.0,
-                           omega2=3.0, phi_plus=0.1)
+                           a1=-0.25, omega1=1.0, omega2=3.0, phi_plus=0.1)
     a.check("with every constant supplied the bound is complete",
             lambda: full["complete"])
-    a.close("half_width is the sum of the four terms",
+    a.close("half_width is the sum of the three terms",
             lambda: full["half_width"],
-            full["B_fs"] + full["B_good"] + full["B_bad"] + full["se_term"], 1e-15)
+            full["B_fs"] + full["B_good"] + full["se_term"], 1e-15)
     a.check("the interval is gamma_hat +/- half_width",
             lambda: math.isclose(full["interval"][1] - full["interval"][0],
                                  2 * full["half_width"]))
     a.check("`dominant` names the largest term",
             lambda: full["dominant"],
             expect=max([("B_fs", full["B_fs"]), ("B_good", full["B_good"]),
-                        ("B_bad", full["B_bad"]), ("se_term", full["se_term"])],
+                        ("se_term", full["se_term"])],
                        key=lambda kv: kv[1])[0])
-    a.check("se_override replaces the fourth term (the non-uniform-n case)",
+    a.check("se_override replaces the standard error (the non-uniform-n case)",
             lambda: math.isclose(
                 wilson_interval(0.5, n, m, 2, rho, sigma_inf2=s2, sigma_max2=0.6,
                                 a1=-0.25, omega1=1.0, se_override=1e-9)["sigma_se"],

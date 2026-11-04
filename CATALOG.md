@@ -129,7 +129,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 | `loglog_log.py` | 150 | `statistical tool` | The loglog-log plot (user, 2026-10-16): $\omega_1$ as minus the slope of $\ln\lvert\gamma_k-\hat\gamma\rvert$ against $\ln k$, GLS on the exact delta-method covariance (shared $\hat\gamma$, shared scales); points resolved at 3 sd with the majority sign. $\hat\gamma$ external (independent draw) or linear in the same means. No I/O. | — |
 | `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
 | `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model, walked on to a full device for a `latency_bound` one. | `loglog` |
-| `wilson.py` | 321 | `statistical tool` | Article eq. (720)'s four-term bound, **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. `sigma_se_ols`: the finite-m standard error on any grid of scales. | `loglog` |
+| `wilson.py` | 321 | `statistical tool` | Article `eq:wilson`'s three-term bound (2026-11-04 revision), **for $\gamma$ only**. `moment_bounds` reads its constants off real samples. `sigma_se_ols`: the finite-m standard error on any grid of scales. | `loglog` |
 | `lmin_rule.py` | 91 | `statistical tool` | The published FSS papers' $L_{\min}$ rule (smallest acceptable, stable $\chi^2$), applied to the straight log-log line; thresholds set by the user, 2026-10-26. No I/O. | — |
 | `coverage.py` | 356 | `statistical tool` | Calibration harness: do our stated error bars cover? `coverage_test`, `coverage_multi`, `rescore`, `combine_se`, Welch–Satterthwaite dof. | — |
 | `artifacts.py` | 314 | `tool` | The naming registry: what every file on disk is called, in (recipes, by `kind`) and out (run artifacts, by content). Provenance is stamped inside each file, not in its name. | — |
@@ -232,8 +232,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `line_chi2`, `acceptable`, `scan`, `select_lmin` | lmin_rule | $\chi^2$ of the weighted log-log line; the $L_{\min}$ rule |
 | `finite_size_bias` | wilson | $\mathcal B_{\rm fs}$ |
 | `good_event_bias` | wilson | $\mathcal B_{\rm good}$ |
-| `bad_event_bias` | wilson | $\mathcal B_{\rm bad}$ |
-| `moment_bounds` | wilson | $\sigma_\infty^2,\sigma^2_{\max},\Lambda$ from samples |
+| `moment_bounds` | wilson | $\sigma_\infty^2,\sigma^2_{\max}$ from samples |
 | `wilson_interval` | wilson | the assembled bound + `complete` flag |
 | `format_interval` | wilson | breakdown, incompleteness first |
 | `wilson_score_interval` | coverage | **binomial** score CI — unrelated to eq. (720) |

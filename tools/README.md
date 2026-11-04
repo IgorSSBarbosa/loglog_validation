@@ -24,7 +24,7 @@ one several others import, because it owns the article's weight definition:
 | `correction.py` | two $\omega_1$ estimators (direct fit of eq. 232, and bias decay) | — |
 | `allocation.py` | `prop:opt` (eq. 945–946), `lem:budget` costs, the tuned constant $\kappa$, `snr`/`neyman`, the `ladder` itself and its decay rate | `loglog` |
 | `cost_model.py` | cost exponent $d$: the two timing probes, pure + affine fits, aggregators, declared-vs-measured | `loglog` |
-| `wilson.py` | eq. (720)'s four-term bound, **for $\gamma$ only** | `loglog` |
+| `wilson.py` | `eq:wilson`'s three-term bound, **for $\gamma$ only** | `loglog` |
 | `coverage.py` | do our stated error bars actually cover? | — |
 | `artifacts.py` | what every file on disk is called, in or out | — |
 | `rng.py` | seeding, and how a seed is recorded so a run regenerates | — |
@@ -57,20 +57,22 @@ chart at three). Neither chart has a unit test yet (they're plots, not
 numeric claims) — visually verified against `experiments/00_synthetic/`,
 including the untrustworthy-MLE styling path.
 
-`wilson.py` — the article's Wilson confidence interval, Theorem `thm:wilson`
-(eq. 720): the four-term bound $\mathcal B_{\mathrm{fs}}+\mathcal B_{\mathrm{good}}
-+\mathcal B_{\mathrm{bad}}+\Phi(\alpha)\sigma_{\mathrm{se}}$ on
+`wilson.py` — the article's Wilson confidence interval, Theorem `cor:wilson`
+(`eq:wilson`): the three-term bound $\Phi^{-1}(1-\alpha/2)\sigma_{\mathrm{se}}
++\mathcal B_{\mathrm{fs}}+\mathcal B_{\mathrm{good}}$ on
 $\lvert\hat\beta-\beta\rvert$. **For $\gamma$ only** — that is the theorem's own
 scope: it describes $\hat\beta=\sum_k w_{k,m}\log\overline Y_{\rho^k}$ and says
 nothing about $\omega_1$ or $a_1$, so do not reach for it there. Its value over a
-replicate interval is the fourth term: $\sigma_{\mathrm{se}}=\sqrt{12\sigma_\infty^2/
-(nm^3)}$ is a closed form, estimable from the raw samples, so no 5-point variance
+replicate interval is the standard error: $\sigma_{\mathrm{se}}=\sqrt{12\sigma_\infty^2/
+(nm(m^2-1))}$ is a closed form, estimable from the raw samples, so no 5-point variance
 estimate is involved and $\Phi(\alpha)=1.960$ is honest where replicates force
 $t_4=2.776$. It is a **bound**, so it overcovers — measured $0.966$–$1.000$ across
 $m_0=2..10$, against a replicate interval that collapses to $0.000$ at $m_0=2$ for want
-of any bias term. `moment_bounds` reads $\sigma_\infty^2$/$\sigma_{\max}^2$/$\Lambda$
-off real samples; `sigma_se_per_scale` handles the non-uniform $n$ eq. (720) does not
-cover. Terms whose constants are unmeasured are dropped only behind a loud
+of any bias term (measured with the old four-term form). `moment_bounds` reads
+$\sigma_\infty^2$/$\sigma_{\max}^2$ off real samples; `sigma_se_per_scale` handles the
+non-uniform $n$ `eq:wilson` does not cover. The 2026-11-04 article revision dropped the
+log-moment assumption and with it $\mathcal B_{\mathrm{bad}}$ and its $\Lambda$, and
+$\mathcal B_{\mathrm{good}}$ became $6\sigma_{\max}^2/(n(m+1))$. Terms whose constants are unmeasured are dropped only behind a loud
 `complete=False` — a bound missing a term is not a bound. Driven by
 `calibration/check_coverage.py --arm wilson`.
 
@@ -436,8 +438,9 @@ $(\overline Y_i,\ \sigma_{\log},\ \mathrm{cv},\ \mathrm{log\_moment})$ for one
 scale in a single pass: the sample mean; its standard error *on the log scale*
 $\mathrm{sd}/(\sqrt n\,\overline Y_i)$ — which is what the log-log fit weights by;
 $\mathrm{sd}/\overline Y_i$, which is what an allocation needs; and
-$\mathbb{E}|\log \xi|^{2+\delta}$ with $\xi = Y_i/\mathbb{E}Y_i$, the per-scale
-ingredient of $\Lambda$ in eq. (720)'s bad-event term.
+$\mathbb{E}|\log \xi|^{2+\delta}$ with $\xi = Y_i/\mathbb{E}Y_i$, which fed the
+old bad-event term and is no longer read by anything (kept so stored summaries share one
+schema); plus `abs_moment` and `n_nonpos` for checks (A4) and (A2).
 `replicate_summary(stats, scales)` transposes `{scale: tuple}` into one list per
 name, ordered by `scales` rather than by the mapping's key order.
 
@@ -447,14 +450,11 @@ That is what lets `run.py` pass `summarize_scale` straight to
 `generate(..., reduce=)` and never write a sample to disk — a planned run is
 routinely hundreds of MB per replicate.
 
-`log_moment` is the one that had to be computed *here* rather than recovered
-later. The first three are functions of the sample mean and could in principle be
-rebuilt from stored summaries; $\Lambda$ is an expectation over individual draws
-and is gone the moment they are freed. Without it eq. (720) is missing `B_bad` and
-stops being a bound — which is exactly what `src/study/report.py` reports for any
-run drawn before this field existed, rather than quietly setting the term to zero.
-`LOG_MOMENT_DELTA = 1.0` must match the $\delta$ `tools/wilson.py` evaluates
-`B_bad` with; a summary on disk carries the number, not the exponent behind it.
+The moments are computed *here* rather than recovered later. The first three
+fields are functions of the sample mean and could in principle be rebuilt from stored
+summaries; a moment of $\xi$ is an expectation over individual draws and is gone the
+moment they are freed. `LOG_MOMENT_DELTA = 1.0` is the article's $\delta$ of (A4); a
+summary on disk carries the number, not the exponent behind it.
 
 The module exists because the definition was written twice, verbatim, in
 `src/study/pilot.py` and `src/study/run.py`. Deliberately free of any dependency on

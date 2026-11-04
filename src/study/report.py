@@ -25,7 +25,7 @@ the one that can be confidently wrong.
 
   Wilson bound         Theorem thm:wilson (eq. 720), for gamma only. A BOUND,
                        so it overcovers, but its width comes from a closed form
-                       -- sigma_se = sqrt(12*sigma_inf^2/(n*m^3)) -- rather than
+                       -- sigma_se = sqrt(12*sigma_inf^2/(n*m(m^2-1))) -- rather than
                        from a 5-point spread, so it needs no t widening and it
                        carries the finite-size bias the replicate interval has
                        no term for.
@@ -82,7 +82,6 @@ from tools.correction import fit_correction, fit_correction_pinned  # noqa: E402
 from tools.coverage import interval  # noqa: E402
 from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
 from tools.loglog_plot import fit_plot, loglog_plot  # noqa: E402
-from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
 from tools.wilson import (  # noqa: E402
     finite_size_bias, sigma_se, wilson_interval)
 
@@ -114,8 +113,8 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = 
     which deliberately ladders down to the small scales, measured 0.885.
 
     sigma_inf2 and sigma_max2 come from cv, which IS a function of the sample
-    mean and so survives summarization; Lambda comes from the log_moment field
-    (`tools/summary.py`), absent from any run drawn before that field existed.
+    mean and so survives summarization. (The bound needs nothing else since the
+    2026-11-04 article revision dropped B_bad and its Lambda.)
 
     `refit` is the pilot refitted with gamma pinned to this run's gamma-hat
     (user, 2026-11-02): still pilot data, so the reason above stands; only
@@ -137,20 +136,10 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = 
         if omega1 is None or a1 is None:
             why.append("omega1/a1 (the plan recorded no constants_at_plan_time)")
 
-    lm = [r.get("log_moment") for r in reps]
-    if any(x is None for x in lm):
-        Lambda = None
-        why.append("Lambda (this run predates the log_moment summary field)")
-    else:
-        # Lambda is max_k E|log xi_k|^(2+delta): an expectation, so replicates
-        # average; the max is over scales.
-        Lambda = float(np.mean(np.array(lm, float), axis=0).max())
-
     return {
         "sigma_inf2": float(cv[-1] ** 2),   # largest scale -- moment_bounds' definition
         "sigma_max2": float((cv ** 2).max()),
         "omega1": omega1, "a1": a1, "omega1_se": omega1_se,
-        "Lambda": Lambda, "delta": LOG_MOMENT_DELTA if Lambda is not None else None,
         "why": why,
     }
 
@@ -216,8 +205,7 @@ def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dic
     if not wi["why"]:
         wilson = wilson_interval(gamma, n, m, m0, rho,
                                  sigma_inf2=wi["sigma_inf2"], sigma_max2=wi["sigma_max2"],
-                                 a1=wi["a1"], omega1=wi["omega1"],
-                                 Lambda=wi["Lambda"], delta=wi["delta"], level=level)
+                                 a1=wi["a1"], omega1=wi["omega1"], level=level)
     wilson_why = wi["why"]
 
     # B_fs = |a1| * rho**(-omega1*m0) / (rho**omega1 - 1): omega1 sits in an
@@ -242,7 +230,7 @@ def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dic
             "fit": fit, "scales": scales, "n": n, "m0": m0, "m": m, "rho": rho,
             "y_bar": y_pool.tolist(), "sigma_log": sig_pool.tolist(),
             "cv": cv.tolist(), "sigma_inf2": sigma_inf2, "wilson_sd": w_sd,
-            "sigma_max2": wi["sigma_max2"], "Lambda": wi["Lambda"],
+            "sigma_max2": wi["sigma_max2"],
             "wilson": wilson, "wilson_why": wilson_why,
             "wilson_bfs_span": b_span, "omega1_se": wi["omega1_se"],
             "pilot_refit": refit,
@@ -319,9 +307,8 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
             f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot "
             f"refitted with gamma pinned to gamma-hat (omega1 = "
             f"{res['pilot_refit']['omega1']:.3g}) |",
-            f"| B_good | {w['B_good']:.3g} | Jensen bias of the log |",
-            f"| B_bad | {w['B_bad']:.3g} | the stray-sample-mean event, needs "
-            f"Lambda = {res['Lambda']:.3g} |",
+            f"| B_good | {w['B_good']:.3g} | Taylor remainder of the log on the "
+            f"good event (lem:Q-prob b) |",
             f"| {w['quantile']:.3g}·sigma_se | {w['se_term']:.3g} | the only "
             f"random term; sigma_se is a closed form, so no t widening |",
             "",
@@ -382,8 +369,8 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
         f"Cross-checks: the all-points OLS slope gives "
         f"{res['gamma_all_points']:+.5f}; the eq. (232) fit gives "
         f"{res['fit']['gamma']:+.5f}.", "",
-        f"The closed-form sd of a single estimate (eq. 583/720, "
-        f"`sqrt(12*sigma_inf2/(n*m^3))/log(rho)`, no replicates involved) is "
+        f"The closed-form sd of a single estimate (thm:CLT / eq:wilson, "
+        f"`sqrt(12*sigma_inf2/(n*m(m^2-1)))/log(rho)`, no replicates involved) is "
         f"**{res['wilson_sd']:.3g}**"
         + (f", against **{res['sd_over_reps']:.3g}** measured as the spread of "
            f"{R} replicates." if res.get("sd_over_reps") else ".")

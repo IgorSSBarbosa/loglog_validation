@@ -386,17 +386,16 @@ $\gamma$:
 | | what it is | blind to |
 |---|---|---|
 | replicate interval | $\hat\gamma \pm t_{R-1}\,\mathrm{sd}/\sqrt R$ — the ordinary Student-$t$ interval, nothing exotic | bias |
-| eq. (720) bound | $B_{\mathrm{fs}} + B_{\mathrm{good}} + B_{\mathrm{bad}} + \Phi(\alpha)\sigma_{\mathrm{se}}$, Theorem thm:wilson | nothing — but it *over*covers |
+| eq:wilson bound | $\Phi^{-1}(1-\alpha/2)\sigma_{\mathrm{se}} + B_{\mathrm{fs}} + B_{\mathrm{good}}$, Theorem cor:wilson | nothing — but it *over*covers |
 
 The $t_{R-1}$ quantile is not decoration: at $R=5$,
 $\Pr(|t_4|<1.96) = 0.8784$, so pairing a 5-point standard error with $1.96$
 gives an interval labelled 95% that covers 88%. This repo published exactly
 that mistake until `calibration/check_coverage.py` measured it.
 
-The bound needs three things the replicate interval does not. $\Lambda$ for
-$B_{\mathrm{bad}}$ comes from the `log_moment` summary field (`tools/summary.py`);
-a run drawn before that field existed gets no bound and is told which term is
-missing, never a term silently set to zero. $\sigma_\infty^2$ and
+The bound needs two things the replicate interval does not. (Since the 2026-11-04
+article revision it no longer needs $\Lambda$: the log-moment assumption and
+$B_{\mathrm{bad}}$ are gone.) $\sigma_\infty^2$ and
 $\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ come **from the pilot,
 never from a refit on the final data** — the plan deepens $m_0$ precisely to put
 the ladder where the correction has died, so refitting $\omega_1$ there fits

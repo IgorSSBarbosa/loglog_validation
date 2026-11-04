@@ -59,20 +59,26 @@ priority: **correctness of each piece, checked numerically, comes before any fig
 
 ## Paper objects (source of truth — cite by equation/theorem, don't re-derive)
 
+Article revision of 2026-11-04 (user): the logarithmic-moment assumption
+($\mathbb{E}\lvert\log\xi_k\rvert^{2+\delta} \le \Lambda$, formerly Assumption 5) was
+removed, along with the Wilson bound's bad-event term $\mathcal B_{\mathrm{bad}}$ that
+used it. The later assumptions moved up by one: "Assumption 6" ($\sigma$ convergence)
+in older notes is now Assumption 5. Equation numbers below are line numbers of an old
+`main.tex`; prefer the LaTeX labels.
+
 | Object | Article location | Form |
 |---|---|---|
 | $J$-order expansion (Assumption 1) | eq. (232) | $\mathbb{E} Y_i = a_0 i^\gamma \exp(a_1 i^{-\omega_1} + \cdots + \phi_J(i) i^{-\omega_J})$ |
 | Positivity (Assumption 2) | line 279 | $Y_i > 0$ |
 | $\phi_j$ uniformly bounded (Assumption 3) | eq. (289) | $\max_j \sup_i \lvert\phi_j(i)\rvert \le \phi^+$ |
 | $(2+\delta)$-moment of $\xi_k$ (Assumption 4) | eq. (305) | $\mathbb{E}\lvert\xi_k - 1\rvert^{2+\delta} \le M$ |
-| $(2+\delta)$-moment of $\log\xi_k$ (Assumption 5) | eq. (319) | $\mathbb{E}\lvert\log\xi_k\rvert^{2+\delta} \le \Lambda$ |
-| $\sigma_k^2 \to \sigma_\infty^2$ (Assumption 6) | eq. (332) | convergence; polynomial-rate variant eq. (342) |
-| $cost(i) = i^d$ (Assumption 7) | eq. (353) | budget cost model |
+| $\sigma_k^2 \to \sigma_\infty^2$ (Assumption 5, `assumption:sigma_converges`) | eq. (332) | convergence; the polynomial-rate variant was removed from the article |
+| $cost(i) = i^d$ (Assumption 6, `assumption:cost_is_power_law`) | eq. (353) | budget cost model |
 | Weighted estimator $\hat\beta,\hat\gamma$ | eq. (523)–(531) | $\hat\beta = \sum_k w_{k,m}\log\overline{Y}_{\rho^k}$ |
 | Weights | eq. (526) | $w_{k,m} = \dfrac{12(k - m_0 - (m+1)/2)}{m(m^2-1)}$ |
 | Weight identities (Lemma linearization) | eq. (542) | $\sum w_{k,m}=0$, $\sum w_{k,m}k = 1$ |
-| CLT for $\hat\gamma$ | Theorem, eq. (583) | $\sqrt{nm^3}(\hat\gamma - \mathbb{E}\hat\gamma) \dto \mathcal N(0, 12\sigma_\infty^2/\log^2\rho)$ |
-| Wilson interval | Theorem, eq. (720) | 4-term bound: finite-size + good-event + bad-event bias + $\Phi(\alpha)\sigma_{\mathrm{se}}$ |
+| CLT for $\hat\gamma$ | Theorem `thm:CLT` ("eq. (583)" in older code comments) | $\sqrt{nm(m^2-1)}\,(\hat\gamma - \gamma - R(m,m_0)/\log\rho) \dto \mathcal N(0, 12\sigma_\infty^2/\log^2\rho)$, under $m/n\to0$, $m_0\to\infty$ |
+| Wilson interval | Theorem `cor:wilson`, eq. `eq:wilson` ("eq. (720)" in older code comments) | 3-term bound: $\Phi^{-1}(1-\alpha/2)\sqrt{12\sigma_\infty^2/(nm(m^2-1))}$ + finite-size $\lvert R\rvert$ bound (`eq:biasbound`) + Taylor remainder $6\sigma_{\max}^2/(n(m+1))$ (`lem:Q-prob` b) |
 | Finite-size bias order | Prop. (820) | $\mathcal B_{\mathrm{fs}} \asymp \rho^{-\omega_1 m_0}/m^2$ |
 | Optimal allocation | Prop. (932), eq. (945)–(946) | $\theta_1 = \frac{2\omega_1}{d+2\omega_1}$, $\theta_2 = \frac{1}{d+2\omega_1}$; $n = \kappa B^{\theta_1}$, $m_0 = \theta_2 \log_\rho B$ |
 | Error decay | eq. (941)/(966) | $\lvert\hat\beta - \beta\rvert \lesssim B^{-\omega_1/(d+2\omega_1)}$, MSE $\lesssim B^{-2\omega_1/(d+2\omega_1)}$ |
