@@ -61,7 +61,7 @@ it stops at 2²⁴, so 393,216 and the collective buffer were never needed. The 
 - Student t(4) over 5 replicates: $\pm0.0028$, giving [0.4983, 0.5140]. This interval
   covers scatter only. The plan predicted a bias of 0.0153 and a per-replicate sd of 0.0071.
   The closed-form sd is 0.00706, and the replicate spread is 0.00635.
-- eq. (720) bound: $\pm0.311$. Nearly all of it is $B_{fs}=0.266$, because at
+- eq. (720) bound (superseded, see the three-term section at the end): $\pm0.311$. Nearly all of it is $B_{fs}=0.266$, because at
   $\omega=0.153$, $\rho^{\omega}-1=0.11$ inflates the bound. The bound is flagged
   incomplete, since its $\omega_2$ piece is missing.
 - The all-points OLS gives 0.50615. The eq. (232) fit gives 0.278, which is not meaningful
@@ -70,3 +70,16 @@ it stops at 2²⁴, so 393,216 and the collective buffer were never needed. The 
 Against 19's `autopilot_p0_fix` ($\omega_1=0.45$, 2¹⁵..2²⁰, $\hat\gamma=0.5180\pm0.0055$),
 the deeper ladder moves $\hat\gamma$ toward ½, by 0.012. The remaining 0.006 is about
 2 replicate se, and smaller than the planned bias of 0.015.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[0.4907, 0.5216]**, half-width **0.0155** ($1.96\sigma_{se}$ 0.0140, $B_{fs}$ 0.0009,
+$B_{good}$ 0.0006). It contains ½. The ±0.311 above predates 2026-11-02: since then
+$B_{fs}$ comes from the pilot refitted with γ pinned, which returns ω₁ = 0.449 (pilot fit
+0.153) and **warns** (χ² p = 0). The tiny $B_{fs}$ is therefore not trustworthy. The bias the
+plan predicted (0.0153) is as large as the whole half-width. The four-term bound of
+2026-11-02 was ±0.0457, of which B_bad was 0.0294.

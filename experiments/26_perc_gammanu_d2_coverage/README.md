@@ -37,7 +37,7 @@ B = 2·10¹¹, tuned m₀ = 6 (ladder 128..4096), n = 6 409, R = 50, seed 202610
 |---|---|
 | mean γ̂ − 43/24 | −0.0031 (≈ 0.4 sd) |
 | Var ratio, eq. (583) | **1.62 [1.10, 2.13]**: FAIL; KS p = 0.20 (normal) |
-| eq. (720) | half-width 0.096; coverage **50/50 [0.93, 1]**; bound/RMSE = 11.7 (dominant B_bad) |
+| eq. (720) | half-width 0.096; coverage **50/50 [0.93, 1]**; bound/RMSE = 11.7 (dominant B_bad; three-term: 0.028, 3.5, B_fs, see the end) |
 
 **Reading.** Normal, small bias, bound covers with a 12× margin. The variance is 1.6× the
 asymptotic prediction; the exact finite-m ratio is unavailable because the ladder (128..4096)
@@ -53,3 +53,14 @@ converged rather than a CLT failure; a pilot on the run's own ladder would settl
 known i^(5/48) drift of the origin anchor (`models/percolation2d.py`). It explains the
 1.6× variance ratio: eq. (583)'s σ∞² does not exist here. ω₁ and a₁ are unidentified on
 128..4096 (1.33 ± 1.63), as expected once the correction has died out.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+Re-scored with the same seed and n_boot. Half-width **0.0283** ($B_{fs}$ 0.0160,
+$1.96\sigma_{se}$ 0.0119, $B_{good}$ 0.0004), coverage **50/50 [0.93, 1]**, bound/RMSE **3.5**
+(was 11.7, B_bad). Var ratio **1.57 [1.07, 2.07]**: still FAIL, for the reason found in
+Step 3 (Assumption 5, formerly 6, fails for the origin observable).

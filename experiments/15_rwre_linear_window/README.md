@@ -125,3 +125,13 @@ by $p$: $\hat\gamma$ and the pilot's $\omega_1$. The small-scale local slopes on
 are part of it too, and there the two windows differ most in relative terms ($W=36$
 against 108 at $k=4$). Results go to `data/sweep_p_<tag>.md` and are recorded here once
 measured.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+Smoke `sweep_p0.5_smoke`: **[0.49865, 0.50173]**, half-width 0.00154 ($B_{fs}$ 0.00082,
+$1.96\sigma_{se}$ 0.00073), which still contains ½. The four-term bound was [0.49821, 0.50217],
+and the table's [0.4986, 0.5017] predates the 2026-11-02 pinned refit.

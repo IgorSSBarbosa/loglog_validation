@@ -234,3 +234,41 @@ p = 3/4. At p = 0.05 the miss is bias, not noise: exact $E|S_i|$ (DP to $2^{17}$
 last point extended with local exponent 1.000) gives $\hat\gamma-\tfrac12=2.80\times10^{-5}$
 on $2^{13}..2^{18}$, against the measured $2.76\times10^{-5}$, with $B_{fs}=0.93\times10^{-5}$.
 
+
+## Wilson interval in the article's three-term form, tag `2h` (2026-11-04)
+
+**Change (user, 2026-11-04).** The article dropped the logarithmic-moment assumption, and
+Theorem cor:wilson lost its $B_{bad}$ term with it. Now
+$W = \Phi^{-1}(1-\alpha/2)\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$:
+$B_{good}$ lost its $(c_0+2)$ factor, and the SE carries the exact $m(m^2-1)$, so it is
+$\sqrt{36/35}$ wider than the old $m^3$ form at $m=6$. $\hat\gamma$ and $B_{fs}$ are unchanged
+(same pinned refit). Every study was re-reported; nothing was redrawn.
+
+| p | Wilson 95% (three-term) | contains γ | half-width new/old | four-term (2026-11-02) | contains γ |
+|---|---|---|---|---|---|
+| 0.05 | [0.500007, 0.500049] | **no** | 0.92 | [0.500005, 0.500050] | **no** |
+| 0.1 | [0.500005, 0.500049] | **no** | 0.92 | [0.500003, 0.500051] | **no** |
+| 0.15 | [0.499998, 0.500043] | yes | 0.92 | [0.499996, 0.500045] | yes |
+| 0.2 | [0.499988, 0.500049] | yes | 0.91 | [0.499984, 0.500052] | yes |
+| 0.25 | [0.499979, 0.500028] | yes | 0.89 | [0.499976, 0.500031] | yes |
+| 0.3 | [0.499951, 0.500028] | yes | 0.86 | [0.499945, 0.500034] | yes |
+| 0.35 | [0.499977, 0.500035] | yes | 0.91 | [0.499974, 0.500038] | yes |
+| 0.4 | [0.499972, 0.500053] | yes | 0.91 | [0.499968, 0.500057] | yes |
+| 0.45 | [0.499973, 0.500032] | yes | 0.86 | [0.499968, 0.500037] | yes |
+| 0.5 | [0.499974, 0.500041] | yes | 0.86 | [0.499969, 0.500046] | yes |
+| 0.55 | [0.499964, 0.500032] | yes | 0.87 | [0.499959, 0.500037] | yes |
+| 0.6 | [0.499918, 0.500186] | yes | 0.88 | [0.499900, 0.500204] | yes |
+| 0.65 | [0.499808, 0.500971] | yes | 0.95 | [0.499776, 0.501003] | yes |
+| 0.7 | [0.499139, 0.506956] | yes | 0.95 | [0.498930, 0.507166] | yes |
+| 0.725 | [0.500620, 0.520329] | **no** | 0.97 | [0.500361, 0.520587] | **no** |
+| 0.75 | [0.513489, 0.540651] | — | 0.97 | [0.513075, 0.541065] | — |
+| 0.775 | [0.550202, 0.570167] | **no** | 0.98 | [0.549960, 0.570408] | yes |
+| 0.8 | [0.598622, 0.607348] | yes | 0.95 | [0.598376, 0.607594] | yes |
+| 0.85 | [0.699736, 0.700665] | yes | 0.88 | [0.699674, 0.700727] | yes |
+| 0.9 | [0.799914, 0.800185] | yes | 0.91 | [0.799901, 0.800198] | yes |
+| 0.95 | [0.899982, 0.900026] | yes | 0.92 | [0.899980, 0.900028] | yes |
+
+Coverage 17/20 → 16/20. The one change is p = 0.775, which now misses $2p-1=0.55$ by
+$2.0\times10^{-4}$. The bound there is all $B_{fs}$ ($9.6\times10^{-3}$ of $1.0\times10^{-2}$),
+and its refit warns ($\chi^2$ p = 1e-47), so the miss is the warned one-correction
+failure near p = 3/4, not the dropped term. All four misses warn.

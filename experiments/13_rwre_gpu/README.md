@@ -217,3 +217,14 @@ python3 experiments/13_rwre_gpu/sweep_p.py --tag 1h          # 8 x 1h, resumable
 ```
 
 Results go to `data/sweep_p_1h.md` and are recorded here once measured.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+The intervals quoted above come from the `smoke`/`smoke34` runs, whose data is no longer on
+disk, so they were not re-reported. The `neymanPilot` sweep was re-reported. Its $B_{fs}$
+is unchanged, and its half-widths shrank by at most 16 % (p = 0.45: 4.06e-5 → 3.42e-5).
+The p = 0.5 interval is [0.49942, 0.50095] (was [0.49933, 0.50103]) and still contains ½.

@@ -1,6 +1,6 @@
 # Experiment 29 — $\hat d_f$, $d=4$, `face_far`
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). d̂_f(4) = 3.0939 ± 0.0904 (eq. 720), literature 3.0446(7) inside; bias-limited by the int32 box cap.**
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). d̂_f(4) = 3.0939 ± 0.0904 (eq. 720), literature 3.0446(7) inside; bias-limited by the int32 box cap. Since 2026-11-02 (pinned refit) the bound excludes the literature value: three-term ± 0.0316, see the end.**
 
 ## Acceptance criterion
 
@@ -48,3 +48,20 @@ Plan: m₀ = 2, scales 8..128, n = 10 260 × R = 5. Ran 58.5 min (1.30× predict
 literature value; the replicate interval does not, which is exactly the case eq. (720) exists
 for. The bound is no tighter than September's (± 0.087): at this box cap d_f(4) is limited by
 finite-size bias, and only `models/percolation_zd_stream.py` (larger boxes) can move it.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[3.0623, 3.1255]**, half-width **0.0316** ($B_{fs}$ 0.0255, $1.96\sigma_{se}$ 0.0059,
+$B_{good}$ 0.0001). It **excludes** 3.0446: the lower end is 0.018 above it.
+
+The flip is not today's change. The four-term bound of 2026-11-02 was already
+[3.0498, 3.1380]: since then, $B_{fs}$ has been built from the pilot refitted with γ pinned
+to γ̂ (0.0255), not from the plan's constants (0.072 in the table above). That refit returns
+ω₁ = 1.88 against the pilot fit's 1.26, and it **warns** (χ² p = 3e-8). The realized bias,
++0.049, is about twice the new $B_{fs}$. The acceptance criterion (narrower than ±0.087) is
+met only formally, since a warned $B_{fs}$ is not a usable bound. Reading (unchanged): this
+is bias-limited by the box cap.

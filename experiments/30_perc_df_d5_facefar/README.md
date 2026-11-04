@@ -1,6 +1,6 @@
 # Experiment 30 — $\hat d_f$, $d=5$, `face_far`
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). d̂_f(5) = 3.7851 ± 0.2677 (eq. 720), literature 3.5260(14) just inside; the pilot under-predicted the bias.**
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). d̂_f(5) = 3.7851 ± 0.2677 (eq. 720), literature 3.5260(14) just inside; the pilot under-predicted the bias. Since 2026-11-02 (pinned refit) the bound excludes it: three-term ± 0.061, see the end.**
 
 ## Acceptance criterion
 
@@ -45,3 +45,18 @@ under-predicts the bias by 1.65×, as `exponents_report.md` Table 4a already fou
 on a ladder starting at i = 4 the fit sees fast curvature and misses a slower drift. This
 estimate is worse than September's (3.6555 ± 0.2121 on 16..64): starting at 4 costs more bias
 than the extra rung saves. At d = 5 the materialized model cannot reach the scales d_f needs.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[3.7240, 3.8462]**, half-width **0.0612** ($B_{fs}$ 0.0528, $1.96\sigma_{se}$ 0.0076,
+$B_{good}$ 0.0007). It **excludes** 3.5260 by 0.198.
+
+The flip is not today's change. The four-term bound of 2026-11-02 was already
+[3.6907, 3.8795]. The pinned refit behind $B_{fs}$ **did not converge** (ω₁ = 10.3,
+χ² p = 1e-35, warning issued), so this interval is void, and the realized bias (+0.259) is
+5× its $B_{fs}$. The ±0.21 acceptance criterion is met only formally. Reading (unchanged): the
+materialized model cannot reach the scales d_f(5) needs.

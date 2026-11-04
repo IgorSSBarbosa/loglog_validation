@@ -66,7 +66,7 @@ Launched over ssh on missouri (shared home, same checkout), under `nohup`.
 | pilot | 3 × 488,519 samples per scale. $\hat\gamma_{\rm pilot}=0.5018$, $\hat\omega_1=0.809\pm0.005$, $\hat a_1=-0.320$, $\hat d=0.997\pm0.010$ (5 probes, all clean: 0.96–1.02) |
 | plan | $m_0^\star=14$, $m=6$ (scales $2^{15}..2^{20}$), $n=102{,}166{,}094$, predicted bias $1.8\times10^{-5}$, sd $2.6\times10^{-5}$ per replicate |
 | long run | 3 replicates, 1577 s, 0.44× the plan's 3595 s |
-| estimate | $\hat\gamma=0.50009$, eq. (720) 95% $[0.49992, 0.50026]$ (without the $\omega_2$ piece). Contains 1/2. Before 2026-11-02, with the plan's $\omega_1=0.809$ in $B_{fs}$: $[0.49999, 0.50019]$ |
+| estimate | $\hat\gamma=0.50009$, eq:wilson 95% $[0.49994, 0.50025]$, half-width $1.54\times10^{-4}$ ($B_{fs}=1.04\times10^{-4}$, $1.96\sigma_{se}=5.1\times10^{-5}$, $B_{good}=7\times10^{-9}$; without the $\omega_2$ piece). Contains 1/2. With the pre-2026-11-04 four-term bound: $[0.49992, 0.50026]$. Before 2026-11-02, with the plan's $\omega_1=0.809$ in $B_{fs}$: $[0.49999, 0.50019]$ |
 | pilot refit, $\gamma$ pinned to $\hat\gamma$ | $\omega_1=0.707\pm0.009$, $a_1=-0.304$, the $\omega_1,a_1$ of $B_{fs}=1.0\times10^{-4}$. $\chi^2=31.9$ on 8 dof, p = 1e-4: **warning** (one correction does not explain the pilot around $\hat\gamma$) |
 | replicate-$t$ | $[0.50004, 0.50014]$: scatter only, **excludes** 1/2 (bias ≈ $1\times10^{-4}$) |
 
@@ -84,12 +84,12 @@ Readings:
    exponents.
 2. **(A2) fails for $\lvert S_i\rvert$:** zeros at even $i$, fraction $3.4\times10^{-3}$ at
    $2^{15}$ down to $6.0\times10^{-4}$ at $2^{20}$ (ratio 5.7 over a factor 32, i.e. $\approx i^{-1/2}$).
-   `log_moment` drops them.
 3. **(A4) is flat** at $\overline{\lvert\xi\rvert^3}=3.1414\pm0.0005$, which is the half-normal
-   value $\pi$. **(A6) is flat** at $\hat\sigma^2=0.5708$, the half-normal value $\pi/2-1$.
-4. **(A5) is still rising** (3.00 → 3.59 across the window), so $\hat L=3.59$ is the
-   largest value seen, not a plateau.
-5. **(A8):** the long run took 0.44× the plan's time. The throughput measured on the
+   value $\pi$. **(A5) is flat** at $\hat\sigma^2=0.5708$, the half-normal value $\pi/2-1$.
+4. The log-moment panel ($\overline{\lvert\log\xi\rvert^3}$, still rising 3.00 → 3.59) is
+   gone: the 2026-11-04 article revision dropped that assumption and the Wilson term that
+   used it (user). Panels are labelled as in the article's Step 4 list since then.
+5. **(A6):** the long run took 0.44× the plan's time. The throughput measured on the
    pilot's small scales understates the one at the long run's scales, as in 14.
 6. **(A1)+(A3):** the pilot fit, extrapolated, follows the long-run points on the
    log-log plot and is off by at most $9.9\times10^{-3}$ in $\log\overline Y$ at
@@ -104,8 +104,8 @@ Readings:
    the article's eqs. (bFS) and (bSE) with the pilot's $\hat a_1$, $\hat\omega_1$,
    $\hat\sigma^2_\infty$ plugged in. Only their crossing $m_0^\star$ is used. These are not
    `plan.py`'s internal constants (`tools/allocation.py` keeps the exact weight sums and
-   a $1/\log\rho$): at every $m_0$ the article's bias is 1.30× and its SE 0.68× the
-   planner's. Both give $m_0^\star=14$, and `plot_pipeline.py` asserts that. The pilot
+   a $1/\log\rho$): at every $m_0$ the article's bias is 1.30× and its SE $\log 2=0.69$× the
+   planner's (0.68× before the article's SE carried the exact $m(m^2-1)$, 2026-11-04). Both give $m_0^\star=14$, and `plot_pipeline.py` asserts that. The pilot
    correction's extrapolation is now its own figure.
 
 Figures were copied to `images/` here (PNG) and to `../article_writting/images/` (PDF, for the article on Overleaf).

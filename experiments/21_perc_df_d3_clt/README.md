@@ -47,4 +47,21 @@ B = 2·10¹¹ per replicate, tuned m₀ = 2 (ladder 8..256), n = 4 876 per scale
 asymptotic eq. (583) underpredicts it by 27 % because Assumption 6 has not converged on
 8..256: cv falls from 1.17 at the bottom of the ladder to 0.83 at the top, so σ∞² taken
 from the top scale is too small for the lower rungs. The eq. (720) bound covers, but is
-9.5× wider than the actual error, almost all of it the stray-mean term B_bad.
+9.5× wider than the actual error, almost all of it the stray-mean term B_bad (a term the
+article dropped on 2026-11-04; see the end).
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+| quantity | three-term | before |
+|---|---|---|
+| Var ratio, thm:CLT with $m(m^2-1)$ | **1.23 [1.02, 1.43]**: still FAIL | 1.27 [1.05, 1.47] |
+| Var ratio, per-scale cv | 1.04 (unchanged) | 1.04 |
+| eq:wilson half-width | **0.0203** ($B_{fs}$ 0.0119, $1.96\sigma_{se}$ 0.0080, $B_{good}$ 0.0004) | 0.059 (B_bad) |
+| coverage | **200/200 [0.98, 1]**, bound/RMSE **3.3** | 200/200, 9.5 |
+
+The reading stands: Assumption 5 (σ convergence, formerly 6) has not converged on 8..256.
+The bound now covers with a 3.3× margin rather than 9.5×, and $B_{fs}$ dominates.

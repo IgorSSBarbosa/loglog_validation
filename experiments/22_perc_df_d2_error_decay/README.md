@@ -58,7 +58,8 @@ The mechanism is visible directly: at fixed m₀ = 3 the bias stays at +0.0027 f
 while the sd falls 37×, so the error floors and the optimum moves up the ladder with B.
 
 **T3.** eq. (720) covers in **all 30 cells** (20/20 each, Wilson lower end 0.84), with
-bound/RMSE 2.9–9.5 (B_fs dominant at low m₀, B_bad at high m₀).
+bound/RMSE 2.9–9.5 (B_fs dominant at low m₀, B_bad at high m₀). With the three-term bound
+of 2026-11-04 it is 598/600, see the end.
 
 **CLT, as a by-product.** 27 of 30 cells pass at α = 0.05 per test; 3 fail with ratio < 1
 (0.56–0.65). With two tests per cell the expected false-fail count is about 2–3, so this is
@@ -66,3 +67,17 @@ consistent with the CLT holding.
 
 Figure: `data/error_decay/theorem_scores.png` (QQ, RMSE vs B with the predicted slope, coverage
 per cell). Candidate for `images/` once reviewed.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+T3 re-scored with the same seed and n_boot. **598/600** (was 600/600). The new misses are
+19/20 at (B = 10⁹, m₀ = 6) and (B = 6·10¹⁰, m₀ = 7), and every cell is still consistent
+with ≥ 95 %. Bound/RMSE is now **1.9–4.5** (was 2.9–9.5). $B_{fs}$ dominates at small m₀
+(m₀ = 3 at B ≤ 4·10⁹, up to m₀ ≤ 6 at 10¹²), and the standard-error term dominates above that.
+In the cells B_bad used to dominate, the half-width shrank 1.7–3.4×. CLT: still 27 of 30 cells pass,
+with the same three failing cells. The variance ratios fell by about 3 %, because the SE is
+$\sqrt{36/35}$ wider at m = 6.

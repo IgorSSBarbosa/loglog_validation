@@ -1,6 +1,6 @@
 # Experiment 27 — $\hat d_f$, $d=3$, `face_far`, planned run
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-09). d̂_f(3) = 2.5222 ± 0.0133 (eq. 720), literature 2.52293(10) inside.**
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-09). d̂_f(3) = 2.5222 ± 0.0133 (eq. 720), literature 2.52293(10) inside. Three-term bound (2026-11-04): ± 0.0043, still inside.**
 
 ## Acceptance criterion
 
@@ -53,3 +53,15 @@ boxes ≤ 512³ and per-site cost grows with the box (the d̂ = 3.14 the pilot m
 so), so the clock has to extrapolate to 1024³.
 
 Report: `data/pilot/report.md` (`plot.png`, `fit.png`).
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[2.5179, 2.5265]**, half-width **0.0043** ($1.96\sigma_{se}$ 0.0036, $B_{fs}$ 0.0007,
+$B_{good}$ 4e-5). It contains 2.52293. The pinned refit does not warn (ω₁ = 1.85, χ² p = 0.78).
+Gap (i) above is gone: the bound is now 3.6× the predicted RMSE (0.0012), not 11×, and
+the standard error dominates it. $B_{fs}$ = 0.0007 rather than 0.0009, because the refit
+with γ pinned has been used since 2026-11-02.

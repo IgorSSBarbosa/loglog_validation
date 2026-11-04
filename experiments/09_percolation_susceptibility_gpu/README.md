@@ -415,7 +415,8 @@ form eq. (523)–(526).
 | eq. (232) refit on this data (dof 1) | 2.0745 | 1.4314 |
 
 **Compared with 1.430(6), at reporting time only.** γ̂ − 1.430 = **+0.0195**, 3.2 × the
-literature error. The eq. (720) interval **covers** 1.430 (its lower end is 0.008 below);
+literature error. The eq. (720) interval **covers** 1.430 (its lower end is 0.008 below;
+**no longer true since 2026-11-02**, see the three-term section at the end);
 the replicate interval does **not**, as the report itself warns: a finite-size bias
 shifts every replicate the same way. The realized bias is inside the bound: +0.0195 against
 a B_fs of 0.0249 in γ_susc units (0.0361 in γ_L; the planner had predicted 0.0303).
@@ -449,3 +450,22 @@ the plan can rest on, an interval that is finite and covers, and a bias one can 
   with 1.430 is not the estimator under test.
 - The budget was 60 min, not the plan's 210, because with the ladder capped nothing more
   was to be gained (T3.3).
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+`autopilot_gsusc_L_d4` now reads, in γ_L units, **[2.0816, 2.1197]**, half-width 0.0190
+($B_{fs}$ 0.0156, $1.96\sigma_{se}$ 0.0034, $B_{good}$ 4e-5); in γ_susc = 0.69·γ_L units
+**[1.4363, 1.4626]**, half-width 0.0131. It **excludes 1.430(6)** by 0.006.
+
+This verdict did not flip today. The four-term bound of 2026-11-02 already gave
+[2.0809, 2.1205] (γ_susc lower end 1.4358). It flipped on 2026-11-02, when $B_{fs}$ switched
+from the planner's ω₁ (B_fs 0.0361 above) to the pilot refitted with γ pinned to γ̂. That
+refit did **not converge** here (ω₁ = 8.6, a₁ = −3·10⁶, χ² p = 3e-167, warning issued),
+so its $B_{fs}$ = 0.0156 is not a usable bias bound, and the realized bias (+0.0195 in
+γ_susc) is above it. Treat this interval as void until the pilot is refit on a ladder where
+one correction describes the data. The x-ladder run (`autopilot_gsusc_d4_210m`) is now
+±692, which is still useless.

@@ -57,6 +57,22 @@ allocation (constant restored from a₁ and cv) hits the empirical best at every
 bound/RMSE 2.7–27 (it widens with m₀). The one miss is instructive: at B = 10¹⁰, m₀ = 5
 (ladder 64..1024) the allocation leaves n = 3 per scale, and one replicate had a top-rung mean
 of exactly 0, so γ̂ = −∞. That is the article's "bad event" (Assumption 2 failing at small n),
-which the B_bad term exists to price.
+which the B_bad term exists to price. The article dropped B_bad on 2026-11-04, see the end.
 
 **CLT.** 22 of 24 cells pass (2 false fails expected at this many tests).
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+T3 re-scored with the same seed and n_boot: **474 of 480** (was 479). Every cell is still
+consistent with ≥ 95 %. The lowest is 18/20 at (B = 4·10¹¹, m₀ = 4), with Wilson CI
+[0.70, 0.97]. The other 19/20 cells are (10¹⁰, 3), (10¹⁰, 5: the γ̂ = −∞ replicate),
+(4·10¹¹, 3) and (10¹², 5). Bound/RMSE is now **1.9–4.0** (was 2.7–27). The large ratios were
+all B_bad, which at m₀ = 5, B = 10¹⁰ was 5.9 of an 8.1 half-width. Now the standard-error term
+dominates most cells. $B_{fs}$ dominates at m₀ = 2 from B = 2·10¹⁰ up, and $B_{good}$ at
+m₀ = 5 for B ≤ 2·10¹⁰, where n is a handful of samples per scale (n = 3 at 10¹⁰). Without B_bad, nothing in the bound prices the
+bad event any more. That is the article's choice: Assumption 2 is checked on the data
+(Step 4), not bounded. CLT: still 22 of 24 cells pass.

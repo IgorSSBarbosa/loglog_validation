@@ -68,7 +68,7 @@ python3 -u src/study/autopilot.py -meta experiments/47_perc_c1_largest_cluster/r
 |---|---|
 | pilot | 3 replicates on 8..1024. $\hat d=2.188\pm0.006$, $\hat\omega_1=1.68\pm0.10$, $\hat a_1=-0.20\pm0.03$ |
 | plan | $m_0=5$, scales 64..2048, $n=1{,}170{,}764$ ×3, 56.1 min, predicted bias $4.6\times10^{-5}$ |
-| estimate | $\hat\gamma=1.89589$, eq. (720) 95% **[1.89570, 1.89609]**, contains $91/48=1.89583$ (error $+6\times10^{-5}$) |
+| estimate | $\hat\gamma=1.89589$, eq:wilson 95% **[1.89571, 1.89608]**, contains $91/48=1.89583$ (error $+6\times10^{-5}$). Three-term bound of 2026-11-04; the four-term one gave [1.89570, 1.89609] |
 | replicate-$t$ | [1.89579, 1.89600], also contains it |
 
 The correction on the 2-D torus is fast ($\omega_1\approx1.7$) and small ($a_1\approx-0.2$),
