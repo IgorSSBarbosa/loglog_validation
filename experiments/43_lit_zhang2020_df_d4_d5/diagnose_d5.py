@@ -78,12 +78,12 @@ def plot(out: Path, L: np.ndarray, y: np.ndarray, sl: np.ndarray, lmin_window: f
     g_win, c_win = ols(L[w], y[w])
     x = np.geomspace(L[0], L[-1], 200)
 
-    ax.plot(L, y, "o", ms=7, color=_INK, mec="white", mew=1.5, zorder=3, label=r"$\bar Y_L$ (13 sizes)")
+    ax.plot(L, y, "o", ms=7, color=_INK, mec="white", mew=1.5, zorder=3, label=r"$\overline{Y}_L$ (13 sizes)")
     ax.plot(x, np.exp(c_full) * x ** g_full, lw=2, color=_BLUE, label=rf"log-log, all sizes: $\hat d_f$={g_full:.4f}")
     xw = np.geomspace(L[w][0] / 1.6, L[-1], 50)
     ax.plot(xw, np.exp(c_win) * xw ** g_win, lw=2, color=_ORANGE,
             label=rf"log-log, $L\geq{lmin_window:.0f}$: $\hat d_f$={g_win:.4f}")
-    ax.set(xscale="log", yscale="log", xlabel="$L$", ylabel=r"$\bar Y_L$ (far-half sites joined to the face)",
+    ax.set(xscale="log", yscale="log", xlabel="$L$", ylabel=r"$\overline{Y}_L$ (far-half sites joined to the face)",
            title="(a) the log-log plot")
     ax.set_xticks(L[::2], [f"{v:.0f}" for v in L[::2]])
     ax.minorticks_off()
@@ -93,7 +93,7 @@ def plot(out: Path, L: np.ndarray, y: np.ndarray, sl: np.ndarray, lmin_window: f
     slope = np.diff(np.log(y)) / np.diff(np.log(L))
     err = 1.96 * np.hypot(sl[1:], sl[:-1]) / np.diff(np.log(L))
     bx.errorbar(mid, slope, yerr=err, fmt="o", ms=7, color=_INK, mec="white", mew=1.5, capsize=0, zorder=3,
-                label=r"local slope $\Delta\log\bar Y/\Delta\log L$ $\pm1.96$ se")
+                label=r"local slope $\Delta\log\overline{Y}/\Delta\log L$, $\pm1.96$ standard errors")
     k = L >= ZHANG_LM
     f = lambda v, g, a0, a1, y1: v ** g * (a0 + a1 * v ** y1)  # noqa: E731
     q, _ = curve_fit(f, L[k], y[k], p0=[3.5, 1, -1, -0.5], sigma=(y * sl)[k], absolute_sigma=True, maxfev=200000)
@@ -101,7 +101,7 @@ def plot(out: Path, L: np.ndarray, y: np.ndarray, sl: np.ndarray, lmin_window: f
     eff = q[0] + q[2] * q[3] * xz ** q[3] / (q[1] + q[2] * xz ** q[3])
     inside = xz <= L[-1]
     bx.plot(xz[inside], eff[inside], lw=2, color=_AQUA,
-            label=rf"Zhang ansatz, $L\geq{ZHANG_LM}$: $d_f$={q[0]:.3f}, $y_1$={q[3]:.2f}")
+            label=rf"Zhang ansatz, $L\geq{ZHANG_LM}$: $\hat d_f$={q[0]:.3f}, $\hat\omega_1$={-q[3]:.2f}")
     bx.plot(xz[~inside], eff[~inside], lw=2, ls=(0, (4, 2)), color=_AQUA)  # extrapolation past the data
     bx.axhline(g_full, lw=2, color=_BLUE, label="log-log, all sizes")
     bx.axhline(g_win, lw=2, color=_ORANGE, label=rf"log-log, $L\geq{lmin_window:.0f}$")
