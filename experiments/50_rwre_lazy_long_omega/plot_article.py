@@ -5,7 +5,8 @@ Nothing is drawn; everything is read from data already on disk.
   - rwre_sweep.pdf: (a) log Ybar_i against log i for 19's `n4e6` sweep (p = 0, 0.05,
     ..., 0.5; n = 800,000 x 5 at every scale), (b) its local slopes
     s_k = log2(Ybar_{2i}/Ybar_i) (± CLT se), with the local slopes of this experiment's
-    two long runs (p = 0.04, 0.3, 4..2^23, `local_slope.json`) on top. Slopes are taken
+    two long runs (p = 0.04, 0.3, 4..2^23, `local_slope.json`) on top, and a band over
+    the pairs between Avena & Thomann's times 2^13..2^16. Slopes are taken
     within a draw, never across draws (ground rule 2).
   - rwre_p<p>_pipeline_{pilot,longrun,checks}.pdf: copies of `46/plot_pipeline.py`'s
     figures of the two long runs.
@@ -69,6 +70,10 @@ def plot_sweep(out: Path) -> None:
             axs.errorbar(k, s, yerr=se, fmt=mk, color="black", mfc="white", ms=3.5,
                          elinewidth=0.8, capsize=0, lw=0, label=f"long run, $p={p}$")
         axs.axhline(0.5, color="#7a7a7a", lw=1, ls="--")
+        # Avena & Thomann (2012) simulated n = 2^13..2^16. Slopes sit at the lower scale
+        # of their pair, so the pairs between those times are at 2^13..2^15.
+        axs.axvspan(2**12.75, 2**15.25, color="#e8e4d8", zorder=0, lw=0,
+                    label="Avena–Thomann's times")
         ax.set(xscale="log", yscale="log", xlabel="scale $i$", ylabel=r"$\overline{Y}_i$")
         ax.set_xscale("log", base=2)
         axs.set_xscale("log", base=2)
