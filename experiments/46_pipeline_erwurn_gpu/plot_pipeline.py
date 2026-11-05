@@ -111,7 +111,7 @@ def fig_pilot(d: dict, rho: float):
 
     ax.errorbar(k, y, yerr=se, fmt="o", color=DATA, label=r"$\log\overline{Y}_{\rho^k}$")
     ax.plot(kk, full(kk), color=FIT, label=r"fit $f(k)$")
-    ax.plot(kk, asym(kk), "--", color=REF, lw=1.1, label=r"asymptote $\hat\alpha k+\hat\beta$")
+    ax.plot(kk, asym(kk), "--", color=REF, lw=1.1, label=r"asymptote $\hat\beta k+\hat\alpha$")
     ax.set_ylabel(r"$\log\overline{Y}$")
     ax.legend(loc="upper left")
     ax.tick_params(labelbottom=False)
@@ -210,7 +210,7 @@ def fig_extrapolation(d: dict, rho: float):
     ax.plot(kk, full(kk) - asym(kk), color=FIT, label=r"$\hat a_1\rho^{-\hat\omega_1 k}$")
     ax.axhline(0, color=REF, lw=0.8, ls="--")
     ax.set_xlabel(r"$k=\log_\rho i$")
-    ax.set_ylabel(r"$\log\overline{Y}-(\hat\alpha k+\hat\beta)$")
+    ax.set_ylabel(r"$\log\overline{Y}-(\hat\beta k+\hat\alpha)$")
     ax.legend(loc="lower right")
     ax.set_title("pilot correction, extrapolated", fontsize=9, loc="left")
     return fig
@@ -265,7 +265,7 @@ def fig_checks(d: dict, rho: float):
     ks = np.log(ls["scales"][:-1]) / math.log(rho) + 0.5
     ax.axvspan(k[0], k[-1], color=WINDOW, label="long-run window")
     ax.errorbar(ks, ls["s"], yerr=ls["se_s"], fmt="o", color=DATA, ms=3.5,
-                label=r"$s_k \pm$ se")
+                label=r"$s_k$, $\pm 1$ standard error")
     ax.axhline(d["answer"]["gamma"], color=REF, ls="--", lw=1,
                label=rf"$\hat\gamma={d['answer']['gamma']:.5f}$")
     ax.set_ylabel(r"$s_k$")
@@ -280,7 +280,7 @@ def fig_checks(d: dict, rho: float):
     ax = ax_["A5"]
     s2 = per_rep(ax, [np.square(r["cv"]) for r in reps], r"$\hat\sigma_i^2$")
     ax.axhline(s2.max(), color=REF, ls="--", lw=1, label=rf"$\hat\sigma^2_{{\max}}={s2.max():.4f}$")
-    ax.set_title(r"(A5) $\hat\sigma_i^2=\widehat{\mathbb{V}}\,\xi_i$", fontsize=9, loc="left")
+    ax.set_title(r"(A5) $\hat\sigma_i^2=\widehat{\mathrm{var}}\,\xi_i$", fontsize=9, loc="left")
 
     ax = ax_["A6"]
     c = pilot["cost"]
