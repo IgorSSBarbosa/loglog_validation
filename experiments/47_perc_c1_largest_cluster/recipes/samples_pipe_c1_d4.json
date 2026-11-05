@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 4, "geometry": "torus"},
+  "scales": [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128],
+  "n": {"rule": "neyman", "budget": 2000000000000.0},
+  "seed": null,
+  "_comment": "User, 2026-11-05: C1 through the pipeline in d = 4, launched after experiment 53 finished on purus. 256^4 > 2^31 exceeds the int32 labels, so the top is L = 128 (--max-scale 128) and the long run is m = 6 on 4..128. sqrt(2)-spaced pilot as in d = 5."
+}

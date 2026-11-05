@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 3, "geometry": "torus"},
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512],
+  "n": {"rule": "neyman", "budget": 200000000000.0},
+  "seed": null,
+  "_comment": "User, 2026-11-05: the article's d_f runs switch from face_far to C1. Pilot ladder and Neyman budget are experiment 49's df_d3 design (4..512, 2e11), so the two observables are compared on the same pilot. Run by run_study.sh with autopilot --time 9h, --max-scale 1024 (1024^3 sites is the int32 label limit's last power of 2)."
+}

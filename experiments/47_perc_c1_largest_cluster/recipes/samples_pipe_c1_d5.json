@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 5, "geometry": "torus"},
+  "scales": [4, 6, 8, 12, 16, 24, 32, 48, 64],
+  "n": {"rule": "neyman", "budget": 2000000000000.0},
+  "seed": null,
+  "_comment": "User, 2026-11-05: A4+A5 through the pipeline. 64^5 = 1.07e9 sites is the largest power of 2 the int32 labels allow, so the long run is m = 5 on 4..64 (experiment 30's constraint). The pilot uses the sqrt(2)-spaced sizes 4..64 (9 rungs, close to Zhang et al.'s 4..60 ladder) so the eq. (232) fit has 5 dof instead of 1."
+}

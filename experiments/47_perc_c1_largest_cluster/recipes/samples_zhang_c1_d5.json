@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 5, "geometry": "torus"},
+  "scales": [4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40, 48, 60],
+  "n": [200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 20000, 20000, 20000, 20000, 20000],
+  "seed": null,
+  "_comment": "User, 2026-11-05: Zhang et al.'s 5D allocation (arXiv:2004.11289 Sec. II; 1e6 samples for L <= 20, 1e5 for L = 24..60) on the largest cluster, as the LONG RUN of a study, with the pipeline's Step 4 checks and estimates after it (fixed_run.py). n is per replicate: drawn as 5 replicates, so the pooled run is exactly Zhang's allocation and the replicate spread gives the se. Repeats experiment 43's step 1 (face count) on C1."
+}

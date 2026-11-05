@@ -207,6 +207,126 @@ def analyse(scales, y_bars_by_scale, rho: float, *, cv=None, n=None) -> dict:
     return out
 
 
+# --- Any increasing ladder (user, 2026-11-05) -------------------------------------
+# Published allocations (Zhang et al. 2020's 4, 6, 8, 10, ..., 60) are not rho^k
+# ladders, and the functions above refuse them. The pair slope is still defined,
+#
+#     s_k = (log Ybar_{i_{k+1}} - log Ybar_{i_k}) / log(i_{k+1} / i_k),
+#
+# and under eq. (232) at J = 1 its expectation is EXACTLY (to the delta method)
+#
+#     s_k = gamma + a1 (i_{k+1}^-omega - i_k^-omega) / log(i_{k+1} / i_k),
+#
+# so the fits below use that pair basis instead of placing s_k at one scale. On a
+# rho^k ladder the basis is a constant times i_k^-omega and `fit_power_pairs`
+# returns `fit_power`'s gamma and omega. Delta s_k and w_k need equal spacing in
+# log i and are not computed here.
+
+def _pair_basis(i: np.ndarray, f) -> np.ndarray:
+    return (f(i[1:]) - f(i[:-1])) / np.log(i[1:] / i[:-1])
+
+
+def _check_increasing(scales) -> np.ndarray:
+    i = np.asarray(scales, dtype=float)
+    if i.size < 2 or np.any(np.diff(i) <= 0) or np.any(i <= 1):
+        raise ValueError(f"scales must be increasing and > 1; got {list(scales)}")
+    return i
+
+
+def local_slopes_pairs(scales, log_y, se_log) -> dict:
+    """s_k between consecutive scales of any increasing ladder, with its se."""
+    i = _check_increasing(scales)
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    K = L.size
+    D1 = (np.eye(K, k=1) - np.eye(K))[:-1] / np.log(i[1:] / i[:-1])[:, None]
+    return {"scales": i.astype(int).tolist(), "s": (D1 @ L).tolist(),
+            "se_s": _propagate(D1, se).tolist()}
+
+
+def fit_power_pairs(scales, s, se, omega_bounds=(1e-3, 10.0)) -> dict:
+    """(P) s_k = gamma + a1 (i_{k+1}^-omega - i_k^-omega) / log(i_{k+1}/i_k), weighted LS.
+
+    `scales` are the ladder's (one more than s). Profiled in omega as `fit_power`;
+    the covariance from curve_fit started at the profile minimum.
+    """
+    i = _check_increasing(scales)
+    s, se = np.asarray(s, float), np.asarray(se, float)
+    basis = lambda om: _pair_basis(i, lambda x: x ** -om)  # noqa: E731
+
+    def profile(om: float) -> tuple[float, np.ndarray]:
+        A = np.vstack([np.ones_like(s), basis(om)]).T / se[:, None]
+        coef, *_ = np.linalg.lstsq(A, s / se, rcond=None)
+        r = A @ coef - s / se
+        return float(r @ r), coef
+
+    grid = np.geomspace(*omega_bounds, 400)
+    j = int(np.argmin([profile(om)[0] for om in grid]))
+    lo, hi = grid[max(j - 1, 0)], grid[min(j + 1, grid.size - 1)]
+    om = float(optimize.minimize_scalar(lambda o: profile(o)[0], bounds=(lo, hi),
+                                        method="bounded", options={"xatol": 1e-10}).x)
+    _, (g, a1) = profile(om)
+    out = {"model": "gamma + a1 (i'^-omega - i^-omega)/log(i'/i)", "gamma": float(g),
+           "a1": float(a1), "omega": om,
+           "omega_on_bound": bool(np.isclose(om, omega_bounds[0], rtol=1e-3)
+                                  or np.isclose(om, omega_bounds[1], rtol=1e-3))}
+    if s.size > 3:
+        k = np.arange(s.size, dtype=float)
+        f = lambda kk, g_, a_, o_: g_ + a_ * basis(o_)[kk.astype(int)]  # noqa: E731
+        popt, pcov = optimize.curve_fit(f, k, s, p0=[g, a1, om], sigma=se,
+                                        absolute_sigma=True, maxfev=20000)
+        err = np.sqrt(np.diag(pcov))
+        out.update(gamma=float(popt[0]), a1=float(popt[1]), omega=float(popt[2]),
+                   se_gamma=float(err[0]), se_a1=float(err[1]), se_omega=float(err[2]))
+    r = (out["gamma"] + out["a1"] * basis(out["omega"]) - s) / se
+    return {**out, **_chi2_summary(r, 3)}
+
+
+def fit_log_pairs(scales, s, se) -> dict:
+    """(L) log E Y = log a0 + gamma log i + c log log i, i.e. s - gamma ~ c / ln i, in the
+    exact pair form s_k = gamma + c (log log i_{k+1} - log log i_k) / log(i_{k+1}/i_k)."""
+    i = _check_increasing(scales)
+    s, se = np.asarray(s, float), np.asarray(se, float)
+    A = np.vstack([np.ones_like(s), _pair_basis(i, lambda x: np.log(np.log(x)))]).T / se[:, None]
+    coef, *_ = np.linalg.lstsq(A, s / se, rcond=None)
+    cov = np.linalg.inv(A.T @ A)
+    return {"model": "gamma + c / ln i (pair form)", "gamma": float(coef[0]),
+            "c": float(coef[1]), "se_gamma": float(np.sqrt(cov[0, 0])),
+            "se_c": float(np.sqrt(cov[1, 1])), **_chi2_summary(A @ coef - s / se, 2)}
+
+
+def clt_se_pairs(scales, cv, n, R) -> np.ndarray:
+    """`clt_se` on any ladder: per-scale variance cv^2/(n R) of mean log Ybar."""
+    i = _check_increasing(scales)
+    v = np.asarray(cv, float) ** 2 / (np.asarray(n, float) * np.asarray(R, float))
+    return np.sqrt(v[:-1] + v[1:]) / np.log(i[1:] / i[:-1])
+
+
+def n_mismatch_pairs(scales, cv, n) -> np.ndarray:
+    """`n_mismatch` on any ladder: cv^2/2 (1/n_k - 1/n_{k+1}) / log(i_{k+1}/i_k)."""
+    i = _check_increasing(scales)
+    cv, n = np.asarray(cv, float), np.asarray(n, float)
+    c2 = ((cv[:-1] + cv[1:]) / 2) ** 2
+    return c2 / 2 * (1 / n[:-1] - 1 / n[1:]) / np.log(i[1:] / i[:-1])
+
+
+def analyse_pairs(scales, y_bars_by_scale, *, cv=None, n=None) -> dict:
+    """`analyse` for any increasing ladder: s_k, the (P) and (L) pair fits, and, given
+    per-scale cv and n, the CLT se and the n-mismatch term (n may differ by scale)."""
+    mom = [scale_moments(y) for y in y_bars_by_scale]
+    L = np.array([m[0] for m in mom])
+    se = np.array([m[1] for m in mom])
+    R = np.array([m[2] for m in mom])
+    out = {"log_y": L.tolist(), "se_log_y": se.tolist(), "R": R.tolist(),
+           **local_slopes_pairs(scales, L, se)}
+    s, se_s = np.array(out["s"]), np.array(out["se_s"])
+    out["fits"] = {"power": fit_power_pairs(scales, s, se_s) if s.size >= 3 else None,
+                   "log": fit_log_pairs(scales, s, se_s) if s.size >= 2 else None}
+    if cv is not None and n is not None:
+        out["se_s_clt"] = clt_se_pairs(scales, cv, n, R).tolist()
+        out["n_mismatch"] = n_mismatch_pairs(scales, cv, n).tolist()
+    return out
+
+
 def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
                 omega_bounds: tuple[float, float]) -> dict:
     """Weighted LS of L = a + b x + c rho^(-omega x) on one window (x = 0, 1, ...).

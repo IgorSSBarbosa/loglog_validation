@@ -74,3 +74,33 @@ python3 -u src/study/autopilot.py -meta experiments/47_perc_c1_largest_cluster/r
 The correction on the 2-D torus is fast ($\omega_1\approx1.7$) and small ($a_1\approx-0.2$),
 so the plan is variance-limited and both intervals cover. Local slopes 64..1024 sit
 within $3.5\times10^{-4}$ of $91/48$ (local-slope pass, `local_slope.json`).
+
+## The article's d_f runs on C1 (user, 2026-11-05)
+
+The article switched its $d_f$ observable from `face_far` to $C_1$. Queued in
+`local/queue_47_c1_d4.txt`, launched by `local/after_53_launch_c1_d4.sh` once experiment 53
+finishes on purus; every run follows the pipeline (pilot, plan, long run, Step 4, eq. (wilson)).
+
+| study | recipe | pilot | long run | seed |
+|---|---|---|---|---|
+| `pipe_c1_d3_9h` | `samples_pipe_c1_d3.json` | 4..512, Neyman $2\cdot10^{11}$ (49's df_d3 design) | 9 h, `--max-scale 1024` | 2026110547 |
+| `pipe_c1_d4_9h` | `samples_pipe_c1_d4.json` | 4, 6, 8, ..., 128 ($\sqrt2$-spaced), Neyman $2\cdot10^{12}$ | 9 h, `--max-scale 128` | 2026110549 |
+| `pipe_c1_d5_9h` | `samples_pipe_c1_d5.json` | 4, 6, 8, ..., 64 ($\sqrt2$-spaced), Neyman $2\cdot10^{12}$ | 9 h, `--max-scale 64 --m 5` | 2026110548 |
+| `zhang_c1_d5` | `samples_pipe_c1_d5.json` (pilot), `samples_zhang_c1_d5.json` (long run) | 4, 6, 8, ..., 64 ($\sqrt2$-spaced), Neyman $2\cdot10^{12}$ | **Zhang et al.'s 5D allocation**, 4..60, as 5 replicates of $n/5$ (pooled = Zhang's $10^6$/$10^5$), then `fixed_run.py report/plot` | 2026110550 / 51 |
+
+The last repeats experiment 43's step 1 (face count) on $C_1$: Zhang's allocation is the long
+run, so the two observables are compared on the same published allocation. Its ladder is not
+$\rho^k$, which the pipeline's drivers require, so `fixed_run.py` does Step 3 and Step 4 on it:
+OLS $\hat\gamma$ per window (eq. (526) is the OLS slope on a $\rho^k$ window; the headline is
+the top 6 scales, the pipeline's $m$), eq. (232) with a cutoff scan, the pilot refit pinned to
+$\hat\gamma$, and local slopes in pair form (`tools/local_slope.py`'s `*_pairs` functions,
+user 2026-11-05). No eq. (wilson) interval: the theorem is proved for $\rho^k$ ladders only.
+Checked before launch: on a $\rho^k$ ladder the pair functions equal the geometric ones (slopes,
+se, CLT se, n-mismatch, and `fit_power`'s $\gamma$, $\omega$, $\chi^2$); on the noiseless Zhang
+ladder they recover a planted $\gamma=1.9$, $a_1=-0.8$, $\omega=0.9$ to $10^{-8}$ ($\chi^2\sim10^{-22}$);
+a 2D smoke run (`data/smoke_fixed`) went through draw, report and plot. $256^4$ and $128^5$
+exceed the int32 labels, hence the caps. Known values: $d_f(3)=2.52293(10)$,
+$d_f(4)=3.0446(7)$, $d_f(5)=3.5260(14)$.
+
+A first launch of `pipe_c1_d3_9h` and `pipe_c1_d5_9h` (2026-11-05 12:57) was stopped by the
+user after ~10 min to wait for 53; its partial output is `data/*_aborted*`.

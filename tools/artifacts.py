@@ -91,6 +91,10 @@ ARTIFACTS: dict[str, str] = {
                                                   # published allocation drawn
                                                   # literally, scored with the
                                                   # log-log estimator
+    "fixed_run_report": "fixed_run_report.json",  # experiments/47_perc_c1_largest_cluster/
+                                                  # fixed_run.py -- Step 4 and the
+                                                  # estimates on a long run drawn on a
+                                                  # published (non-rho^k) allocation
 }
 
 #: old filename -> the kinds that ever used it, most specific first.
