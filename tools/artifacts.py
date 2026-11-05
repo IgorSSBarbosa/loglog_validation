@@ -79,6 +79,10 @@ ARTIFACTS: dict[str, str] = {
                                                   # omega_1 from the loglog-log plot:
                                                   # pilot gamma_k vs the final's gamma-hat
     "omega_loglog_figure": "omega_loglog.png",    # the same: log-log and loglog-log panels
+    "omega_windows":    "omega_windows.json",     # src/estimate/omega_windows.py --
+                                                  # omega per window: slope of local
+                                                  # slopes vs a 5-point LS fit
+    "omega_windows_figure": "omega_windows.png",  # the same, omega-hat per window
     "omega_loglog_top": "omega_loglog_top.json",  # experiments/19_rwre_lazy_omega/
                                                   # omega_loglog_top.py -- pilot-only
                                                   # variant, gamma-hat = top pair's slope

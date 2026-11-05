@@ -205,3 +205,72 @@ def analyse(scales, y_bars_by_scale, rho: float, *, cv=None, n=None) -> dict:
         out["se_s_clt"] = clt_se(cv, n, R, rho).tolist()
         out["n_mismatch"] = n_mismatch(cv, n, rho).tolist()
     return out
+
+
+def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
+                omega_bounds: tuple[float, float]) -> dict:
+    """Weighted LS of L = a + b x + c rho^(-omega x) on one window (x = 0, 1, ...).
+
+    (a, b, c) are linear given omega, so omega is profiled over a log grid, refined
+    in the best cell, and its 68% interval read off the profile at chi2_min + 1. The
+    profile, not curve_fit's linearized se, is the error bar: on 5 points the chi2 in
+    omega is far from quadratic.
+    """
+    def profile(om: float) -> tuple[float, np.ndarray]:
+        A = np.vstack([np.ones_like(x), x, rho ** (-om * x)]).T / se[:, None]
+        coef, *_ = np.linalg.lstsq(A, L / se, rcond=None)
+        r = A @ coef - L / se
+        return float(r @ r), coef
+
+    grid = np.geomspace(*omega_bounds, 600)
+    chi = np.array([profile(om)[0] for om in grid])
+    j = int(np.argmin(chi))
+    lo, hi = grid[max(j - 1, 0)], grid[min(j + 1, grid.size - 1)]
+    om = float(optimize.minimize_scalar(lambda o: profile(o)[0], bounds=(lo, hi),
+                                        method="bounded", options={"xatol": 1e-12}).x)
+    chi2, (a, b, c) = profile(om)
+    excess = lambda o: profile(o)[0] - chi2 - 1.0   # noqa: E731
+
+    def edge(side: np.ndarray, bound: float) -> tuple[float, bool]:
+        # the nearest grid point outside the interval brackets the crossing; none means
+        # the profile never rises by 1 on that side, so the interval is open there
+        out = side[chi[np.isin(grid, side)] > chi2 + 1.0]
+        if out.size == 0:
+            return bound, True
+        far = out.max() if bound < om else out.min()
+        return float(optimize.brentq(excess, *sorted((far, om)), xtol=1e-12)), False
+
+    lo_e, lo_open = edge(grid[grid < om], omega_bounds[0])
+    hi_e, hi_open = edge(grid[grid > om], omega_bounds[1])
+    on_bound = bool(np.isclose(om, omega_bounds[0], rtol=1e-3)
+                    or np.isclose(om, omega_bounds[1], rtol=1e-3))
+    return {"omega": om, "a": float(a), "b": float(b), "c": float(c),
+            "omega_lo": lo_e, "omega_hi": hi_e, "interval_open": lo_open or hi_open,
+            "omega_on_bound": on_bound, "chi2": chi2, "dof": int(x.size - 4),
+            "p_value": float(stats.chi2.sf(chi2, x.size - 4)) if x.size > 4 else None}
+
+
+def omega_windows(scales, log_y, se_log, rho: float, width: int = 5,
+                  omega_bounds=(1e-2, 10.0)) -> list[dict]:
+    """omega from a + b k + c rho^(-omega k) fitted on each run of `width` consecutive
+    points of the log-log plot (user, 2026-11-04): m - width + 1 estimates.
+
+    By eq. (232), log E Y_i = log a0 + gamma log i + a1 i^-omega1 + ..., which on the
+    grid i = rho^k is exactly this model at J = 1, so omega reads omega1, b / log rho
+    reads gamma and c rho^(omega k0) reads a1 (k0 = log_rho of the window's first
+    scale). At width = 4 the fit is an interpolation and omega equals w_k of
+    `local_slopes` identically; width = 5 leaves one dof, hence a chi2.
+    """
+    i = _check_grid(scales, rho)
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    if width < 4:
+        raise ValueError(f"the model has 4 parameters; width must be >= 4, got {width}")
+    out = []
+    x = np.arange(width, dtype=float)
+    for k in range(L.size - width + 1):
+        f = _window_fit(x, L[k:k + width], se[k:k + width], rho, omega_bounds)
+        f.update(scales=i[k:k + width].astype(int).tolist(),
+                 gamma=f["b"] / np.log(rho),
+                 a1=f["c"] * float(i[k]) ** f["omega"])
+        out.append(f)
+    return out
