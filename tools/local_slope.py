@@ -360,11 +360,17 @@ def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
         far = out.max() if bound < om else out.min()
         return float(optimize.brentq(excess, *sorted((far, om)), xtol=1e-12)), False
 
+    # se of b from the full (a, b, c, omega) covariance at the optimum, so omega's
+    # uncertainty reaches b; linearized, which b (a linear parameter) tolerates
+    e = rho ** (-om * x)
+    J = np.vstack([np.ones_like(x), x, e, -c * x * np.log(rho) * e]).T / se[:, None]
+    se_b = float(np.sqrt(np.linalg.pinv(J.T @ J)[1, 1]))
+
     lo_e, lo_open = edge(grid[grid < om], omega_bounds[0])
     hi_e, hi_open = edge(grid[grid > om], omega_bounds[1])
     on_bound = bool(np.isclose(om, omega_bounds[0], rtol=1e-3)
                     or np.isclose(om, omega_bounds[1], rtol=1e-3))
-    return {"omega": om, "a": float(a), "b": float(b), "c": float(c),
+    return {"omega": om, "a": float(a), "b": float(b), "c": float(c), "se_b": se_b,
             "omega_lo": lo_e, "omega_hi": hi_e, "interval_open": lo_open or hi_open,
             "omega_on_bound": on_bound, "chi2": chi2, "dof": int(x.size - 4),
             "p_value": float(stats.chi2.sf(chi2, x.size - 4)) if x.size > 4 else None}
@@ -390,7 +396,92 @@ def omega_windows(scales, log_y, se_log, rho: float, width: int = 5,
     for k in range(L.size - width + 1):
         f = _window_fit(x, L[k:k + width], se[k:k + width], rho, omega_bounds)
         f.update(scales=i[k:k + width].astype(int).tolist(),
-                 gamma=f["b"] / np.log(rho),
+                 gamma=f["b"] / np.log(rho), se_gamma=f["se_b"] / np.log(rho),
                  a1=f["c"] * float(i[k]) ** f["omega"])
         out.append(f)
     return out
+
+
+def clt_se_log(cv_by_scale, n_by_scale) -> np.ndarray:
+    """se of mean log Ybar per scale from each replicate's own cv and n (user, 2026-11-05).
+
+    Delta method per replicate, var log Ybar_r = cv_r^2 / n_r; the mean over R replicates
+    has variance sum_r cv_r^2 / n_r / R^2. Unlike `scale_moments`' sd_r / sqrt(R), which
+    rests on R - 1 = 2 dof when R = 3, this uses every sample, so a chi2 weighted by it
+    is chi2-distributed when the model holds.
+    """
+    out = []
+    for cv, n in zip(cv_by_scale, n_by_scale):
+        cv, n = np.asarray(cv, float), np.asarray(n, float)
+        out.append(np.sqrt(np.sum(cv ** 2 / n)) / cv.size)
+    return np.array(out)
+
+
+def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
+                 omega_bounds=(1e-2, 10.0)) -> dict:
+    """The triple (i_min, i_max, omega): a + b k + c rho^(-omega k) fitted by weighted
+    LS on every run of >= `min_points` consecutive log-log points (user, 2026-11-05).
+
+    The left cut drops scales where omega_2, ... still act; the right cut, scales whose
+    variance or bias the model does not describe. chi2 alone cannot choose the range:
+    dropping points always lowers it. Each range is scored by Jay & Neil's AIC with data
+    cuts (Phys. Rev. D 103, 114502 (2021)), AIC = chi2 + 2 k + 2 N_cut with
+    k = 4 parameters, so a dropped point costs as much as a parameter; weights are
+    proportional to exp(-AIC / 2). `best` is the highest-weight range, and its 68%
+    profile interval is the statistical error. `systematic` is the weighted sd of omega
+    over the ranges, i.e. what the choice of range moves it by; fits whose interval is
+    open or whose omega sits on a bound are left out of it (user, 2026-11-05), since
+    their omega says nothing and would dominate. min_points = 6 keeps dof >= 2.
+    gamma = b / log rho gets the same two errors: `gamma_stat` from the best fit's
+    linearized (a, b, c, omega) covariance, `gamma_systematic` the weighted sd over ranges.
+
+    `best` is the highest-weight range among those closed fits, not over all ranges
+    (2026-11-05, made general): omega on a bound degenerates rho^(-omega k) into a
+    constant or a line, so b no longer reads gamma (rwre p = 0.2 gave omega = 0.010,
+    gamma = -0.09). With no closed fit at all, omega and gamma are None and `reason`
+    says why; nothing is substituted.
+    """
+    i = _check_grid(scales, rho)
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    m = L.size
+    if min_points < 5:
+        raise ValueError(f"4 parameters need >= 5 points for a chi2; got {min_points}")
+    if m < min_points:
+        raise ValueError(f"{m} log-log points; the range fit needs >= {min_points}")
+    fits = []
+    for k1 in range(m - min_points + 1):
+        for k2 in range(k1 + min_points, m + 1):
+            f = _window_fit(np.arange(k2 - k1, dtype=float), L[k1:k2], se[k1:k2], rho,
+                            omega_bounds)
+            f.update(i_min=int(i[k1]), i_max=int(i[k2 - 1]), points=k2 - k1,
+                     gamma=f["b"] / np.log(rho), se_gamma=f["se_b"] / np.log(rho),
+                     a1=f["c"] * float(i[k1]) ** f["omega"],
+                     aic=f["chi2"] + 2 * 4 + 2 * (m - (k2 - k1)))
+            fits.append(f)
+    aic = np.array([f["aic"] for f in fits])
+    w = np.exp(-(aic - aic.min()) / 2)
+    w /= w.sum()
+    for f, wf in zip(fits, w):
+        f["weight"] = float(wf)
+    good = np.array([not (f["interval_open"] or f["omega_on_bound"]) for f in fits])
+    head = {"criterion": "AIC = chi2 + 2*4 + 2*N_cut (Jay & Neil 2021), weight ~ exp(-AIC/2)",
+            "min_points": min_points, "weight_left_out": float(w[~good].sum())}
+    if not good.any():
+        return {**head, "best": None, "omega": None, "gamma": None,
+                "reason": "every range's omega interval is open or omega sits on a bound",
+                "fits": fits}
+    best = fits[int(np.flatnonzero(good)[np.argmax(w[good])])]
+    om = np.array([f["omega"] for f in fits])
+    wg = w[good] / w[good].sum()
+    mean = float(wg @ om[good])
+    syst = float(np.sqrt(wg @ (om[good] - mean) ** 2))
+    ga = np.array([f["gamma"] for f in fits])[good]
+    g_syst = float(np.sqrt(wg @ (ga - wg @ ga) ** 2))
+    stat = (best["omega_hi"] - best["omega_lo"]) / 2
+    return {**head, "best": best,
+            "omega": best["omega"], "stat": stat, "systematic": syst,
+            "total": float(np.hypot(stat, syst)),
+            "weighted_mean": mean,
+            "gamma": best["gamma"], "gamma_stat": best["se_gamma"], "gamma_systematic": g_syst,
+            "gamma_total": float(np.hypot(best["se_gamma"], g_syst)),
+            "fits": fits}

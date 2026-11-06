@@ -448,6 +448,14 @@ child 2 of its own seed (children 0 and 1 are the pilot's and the run's). Its
 draws are **not** inside `--time`; it prints its own prediction first.
 `--no-local-slope` skips it.
 
+Every completed `local_slope.py` run then calls `src/estimate/omega_aic.py`, the
+AIC fit: the same model on every run of $\ge 6$ points, the range chosen by AIC with
+data cuts, `omega_aic.json` + `omega_aic_fit.png` (see `src/README.md`). Then it calls
+`src/estimate/omega_windows.py` at width 5 (user, 2026-11-05). It draws nothing and fits
+$L_k = a + bk + c\rho^{-\omega k}$ by weighted least squares on each run of 5
+consecutive log-log points, next to $w_k$: `omega_windows.json` + `.png`. A
+hollow square (interval open, or $\hat\omega$ on a bound) is not read.
+
 ```bash
 python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 --dry-run
 python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 [--min-scale 4] [--truth 0.5]

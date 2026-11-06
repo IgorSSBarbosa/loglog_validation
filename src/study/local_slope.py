@@ -56,6 +56,8 @@ from tools.rng import as_seed_sequence, seed_record, spawn  # noqa: E402
 from tools.summary import summarize_scale  # noqa: E402
 
 from src.budget.allocation_table import human_time  # noqa: E402
+from src.estimate.omega_aic import omega_aic  # noqa: E402
+from src.estimate.omega_windows import omega_windows  # noqa: E402
 from src.generate.generate import generate  # noqa: E402
 
 PRODUCED_BY = "src/study/local_slope.py"
@@ -447,7 +449,11 @@ def local_slope(sd: Path, seed, *, min_scale: int | None = None,
     png = plot(sd, res, model=model, params=params, n=plan["n"], d=d, truth=truth)
     print(f"\ndrew {len(new)} cell(s) in {human_time(elapsed)}"
           + (f" (predicted {human_time(seconds)})" if seconds and new else ""))
-    print(f"output = {out}\n         {png}")
+    print(f"output = {out}\n         {png}\n")
+    # the AIC fit and the 5-point window fit read only the analysis just written
+    # (user, 2026-11-05); omega_aic first, so the window figure can show its range
+    omega_aic(sd)
+    omega_windows(sd)
 
 
 if __name__ == "__main__":

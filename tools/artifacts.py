@@ -83,6 +83,15 @@ ARTIFACTS: dict[str, str] = {
                                                   # omega per window: slope of local
                                                   # slopes vs a 5-point LS fit
     "omega_windows_figure": "omega_windows.png",  # the same, omega-hat per window
+    "omega_aic":        "omega_aic.json",         # src/estimate/omega_aic.py -- the
+                                                  # AIC fit: (i_min, i_max, omega) of
+                                                  # a + bk + c rho^(-omega k), AIC-cut
+    "omega_aic_fit_figure": "omega_aic_fit.png",  # the same, the AIC-chosen range's
+                                                  # fit on the log-log points
+    "omega_aic_sweep":  "omega_aic_sweep.json",   # src/report/plot_aic_sweep.py --
+                                                  # the AIC fit's omega, gamma over a
+                                                  # sweep of one model parameter
+    "omega_aic_sweep_figure": "omega_aic_sweep.png",  # the same, against the parameter
     "omega_loglog_top": "omega_loglog_top.json",  # experiments/19_rwre_lazy_omega/
                                                   # omega_loglog_top.py -- pilot-only
                                                   # variant, gamma-hat = top pair's slope

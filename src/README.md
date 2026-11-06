@@ -15,8 +15,11 @@ src/
   budget/     allocation_experiment.py  allocation_table.py    spend a budget well
               protocol_arm.py                          a published allocation, our estimator
   report/     plot_loglog.py  plot_cost.py  plot_allocation.py    say what happened
+              plot_aic_sweep.py                       the AIC fit against a swept parameter
   study/      pilot.py  plan.py  refit_cost.py  run.py  report.py    the whole thing, end to end
-              local_slope.py                          below a finished study: s_k per pair
+              local_slope.py                          below a finished study: s_k per pair,
+                                                      then estimate/omega_aic.py (AIC fit)
+                                                      and estimate/omega_windows.py (5-point omega)
 ```
 
 **If you just want $\hat\gamma$ for a model, use `src/study/` and read
@@ -243,7 +246,31 @@ $\mathbb{E}[\hat a_1]$ rather than $a_1$, a bias no number of replicates removes
 `y_bar`/`n`/`sigma_log` stored in `omega1.json`, so the samples need not be kept.
 Verified: `tools/tests/test_allocation_table.py` (20 cases).
 
+`omega_aic.py` — the AIC fit (user, 2026-11-05), for any study with `local_slope.json`:
+$a + bk + c\rho^{-\omega k}$ by weighted LS (CLT se per point) on every run of $\ge 6$
+consecutive log-log points, each range scored by AIC with data cuts (Jay & Neil 2021,
+$\chi^2 + 2\cdot4 + 2N_\text{cut}$). Reports the best closed range's $\hat\omega$ and
+$\hat\gamma = b/\log\rho$, each $\pm$ stat $\pm$ range systematic; with no closed fit it
+reports none. `omega_aic.json` + `omega_aic_fit.png`. `src/study/local_slope.py` runs it
+on every completed run; `--all` runs it on every study under a data root.
+On planted data (`tools/tests/test_local_slope.py`) stat alone under-covers (ω 52%,
+γ 42% at nominal 68%) and stat ⊕ systematic over-covers (93%, 90%).
+
+```bash
+python3 src/estimate/omega_aic.py --data-root $D --study mystudy [other ...]
+python3 src/estimate/omega_aic.py --data-root $D --all
+```
+
 ## `report/`
+
+`plot_aic_sweep.py` — the AIC fit's $\hat\omega$ and $\hat\gamma$ against one model
+parameter (read from each study's `local_slope.json` `params`), for a sweep of studies.
+No truth drawn (ground rule 4). `<out>/omega_aic_sweep.json` + `.png`.
+
+```bash
+python3 src/report/plot_aic_sweep.py --data-root $D --studies 'fixed_p*_3h' --param p --out $D/aic_sweep_3h
+```
+
 
 `plot_loglog.py` — the shared log-log plotter, reading a run directory's own
 `samples_meta.json` to look up its model in `tools/models.py`'s registry. The raw-data
