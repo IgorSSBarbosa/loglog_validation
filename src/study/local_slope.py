@@ -29,6 +29,7 @@ recorded as user-supplied. It never reaches a fit (ground rule 4).
 CLI:
     python3 src/study/local_slope.py --study <s> --data-root <D> --seed <int>
             [--min-scale I] [--truth GAMMA] [--dry-run]
+    python3 src/study/local_slope.py --study <s> --data-root <D> --replot
 """
 
 from __future__ import annotations
@@ -264,6 +265,7 @@ def plot(sd: Path, res: dict, *, model: str, params: dict, n: int, d: float,
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import MaxNLocator
 
     rho = res["rho"]
     sc = np.asarray(res["scales"], float)
@@ -322,6 +324,9 @@ def plot(sd: Path, res: dict, *, model: str, params: dict, n: int, d: float,
 
     for a in axes:
         a.grid(True, color="#e1e0d9", lw=0.6)
+    # log2 i takes integer values only, so a tick at 2.5 names no scale (user, 2026-11-03).
+    for a in axes[:2]:
+        a.xaxis.set_major_locator(MaxNLocator(integer=True, steps=[1, 2, 5, 10]))
     fig.suptitle(f"{model} {params}  --  n = {n:,} per replicate at every scale", fontsize=10)
     fig.tight_layout()
     out = sd / "local_slope.png"
@@ -334,7 +339,7 @@ def _main(argv=None) -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--study", required=True)
     p.add_argument("--data-root", type=Path, required=True)
-    p.add_argument("--seed", type=int, required=True,
+    p.add_argument("--seed", type=int, default=None,
                    help="root seed for every top-up, redraw and gap draw; recorded, and "
                         "refused if the study or an earlier run here already used it")
     p.add_argument("--min-scale", type=int, default=None,
@@ -343,9 +348,26 @@ def _main(argv=None) -> None:
                    help="reporting only: adds panel (c), |s_k - GAMMA|; never fitted")
     p.add_argument("--dry-run", action="store_true",
                    help="print what would be reused and drawn, and the predicted time")
+    p.add_argument("--replot", action="store_true",
+                   help="draw nothing: redraw local_slope.png from a complete local_slope.json")
     a = p.parse_args(argv)
+    if a.replot:
+        print(replot(Path(a.data_root) / a.study))
+        return
+    if a.seed is None:
+        p.error("--seed is required unless --replot")
     local_slope(Path(a.data_root) / a.study, a.seed, min_scale=a.min_scale,
                 truth=a.truth, dry_run=a.dry_run)
+
+
+def replot(sd: Path) -> Path:
+    """local_slope.png again from the stored analysis; reads one file, draws nothing."""
+    ls = read_artifact(sd, "local_slope")
+    if not ls.get("complete"):
+        raise SystemExit(f"{artifact_path(sd, 'local_slope')} is not complete: nothing to plot")
+    truth = ls.get("truth")
+    return plot(sd, ls["analysis"], model=ls["model"], params=ls["params"], n=ls["n"],
+                d=ls["d"], truth=None if truth is None else truth["value"])
 
 
 def local_slope(sd: Path, seed, *, min_scale: int | None = None,
