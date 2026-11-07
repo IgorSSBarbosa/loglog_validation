@@ -190,6 +190,8 @@ def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
             "omega1_stat": rf["stat"], "omega1_systematic": rf["systematic"],
             "omega1_lo": b["omega_lo"], "omega1_hi": b["omega_hi"],
             "i_min": b["i_min"], "i_max": b["i_max"], "points": b["points"],
+            # natural-log base, so b = gamma and log a0 = a - gamma log i_min
+            "a0": float(np.exp(b["a"] - b["gamma"] * np.log(b["i_min"]))),
             "gamma": b["gamma"], "chi2": b["chi2"], "dof": b["dof"],
             "p_value": b["p_value"], "omega1_at_bound": False,
             "warn": bool(b["p_value"] < REFIT_WARN_P)}

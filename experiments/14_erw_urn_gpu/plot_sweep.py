@@ -264,6 +264,8 @@ def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> No
         warn = np.array([r["warn"] for r in rf])
         for sel, face, lab in ((~warn, blue, r"pilot refit $\hat\omega_1$, $\gamma=\hat\gamma$"),
                                (warn, "white", r"pilot refit, $\chi^2$ warning")):
+            if not sel.any():
+                continue
             ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="o", color=blue, mfc=face, ms=4.5,
                         capsize=2, elinewidth=1, label=lab)
         ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
