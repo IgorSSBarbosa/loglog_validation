@@ -65,6 +65,18 @@ ranges ending at 128. The all-scales fit stays in answer.json as
 `pilot_refit_all_scales`, for comparison only. With no closed range there is no
 omega1 and no bound, and `wilson_why` says so.
 
+Why this AIC. chi2 cannot choose a range: dropping points always lowers it.
+Jay & Neil (PRD 103, 114502 (2021)) give each cut point a "perfect" one-parameter
+model (zero chi2, penalty 2), so AIC = chi2 + 2k + 2 N_cut, weight ~ exp(-AIC/2).
+Neil & Sitison (PRE 108, 045308 (2023), eq. 26) derive it from the KL divergence.
+It equals ours up to a range-independent constant, and they prefer it to the AIC
+on the kept points alone, which cuts too much data. It assumes cut and kept
+points are uncorrelated, which holds exactly here (independent scales, ground
+rule 2), and Gaussian data at large N, which 5-10 pilot points only approximate,
+hence the coverage check above. The pin is a Gaussian prior on gamma and k = 4 on
+every range, so it moves no weight. Unlike the papers, which average over ranges,
+we take the best closed range plus the weighted spread (src/study/README.md).
+
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/report.py --study mystudy --data-root ... --budget-analysis

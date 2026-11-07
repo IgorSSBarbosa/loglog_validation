@@ -416,6 +416,39 @@ against 34/39 with the all-scales fit (kept in `answer.json` as
 $\omega_1$ and no bound: on 6 of 116 studies, each of which the all-scales fit had
 already flagged ($\omega_1$ on its bound, or $p \approx 0$).
 
+**Why AIC with data cuts.** The model is $\log\overline Y_i = a + \gamma\log i +
+a_1 i^{-\omega_1}$ (eq. 232 at $J = 1$), with $\gamma$ held at $\hat\gamma$ by one
+extra Gaussian residual $(\gamma - \hat\gamma)/\mathrm{se}(\hat\gamma)$. The left
+cut drops scales where $\omega_2, \dots$ still act, the right cut scales where the
+correction has sunk below the noise. $\chi^2$ cannot choose the range, since
+dropping points always lowers it. Jay & Neil (PRD 103, 114502 (2021),
+arXiv:2008.01069) turn the choice of range into model selection: the cut points
+get a "perfect" model with one parameter each, which adds no $\chi^2$ and costs 2
+per point, so $\mathrm{AIC} = \chi^2 + 2k + 2N_{\mathrm{cut}}$ with $k = 4$, and each
+range gets weight $\propto e^{-\mathrm{AIC}/2}$ (Akaike weights, Burnham & Anderson
+2002). Neil & Sitison (PRE 108, 045308 (2023), arXiv:2305.19417) derive it from
+the Kullback–Leibler divergence. Their eq. (26), $\chi^2_K + 2k - 2d_K + d$, is
+ours up to the range-independent constant $-m$. They prefer it to the AIC on
+the kept points alone (their eq. 17, used by BMW, Nature 593, 51 (2021)), which
+"has an undesirable tendency to cut data too aggressively".
+
+What the derivation assumes, and how it holds here:
+- *Cut and kept data uncorrelated* (their eq. 15). This holds exactly: every scale
+  draws independent randomness (ground rule 2).
+- *Gaussian data, large $N$.* $\log\overline Y_i$ is Gaussian only via the CLT and
+  the delta method, and the $2k$ penalty is an asymptotic correction. On 5–10 pilot
+  points the criterion is a heuristic, which is why the coverage numbers above are
+  what justify it.
+- *The pin is a Gaussian prior on $\gamma$.* $k$ stays 4 on every range, so the pin
+  moves no weight. Strictly this is the prior-augmented setting of Neil & Sitison,
+  arXiv:2208.14983 (BAIC).
+
+One departure: the papers *average* over ranges ($\langle\omega\rangle = \sum w_r
+\omega_r$, variance $\sum w_r\sigma_r^2 + \sum w_r\omega_r^2 - \langle\omega\rangle^2$).
+We take the highest-weight closed range and add the weighted spread over ranges in
+quadrature with its profile error. The averaged value is in `omega_ranges`'
+`weighted_mean`, unused.
+
 ### The bound inherits $\omega_1$'s error bar exponentially
 
 $B_{\mathrm{fs}} \sim \rho^{-\omega_1 m_0}$, so a loose $\omega_1$ does not
