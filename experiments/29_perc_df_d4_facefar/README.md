@@ -65,3 +65,17 @@ to γ̂ (0.0255), not from the plan's constants (0.072 in the table above). That
 +0.049, is about twice the new $B_{fs}$. The acceptance criterion (narrower than ±0.087) is
 met only formally, since a warned $B_{fs}$ is not a usable bound. Reading (unchanged): this
 is bias-limited by the box cap.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 3.093896 | 1.88 ± 0.062 | 37.9/3 ⚠ | 0.0316 | 1.87 ± 0.06 | 4..64 | 23.8/2 ⚠ | 0.0321 |

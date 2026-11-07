@@ -118,3 +118,26 @@ Figures were copied to `images/` here (PNG) and to `../article_writting/images/`
 | `pipeline_p0.6_1h_v2` | purus | stopped after its pilot: planned on $\hat d=1.50$ from the wave bug |
 | `pipeline_p0.6_1h_v3` | purus | finished ($\hat\gamma=0.50011$). One probe disturbed by desktop GPU use |
 | `pipeline_p0.6_1h_niagara` | niagara | stopped in its long run: another project shares that GPU |
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pipeline_p0.6_1h` | 0.500103 | 0.737 ± 0.0097 | 19.8/8 | 0.00013 ✓ | 0.689 ± 0.14 | 8..4096 | 8.01/7 | 0.000173 ✓ |
+| `pipeline_p0.6_1h_missouri` | 0.500093 | 0.707 ± 0.0095 | 31.9/8 ⚠ | 0.000154 ✓ | 0.59 ± 0.057 | 16..4096 | 3.88/6 | 0.000349 ✓ |
+| `pipeline_p0.6_1h_v3` | 0.500106 | 0.7 ± 0.0095 | 24.3/8 ⚠ | 0.000161 ✓ | 0.583 ± 0.085 | 32..4096 | 2.83/5 | 0.000352 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.
+
+`pipeline_p0.6_1h_missouri` is the article's worked example: its refit is now
+$0.59 \pm 0.06$ on $16..4096$ (conjecture $|4p-3| = 0.6$), the interval
+$[0.49974, 0.50044]$, and `images/pipeline_checks.png` (and the article's
+`pipeline_checks.pdf`) draw this refit and name its range.

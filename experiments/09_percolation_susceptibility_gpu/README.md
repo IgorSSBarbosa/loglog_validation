@@ -469,3 +469,20 @@ so its $B_{fs}$ = 0.0156 is not a usable bias bound, and the realized bias (+0.0
 γ_susc) is above it. Treat this interval as void until the pilot is refit on a ladder where
 one correction describes the data. The x-ladder run (`autopilot_gsusc_d4_210m`) is now
 ±692, which is still useless.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `autopilot_gsusc_L_d4` | 2.100666 | 8.58 ± 0.0033 | 767/2 ⚠ | 0.019 | none | — | — | no bound |
+| `autopilot_gsusc_d4_210m` | 1.429691 | 0.001 ± 1.7 | 3.7/3 ⚠ | 692 | none | — | — | no bound |
+
+No bound now (`autopilot_gsusc_L_d4`, `autopilot_gsusc_d4_210m`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).

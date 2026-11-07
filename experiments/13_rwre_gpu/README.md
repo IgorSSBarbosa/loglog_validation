@@ -228,3 +228,38 @@ The intervals quoted above come from the `smoke`/`smoke34` runs, whose data is n
 disk, so they were not re-reported. The `neymanPilot` sweep was re-reported. Its $B_{fs}$
 is unchanged, and its half-widths shrank by at most 16 % (p = 0.45: 4.06e-5 → 3.42e-5).
 The p = 0.5 interval is [0.49942, 0.50095] (was [0.49933, 0.50103]) and still contains ½.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_data/gpu_sieve/sweep_p0.45_RWRE_gpu_sieve` | 0.519609 | 4.01 ± 3.3 | 37.2/6 ⚠ | 8.44e-05 | 0.624 ± 0.64 | 16..1024 | 5.05/4 | 0.00428 |
+| `sweep_data/longsieve/sweep_p0.1_RWRE_longsieve` | 0.530761 | 0.234 ± 0.0085 | 5.89/6 | 0.111 | 0.234 ± 0.02 | 4..1024 | 5.89/6 | 0.111 |
+| `sweep_data/longsieve/sweep_p0.2_RWRE_longsieve` | 0.539511 | 0.107 ± 0.013 | 4.13/6 | 0.751 | 0.107 ± 0.027 | 4..1024 | 4.13/6 | 0.751 |
+| `sweep_data/longsieve/sweep_p0.3333_RWRE_longsieve` | 0.559960 | 0.001 ± 0.57 | 24.8/6 ⚠ | 619 | none | — | — | no bound |
+| `sweep_data/longsieve/sweep_p0.3_RWRE_longsieve` | 0.553700 | 0.001 ± 4.5e-05 | 31.2/6 ⚠ | 5e+03 | none | — | — | no bound |
+| `sweep_data/longsieve/sweep_p0.45_RWRE_longsieve_neyman` | 0.531894 | 5.88 ± 2.6 | 490/7 ⚠ | 0.000225 | 0.574 ± 0.35 | 64..1024 | 3.27/2 | 0.0155 |
+| `sweep_data/longsieve/sweep_p0.4_RWRE_longsieve` | 0.574067 | 0.078 ± 0.017 | 39.1/6 ⚠ | 1.3 | 0.294 ± 0.09 | 32..1024 | 0.132/3 | 0.0502 |
+| `sweep_data/longsieve/sweep_p0.5_RWRE_longsieve` | 0.500206 | 1.01 ± 0.079 | 10/6 | 0.000575 | 0.438 ± 0.46 | 16..1024 | 3.89/4 | 0.00366 |
+| `sweep_data/longsieve/sweep_p0_RWRE_longsieve` | 0.529136 | 0.35 ± 0.038 | 6.66/6 | 0.034 | 0.35 ± 0.069 | 4..1024 | 6.66/6 | 0.034 |
+| `sweep_data/sweep_1h/sweep_p0.5_1h` | 0.500019 | 1.19 ± 0.19 | 4.48/6 | 0.000607 | 1.19 ± 0.22 | 4..1024 | 4.48/6 | 0.000607 |
+| `sweep_data/sweep_smoke/sweep_p0.5_smoke` | 0.500126 | 1.03 ± 0.099 | 0.753/6 | 0.000846 | 1.03 ± 0.11 | 4..1024 | 0.753/6 | 0.000846 |
+| `sweep_data/sweep_smoke/sweep_p0.5_smoke34` | 0.500073 | 0.817 ± 0.095 | 4.52/6 | 0.00219 | 0.817 ± 0.17 | 4..1024 | 4.52/6 | 0.00219 |
+| `sweep_p0.1_neymanPilot` | 0.531750 | 0.259 ± 0.012 | 4.51/6 | 0.0803 | 0.237 ± 0.026 | 8..1024 | 1.44/5 | 0.103 |
+| `sweep_p0.2_neymanPilot` | 0.540024 | 0.147 ± 0.014 | 11.9/6 | 0.331 | 0.119 ± 0.063 | 4..512 | 5.58/5 | 0.575 |
+| `sweep_p0.3333_neymanPilot` | 0.559580 | 0.001 ± 0.2 | 37.8/6 ⚠ | 1.23e+03 | 0.954 ± 1.3 | 8..128 | 2.64/2 | 0.00229 |
+| `sweep_p0.3_neymanPilot` | 0.553609 | 0.001 ± 3.5e-05 | 46.8/6 ⚠ | 4.93e+03 | 0.487 ± 0.3 | 4..64 | 8.99/2 | 0.00341 |
+| `sweep_p0.45_neymanPilot` | 0.515876 | 4.09 ± 3.3 | 16.2/6 | 3.42e-05 | 2.61 ± 1.4 | 4..64 | 1.56/2 | 5.93e-05 |
+| `sweep_p0.4_neymanPilot` | 0.573891 | 0.143 ± 0.035 | 18.3/6 ⚠ | 0.289 | 0.134 ± 0.15 | 8..512 | 1.64/4 | 0.383 |
+| `sweep_p0.5_neymanPilot` | 0.500182 | 0.927 ± 0.051 | 7.86/6 | 0.000765 | 0.709 ± 0.16 | 8..1024 | 1.69/5 | 0.00163 |
+| `sweep_p0_neymanPilot` | 0.525883 | 0.308 ± 0.034 | 10.9/6 | 0.0463 | 0.323 ± 0.11 | 4..128 | 1.85/3 | 0.04 |
+
+No bound now (`sweep_data/longsieve/sweep_p0.3333_RWRE_longsieve`, `sweep_data/longsieve/sweep_p0.3_RWRE_longsieve`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).

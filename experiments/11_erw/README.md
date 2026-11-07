@@ -149,3 +149,24 @@ python3 src/study/autopilot.py -meta experiments/11_erw/recipes/samples_super_p0
   separates the two error sources the Wilson interval (eq. 720) adds together, and
   would score $\mathcal B_{\rm fs}$ directly — at $p=3/4$ as well, where there is no
   $\omega_1$ for the interval to use.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.799 ± 0.026 | 5.18/5 | 0.00223 ✓ | 0.799 ± 0.072 | 4..512 | 5.18/5 | 0.00223 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.375 ± 0.0085 | 8.34/5 | 0.024 | 0.355 ± 0.022 | 8..512 | 2.51/4 | 0.0286 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.366 ± 0.0062 | 14.1/5 | 0.0201 | 0.387 ± 0.034 | 4..128 | 2/3 | 0.0162 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.384 ± 0.0065 | 11.1/5 | 0.0222 | 0.341 ± 0.027 | 16..512 | 1.65/3 | 0.0318 |
+| `ERW_p0.78` | 0.577894 | 0.371 ± 0.0069 | 13.8/5 | 0.0246 ✓ | 0.328 ± 0.024 | 16..512 | 1.21/3 | 0.0358 ✓ |
+| `ERW_p0.9` | 0.800466 | 0.662 ± 0.032 | 14/8 | 0.00253 ✓ | 1.16 ± 0.5 | 64..4096 | 2.46/4 | 0.00138 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.

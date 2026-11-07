@@ -159,3 +159,28 @@ the $p=0$ curve read at $k\varepsilon^\nu$, for $k\ge2^6$.
   $D_\infty=5.9$–$6.1$. Larger $p$ are not in the tail yet (their fits fail), and the
   collapse says they will join the same curve. So "diffusive?" is a question about the $p=0$
   curve alone. Longer $p=0$ runs, not more $p$ values, would settle it.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `fixed_p0.05_3h` | 0.512466 | 0.194 ± 0.0019 | 534/14 ⚠ | 0.122 | 0.192 ± 0.045 | 16..2048 | 2.89/5 | 0.114 |
+| `fixed_p0.15_3h` | 0.516438 | 0.118 ± 0.0015 | 1.49e+03/14 ⚠ | 0.78 | 0.142 ± 0.084 | 64..1024 | 0.475/2 | 0.319 |
+| `fixed_p0.1_3h` | 0.513663 | 0.162 ± 0.0016 | 702/14 ⚠ | 0.248 | 0.212 ± 0.061 | 128..4096 | 1.18/3 | 0.0895 |
+| `fixed_p0.25_3h` | 0.522603 | 0.0685 ± 0.0011 | 9.57e+03/14 ⚠ | 3.36 | 0.223 ± 0.079 | 1024..16384 | 0.153/2 | 0.0985 |
+| `fixed_p0.2_3h` | 0.517929 | 0.112 ± 0.0011 | 5.15e+03/14 ⚠ | 0.81 | 0.342 ± 0.1 | 8192..131072 | 0.452/2 | 0.0294 |
+| `fixed_p0.35_3h` | 0.531069 | 0.0165 ± 0.00046 | 3.99e+04/16 ⚠ | 33.2 | 0.257 ± 0.13 | 4096..131072 | 4.95/3 | 0.0859 |
+| `fixed_p0.3_3h` | 0.525873 | 0.0563 ± 0.0007 | 1.67e+04/14 ⚠ | 3.16 | 0.304 ± 0.082 | 4096..65536 | 0.329/2 | 0.0482 |
+| `fixed_p0.3_smoke` | 0.525522 | 0.041 ± 0.00095 | 1.63e+04/14 ⚠ | 9.41 | 0.3 ± 0.08 | 4096..65536 | 0.336/2 | 0.0717 |
+| `fixed_p0.45_3h` | 0.565990 | 0.087 ± 0.00078 | 3.76e+04/16 ⚠ | 2.1 | 0.255 ± 0.084 | 256..4096 | 4.15/2 | 0.0485 |
+| `fixed_p0.4_3h` | 0.542650 | 0.313 ± 0.0035 | 2.23e+04/16 ⚠ | 0.0101 | 0.262 ± 0.076 | 16384..262144 | 3.18/2 | 0.086 |
+| `fixed_p0.5_3h` | 0.500002 | 0.995 ± 0.018 | 20.7/16 | 0.00147 | 0.781 ± 0.21 | 16..131072 | 6.9/11 | 0.00148 |
+| `fixed_p0_3h` | 0.511764 | 0.228 ± 0.0019 | 698/14 ⚠ | 0.0615 | 0.263 ± 0.039 | 512..32768 | 0.507/4 | 0.0396 |

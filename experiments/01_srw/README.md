@@ -918,3 +918,19 @@ fine) — RSS stayed a few GiB throughout, no `psutil`-triggered flush warnings,
 chunked output matched the in-RAM path exactly. `Huge_test.json` itself is expected to
 run (slowly — ~100M samples x 10 scales) without OOM, but hasn't been run end-to-end
 in this session (would take a long time).
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `omega_windows_30m` | 0.500099 | 1 ± 0.012 | 3.01/3 | 0.000441 ✓ | 1 ± 0.018 | 8..256 | 3.01/3 | 0.000441 ✓ |
+
+Coverage of the exact $\gamma$: old 1/1, new 1/1.

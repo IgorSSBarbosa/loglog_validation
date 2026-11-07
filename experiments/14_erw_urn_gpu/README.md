@@ -272,3 +272,46 @@ Coverage 17/20 → 16/20. The one change is p = 0.775, which now misses $2p-1=0.
 $2.0\times10^{-4}$. The bound there is all $B_{fs}$ ($9.6\times10^{-3}$ of $1.0\times10^{-2}$),
 and its refit warns ($\chi^2$ p = 1e-47), so the miss is the warned one-correction
 failure near p = 3/4, not the dropped term. All four misses warn.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.05_2h` | 0.500028 | 1.23 ± 0.0078 | 105/8 ⚠ | 2.09e-05 ✗ | 1.09 ± 0.099 | 8..2048 | 3.65/6 | 3.61e-05 ✓ |
+| `sweep_p0.05_smoke` | 0.500069 | 1.22 ± 0.0077 | 61.8/8 ⚠ | 6.14e-05 ✗ | 1.07 ± 0.049 | 16..4096 | 2.2/6 | 9.76e-05 ✓ |
+| `sweep_p0.15_2h` | 0.500020 | 1.18 ± 0.0086 | 70.4/8 ⚠ | 2.26e-05 ✓ | 1.01 ± 0.071 | 16..4096 | 2.09/6 | 5.07e-05 ✓ |
+| `sweep_p0.1_2h` | 0.500027 | 1.21 ± 0.0081 | 81.2/8 ⚠ | 2.19e-05 ✗ | 1 ± 0.085 | 16..4096 | 3.3/6 | 5.48e-05 ✓ |
+| `sweep_p0.25_2h` | 0.500003 | 1.09 ± 0.01 | 16.6/8 | 2.45e-05 ✓ | 1.02 ± 0.063 | 8..4096 | 3.21/7 | 3.04e-05 ✓ |
+| `sweep_p0.2_2h` | 0.500018 | 1.14 ± 0.0094 | 36.6/8 ⚠ | 3.08e-05 ✓ | 1.05 ± 0.058 | 8..4096 | 5.3/7 | 4.38e-05 ✓ |
+| `sweep_p0.35_2h` | 0.500006 | 0.993 ± 0.014 | 3.83/8 | 2.9e-05 ✓ | 1.03 ± 0.042 | 8..4096 | 1.79/7 | 2.6e-05 ✓ |
+| `sweep_p0.3_2h` | 0.499989 | 1.04 ± 0.012 | 10.4/8 | 3.82e-05 ✓ | 1 ± 0.047 | 8..4096 | 6.88/7 | 4.19e-05 ✓ |
+| `sweep_p0.45_2h` | 0.500002 | 0.928 ± 0.021 | 13.9/8 | 2.96e-05 ✓ | 1.54 ± 0.42 | 32..2048 | 2.22/4 | 2.26e-05 ✓ |
+| `sweep_p0.4_2h` | 0.500012 | 0.987 ± 0.017 | 10.8/8 | 4.07e-05 ✓ | 0.992 ± 0.13 | 4..1024 | 6.04/6 | 4e-05 ✓ |
+| `sweep_p0.55_2h` | 0.499998 | 0.89 ± 0.019 | 10.2/8 | 3.4e-05 ✓ | 0.89 ± 0.084 | 4..4096 | 10.2/8 | 3.4e-05 ✓ |
+| `sweep_p0.5_2h` | 0.500007 | 0.954 ± 0.025 | 5.3/8 | 3.35e-05 ✓ | 0.954 ± 0.049 | 4..4096 | 5.3/8 | 3.35e-05 ✓ |
+| `sweep_p0.65_2h` | 0.500390 | 0.486 ± 0.0042 | 51.1/8 ⚠ | 0.000581 ✓ | 0.437 ± 0.044 | 16..2048 | 2.48/5 | 0.000993 ✓ |
+| `sweep_p0.6_2h` | 0.500052 | 0.692 ± 0.0093 | 10.8/8 | 0.000134 ✓ | 0.701 ± 0.073 | 4..2048 | 4.74/7 | 0.000127 ✓ |
+| `sweep_p0.725_2h` | 0.510474 | 0.293 ± 0.0017 | 212/8 ⚠ | 0.00985 ✗ | 0.249 ± 0.011 | 32..4096 | 1.56/5 | 0.0205 ✓ |
+| `sweep_p0.75_2h` | 0.527070 | 0.27 ± 0.0015 | 216/8 ⚠ | 0.0136 | 0.296 ± 0.035 | 8..128 | 0.334/2 | 0.00822 |
+| `sweep_p0.775_2h` | 0.560184 | 0.293 ± 0.0016 | 241/8 ⚠ | 0.00998 ✗ | 0.315 ± 0.041 | 8..128 | 0.524/2 | 0.00657 ✗ |
+| `sweep_p0.7_2h` | 0.503048 | 0.338 ± 0.002 | 148/8 ⚠ | 0.00391 ✓ | 0.295 ± 0.015 | 32..4096 | 2.64/5 | 0.00747 ✓ |
+| `sweep_p0.85_2h` | 0.700201 | 0.472 ± 0.003 | 28.9/8 ⚠ | 0.000465 ✓ | 0.426 ± 0.027 | 16..512 | 1.31/3 | 0.000761 ✓ |
+| `sweep_p0.8_2h` | 0.602985 | 0.332 ± 0.0017 | 166/8 ⚠ | 0.00436 ✓ | 0.286 ± 0.021 | 32..4096 | 3.4/5 | 0.00881 ✓ |
+| `sweep_p0.95_2h` | 0.900004 | 0.818 ± 0.012 | 12.4/8 | 2.2e-05 ✓ | 0.809 ± 0.11 | 4..2048 | 7.25/7 | 2.27e-05 ✓ |
+| `sweep_p0.9_2h` | 0.800050 | 0.634 ± 0.0056 | 5.99/8 | 0.000135 ✓ | 0.634 ± 0.018 | 4..4096 | 5.99/8 | 0.000135 ✓ |
+
+Coverage of the exact $\gamma$: old 16/21, new 20/21.
+
+These are the article's ERW tables (`tab:erw-gamma`, `tab:erw-omega`) and `erw_omega_vs_p.pdf`,
+regenerated with `plot_sweep.py --tag 2h --article`. For $0.1 \le p \le 0.35$ the AIC refit gives
+$\hat\omega_1 = 1.00$–$1.05$, the conjectured 1, where the all-scales refit gave up to 1.23. The one
+miss, $p = 0.775$, and $p = 3/4$ both chose the short range $8..128$ and no longer warn: there the
+length of the range, not the $\chi^2$, is what says one correction does not describe the pilot.

@@ -60,3 +60,19 @@ The flip is not today's change. The four-term bound of 2026-11-02 was already
 χ² p = 1e-35, warning issued), so this interval is void, and the realized bias (+0.259) is
 5× its $B_{fs}$. The ±0.21 acceptance criterion is met only formally. Reading (unchanged): the
 materialized model cannot reach the scales d_f(5) needs.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 3.785099 | 10.3 ± 0.0098 | 161/2 ⚠ | 0.0611 | none | — | — | no bound |
+
+No bound now (`pilot`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).

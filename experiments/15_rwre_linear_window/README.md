@@ -135,3 +135,17 @@ Re-reported from the stored data; nothing was redrawn.
 Smoke `sweep_p0.5_smoke`: **[0.49865, 0.50173]**, half-width 0.00154 ($B_{fs}$ 0.00082,
 $1.96\sigma_{se}$ 0.00073), which still contains ½. The four-term bound was [0.49821, 0.50217],
 and the table's [0.4986, 0.5017] predates the 2026-11-02 pinned refit.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.5_smoke` | 0.500192 | 1 ± 0.11 | 6.74/6 | 0.00154 | 1 ± 0.16 | 4..1024 | 6.74/6 | 0.00154 |

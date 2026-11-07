@@ -166,3 +166,19 @@ Zhang's own observable, which `percolation_zd_gpu` does not implement.
 .venv/bin/python experiments/43_lit_zhang2020_df_d4_d5/diagnose_d5.py \
     experiments/43_lit_zhang2020_df_d4_d5/data/zhang2020_d5
 ```
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `zhang_w070_8h` | 3.943345 | 0.001 ± 3e-06 | 5.65e+04/10 ⚠ | 5.06e+04 | none | — | — | no bound |
+
+No bound now (`zhang_w070_8h`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).

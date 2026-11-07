@@ -83,3 +83,17 @@ $B_{fs}$ comes from the pilot refitted with γ pinned, which returns ω₁ = 0.4
 0.153) and **warns** (χ² p = 0). The tiny $B_{fs}$ is therefore not trustworthy. The bias the
 plan predicted (0.0153) is as large as the whole half-width. The four-term bound of
 2026-11-02 was ±0.0457, of which B_bad was 0.0294.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `run_p0_cap262144` | 0.506147 | 0.449 ± 0.001 | 5.91e+03/6 ⚠ | 0.0155 | 0.178 ± 0.011 | 64..1024 | 1.48/2 | 0.145 |
