@@ -98,3 +98,64 @@ window $2^{18}..2^{23}$ (capped by `--max-scale`), 36 min per replicate, with
 ## Results
 
 (none yet)
+
+## The diffusion coefficient across $p$ (user's conjecture, 2026-11-07)
+
+**Conjecture (user).** The walk is diffusive at every $p$, with $D(0)>1=D(\tfrac12)$. For
+$0<p<\tfrac12$ the walker reads the environment only at rate $\varepsilon=1-2p$, so $D$ needs
+a time diverging like $\varepsilon^{-\nu}$ to build up, and that crossover is 16's and 19's
+hump. The user added that $p=0$ also takes a long time to settle. Exploratory: no
+pre-registered criterion, no new draws.
+
+**Method.** `plot_diffusion.py` rebuilds $\mathbb E X_k^2=\overline Y^2(1+\mathrm{cv}^2)$ per
+replicate from 19's `omega_p<p>_n4e6` (from $k=4$), this experiment's `fixed_p<p>_3h`
+($2^{18}..2^{23}$) and 50's `long_p0.3_24h`, pooled by inverse variance. It reports
+$D(k)=\mathbb E X_k^2/k$ (1 for srw) and $R_k=\mathbb E|X_k|/\sqrt{\mathbb E X_k^2}$. These are
+moments, not article estimators. The se is over 5 replicates (4 dof), so it is rough.
+
+```bash
+python3 experiments/52_rwre_lazy_fixed_omega_sweep/plot_diffusion.py   # -> data/diffusion_coefficient_vs_p.png
+```
+
+![E X^2, D vs p, collapse](images/diffusion_coefficient_vs_p.png)
+
+| $p$ | $D(2^{23})$ | $D_\infty$, $D_\infty-Ak^{-0.1325}$ on $k\ge2^{12}$ | $\chi^2$/dof | collapse at $\nu=4$: max dev. | best $\nu$ |
+|---|---|---|---|---|---|
+| 0 | $5.214\pm0.012$ | $6.047\pm0.010$ | 42/10 | (reference) | – |
+| 0.05 | $5.176\pm0.016$ | $6.058\pm0.006$ | 17/10 | 0.9% | 4.58 |
+| 0.1 | $5.148\pm0.015$ | $6.063\pm0.007$ | 13/10 | 1.8% | 4.45 |
+| 0.15 | $5.074\pm0.035$ | $6.041\pm0.011$ | 56/10 | 2.5% | 4.32 |
+| 0.2 | $5.029\pm0.017$ | $6.021\pm0.018$ | 171/10 | 3.0% | 4.24 |
+| 0.25 | $4.887\pm0.010$ | $5.912\pm0.024$ | 425/10 | 7.5% | 4.19 |
+| 0.3 | $4.751\pm0.003$ | $5.939\pm0.040$ | 1789/10 | 4.1% | 4.13 |
+| 0.35 | $4.541\pm0.017$ | $5.597\pm0.059$ | 7034/10 | 7.0% | 4.17 |
+| 0.4 | $4.167\pm0.014$ | $4.994\pm0.113$ | 14177/10 | 4.7% | 4.12 |
+| 0.45 | $3.338\pm0.016$ | $3.535\pm0.168$ | 98435/10 | 4.9% | 4.05 |
+| 0.5 | $1.003\pm0.002$ | $1.000$ (constant) | 26/21 | – | – |
+
+$\theta=0.1325$ is the free-$\theta$ fit at $p=0$ on $k\ge2^{10}$, then held fixed. Its se is
+inflated by $\sqrt{\chi^2/\mathrm{dof}}$ when that exceeds 1. "Collapse" compares $D(k,p)$ with
+the $p=0$ curve read at $k\varepsilon^\nu$, for $k\ge2^6$.
+
+**What it shows.**
+- **$D$ is far from srw's.** At $p=0$, $D$ rises from 1.49 ($k=4$) to 5.21 ($2^{23}$) and is still
+  rising. On $k\ge2^{10}$ the saturating form $D_\infty-Ak^{-\theta}$ ($D_\infty\approx6.0$,
+  $\theta\approx0.13$) fits far better than $a+c\ln k$ ($\chi^2$ 5759/12) or $Ak^g$ (12354/12),
+  but it is rejected too (42/10 on $k\ge2^{12}$). $D_\infty$ is about 14% beyond $2^{23}$: an
+  extrapolation, not a measurement. $R_k$ falls from 0.8085 to 0.8015, towards the Gaussian
+  $\sqrt{2/\pi}=0.7979$.
+- **The $p$-walk is the $p=0$ walk on a slower clock.** $D(k,p)\approx D(k\varepsilon^4,0)$
+  within 1–7% for every $p\in[0.05,0.45]$ (panel c). The best $\nu$ falls from 4.58 to 4.05 as
+  $p\to\tfrac12$. First order in $\varepsilon^2$ gives exactly 4: early on,
+  $D-1\approx0.38\,\varepsilon^2\sqrt k$ (local exponent $0.50\pm0.02$ at $p=0.45$ up to
+  $2^{10}$), so the crossover sits where $\varepsilon^2\sqrt\tau\sim1$. The crossover times from
+  the peak of $R_k$ and of $d\ln D/d\ln k$ give $\nu=4.33\pm0.10$ and $4.44\pm0.13$
+  ($0.2\le p<\tfrac12$), against 16's $\varphi\approx4.3$ for the hump.
+- **The hump is $D$'s crossover.** $s_k\approx\tfrac12+\tfrac12\,d\ln D/d\ln k$ (the shape term
+  $d\ln R/d\ln k$ is at most ~0.001 per doubling), and $d\ln D/d\ln k$ peaks where $D$ climbs
+  off 1. For $p\lesssim0.2$ that peak sits at $k\lesssim2^6$, inside the lattice transient,
+  which fits 16's apparent $p_c\approx0.23$.
+- **One $D_\infty$ for all $p<\tfrac12$, if any.** The $p\le0.2$ tail fits all give
+  $D_\infty=5.9$–$6.1$. Larger $p$ are not in the tail yet (their fits fail), and the
+  collapse says they will join the same curve. So "diffusive?" is a question about the $p=0$
+  curve alone. Longer $p=0$ runs, not more $p$ values, would settle it.
