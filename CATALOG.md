@@ -125,7 +125,7 @@ Tags, as requested, with one addition (`model`) flagged in §5:
 |---|---|---|---|---|
 | `loglog.py` | 253 | `statistical tool` | Four $\hat\gamma$ estimators + the article's closed-form eq. (526) weights. **The canonical weight definition** — `allocation.py` and `wilson.py` import it. | — |
 | `correction.py` | 215 | `statistical tool` | Two $\omega_1$ estimators: direct fit of eq. (232), and bias-decay fit. Non-convex in $\omega_1$, hence multi-restart. | — |
-| `local_slope.py` | 208 | `statistical tool` | Consecutive-point slopes $s_k$ (eq. 526 at $m=2$) from $R$ replicate means per scale, with se; the local exponent $w_k$ of $\Delta s_k$ (flat under Prop. 820's power law, drifting to 0 under $c/\ln i$); the (P) power and (L) log fits compared by $\chi^2$, $p$ only; the exact mean/cv merge a top-up needs. No I/O. | — |
+| `local_slope.py` | 519 | `statistical tool` | Consecutive-point slopes $s_k$ (eq. 526 at $m=2$) from $R$ replicate means per scale, with se; the local exponent $w_k$ of $\Delta s_k$ (flat under Prop. 820's power law, drifting to 0 under $c/\ln i$); the (P) power and (L) log fits compared by $\chi^2$, $p$ only; the exact mean/cv merge a top-up needs. No I/O. | — |
 | `loglog_log.py` | 150 | `statistical tool` | The loglog-log plot (user, 2026-10-16): $\omega_1$ as minus the slope of $\ln\lvert\gamma_k-\hat\gamma\rvert$ against $\ln k$, GLS on the exact delta-method covariance (shared $\hat\gamma$, shared scales); points resolved at 3 sd with the majority sign. $\hat\gamma$ external (independent draw) or linear in the same means. No I/O. | — |
 | `allocation.py` | 475 | `budget tool` | `prop:opt` (eq. 945–946), `lem:budget` costs, and the **tuned constant** $\kappa$ that the rate theorem drops. Also `snr`/`neyman` per-scale rules. | `loglog` |
 | `cost_model.py` | 287 | `budget tool`, `statistical tool` | Cost exponent $d$: pure power law and the affine $a + b\,i^d$ that fixed the small-scale regime. Timing aggregators + median CI, and the declared-vs-measured cross-check. The probes: one sample per call for most models, `probe_batched` (the slope in $n$) for a `batched_cost` model, walked on to a full device for a `latency_bound` one. | `loglog` |
@@ -208,13 +208,13 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `gamma_mle` | loglog | Gaussian MLE, with `trustworthy` diagnostics |
 | `compare_methods` | loglog | all four, bundled |
 | `fit_correction` | correction | eq. (232) fit → $(a_0,\gamma,a_1,\omega_1)$ |
-| `fit_correction_pinned` | correction | the same fit with $\gamma$ pinned to the long run's $\hat\gamma$, with $\chi^2$ p-value; feeds $B_{fs}$ in `report.py` |
+| `fit_correction_pinned` | correction | the same fit with $\gamma$ pinned to the long run's $\hat\gamma$, with $\chi^2$ p-value; since 2026-11-07 only `answer.json`'s `pilot_refit_all_scales`, for comparison |
 | `omega1_from_bias_decay` | correction | $\omega_1$ from how $\hat\gamma_i$ drifts |
 | `local_slopes` | local_slope | $s_k$, $\Delta s_k$, $w_k$ with Jacobian-propagated se and resolved flags |
 | `fit_power`, `fit_log` | local_slope | (P) $\gamma + c\,i^{-\omega}$ and (L) $\gamma + c/\ln i$ on $s_k$, with $\chi^2$, dof, $p$ |
 | `omega_windows` | local_slope | $a + bk + c\rho^{-\omega k}$ by weighted LS on each run of `width` consecutive log-log points; $\omega$ profiled, 68% interval at $\chi^2_{\min}+1$ |
 | `clt_se_log` | local_slope | se of mean $\log\overline Y$ per scale from each replicate's own cv and $n$: $\sqrt{\sum_r \mathrm{cv}_r^2/n_r}/R$ |
-| `omega_ranges` | local_slope | $a + bk + c\rho^{-\omega k}$ on every run of $\ge 6$ points; range scored by AIC with data cuts (Jay & Neil 2021); best closed $(i_{\min}, i_{\max}, \hat\omega)$ (none if no fit closes), stat and range-systematic errors |
+| `omega_ranges` | local_slope | $a + bk + c\rho^{-\omega k}$ on every run of $\ge 6$ points (any increasing scales); range scored by AIC with data cuts (Jay & Neil 2021); best closed $(i_{\min}, i_{\max}, \hat\omega)$ (none if no fit closes), stat and range-systematic errors. `gamma_pin` ties $\gamma$ to $\hat\gamma$: `report.pinned_refit`, the $\omega_1, a_1$ of $B_{fs}$ |
 | `merge_means` | local_slope | exact $(n, \bar Y, \mathrm{cv})$ of two independent samples' union |
 | `total_cost` | allocation | `lem:budget` geometric sum |
 | `feasible` | allocation | $\theta_1+d\theta_2=1$ self-check |

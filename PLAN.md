@@ -170,7 +170,9 @@ loglog_validation/
                                   terms, assembled in src/study/report.py beside
                                   the Student-t replicate interval. B_fs takes
                                   omega1/a1 from the PILOT (a final-run refit has
-                                  no correction left to fit) and is re-evaluated
+                                  no correction left to fit), refitted with gamma
+                                  pinned on an AIC-chosen range of pilot scales
+                                  (local_slope.omega_ranges), and is re-evaluated
                                   across omega1 +/- 1 se, since omega1 sits in an
                                   exponent
     allocation.py                budget allocation rule (eq. 945-946) + cost

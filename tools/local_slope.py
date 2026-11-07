@@ -328,18 +328,32 @@ def analyse_pairs(scales, y_bars_by_scale, *, cv=None, n=None) -> dict:
 
 
 def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
-                omega_bounds: tuple[float, float]) -> dict:
+                omega_bounds: tuple[float, float],
+                pin: tuple[float, float] | None = None) -> dict:
     """Weighted LS of L = a + b x + c rho^(-omega x) on one window (x = 0, 1, ...).
 
     (a, b, c) are linear given omega, so omega is profiled over a log grid, refined
     in the best cell, and its 68% interval read off the profile at chi2_min + 1. The
     profile, not curve_fit's linearized se, is the error bar: on 5 points the chi2 in
     omega is far from quadratic.
+
+    `pin` = (b0, se_b0) ties b to an independent estimate by one extra residual
+    (b - b0) / se_b0, as `correction.fit_correction_pinned` does, so the chi2 carries
+    b0's own error and has x.size - 3 dof.
     """
+    rows = [np.ones_like(x), x]
+    extra_A = np.zeros((0, 3))
+    extra_y = np.zeros(0)
+    if pin is not None:
+        extra_A = np.array([[0.0, 1.0 / pin[1], 0.0]])
+        extra_y = np.array([pin[0] / pin[1]])
+    n_free = 3 if pin is not None else 4
+
     def profile(om: float) -> tuple[float, np.ndarray]:
-        A = np.vstack([np.ones_like(x), x, rho ** (-om * x)]).T / se[:, None]
-        coef, *_ = np.linalg.lstsq(A, L / se, rcond=None)
-        r = A @ coef - L / se
+        A = np.vstack([*rows, rho ** (-om * x)]).T / se[:, None]
+        A, y = np.vstack([A, extra_A]), np.concatenate([L / se, extra_y])
+        coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+        r = A @ coef - y
         return float(r @ r), coef
 
     grid = np.geomspace(*omega_bounds, 600)
@@ -364,6 +378,8 @@ def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
     # uncertainty reaches b; linearized, which b (a linear parameter) tolerates
     e = rho ** (-om * x)
     J = np.vstack([np.ones_like(x), x, e, -c * x * np.log(rho) * e]).T / se[:, None]
+    if pin is not None:
+        J = np.vstack([J, [0.0, 1.0 / pin[1], 0.0, 0.0]])
     se_b = float(np.sqrt(np.linalg.pinv(J.T @ J)[1, 1]))
 
     lo_e, lo_open = edge(grid[grid < om], omega_bounds[0])
@@ -372,8 +388,9 @@ def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
                     or np.isclose(om, omega_bounds[1], rtol=1e-3))
     return {"omega": om, "a": float(a), "b": float(b), "c": float(c), "se_b": se_b,
             "omega_lo": lo_e, "omega_hi": hi_e, "interval_open": lo_open or hi_open,
-            "omega_on_bound": on_bound, "chi2": chi2, "dof": int(x.size - 4),
-            "p_value": float(stats.chi2.sf(chi2, x.size - 4)) if x.size > 4 else None}
+            "omega_on_bound": on_bound, "chi2": chi2, "dof": int(x.size - n_free),
+            "p_value": (float(stats.chi2.sf(chi2, x.size - n_free))
+                        if x.size > n_free else None)}
 
 
 def omega_windows(scales, log_y, se_log, rho: float, width: int = 5,
@@ -418,7 +435,8 @@ def clt_se_log(cv_by_scale, n_by_scale) -> np.ndarray:
 
 
 def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
-                 omega_bounds=(1e-2, 10.0)) -> dict:
+                 omega_bounds=(1e-2, 10.0),
+                 gamma_pin: tuple[float, float] | None = None) -> dict:
     """The triple (i_min, i_max, omega): a + b k + c rho^(-omega k) fitted by weighted
     LS on every run of >= `min_points` consecutive log-log points (user, 2026-11-05).
 
@@ -440,8 +458,21 @@ def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
     constant or a line, so b no longer reads gamma (rwre p = 0.2 gave omega = 0.010,
     gamma = -0.09). With no closed fit at all, omega and gamma are None and `reason`
     says why; nothing is substituted.
+
+    `gamma_pin` = (gamma_hat, se) pins gamma to the long run's estimate (user,
+    2026-11-07): this is the omega1 of the Step 4 refit that feeds B_fs, where gamma
+    must stay the log-log estimator's own. The pin is one extra residual, so dof =
+    points - 3 and min_points = 5 already keeps dof >= 2; k stays 4 in the AIC (gamma
+    is still fitted, under the penalty), a constant that moves no weight. With the
+    pin, `gamma` is returned as fitted, for checking it stayed at gamma_hat.
+
+    Scales need only increase (2026-11-07, for pilots off a rho^k ladder): x =
+    log_rho(i / i_min), so rho^(-omega x) = (i / i_min)^-omega and omega, a1, gamma
+    do not depend on rho; on a ladder x is 0, 1, 2, ... as before.
     """
-    i = _check_grid(scales, rho)
+    i = _check_increasing(scales)
+    pin = None if gamma_pin is None else (gamma_pin[0] * np.log(rho),
+                                          gamma_pin[1] * np.log(rho))
     L, se = np.asarray(log_y, float), np.asarray(se_log, float)
     m = L.size
     if min_points < 5:
@@ -451,8 +482,8 @@ def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
     fits = []
     for k1 in range(m - min_points + 1):
         for k2 in range(k1 + min_points, m + 1):
-            f = _window_fit(np.arange(k2 - k1, dtype=float), L[k1:k2], se[k1:k2], rho,
-                            omega_bounds)
+            x = np.log(i[k1:k2] / i[k1]) / np.log(rho)
+            f = _window_fit(x, L[k1:k2], se[k1:k2], rho, omega_bounds, pin)
             f.update(i_min=int(i[k1]), i_max=int(i[k2 - 1]), points=k2 - k1,
                      gamma=f["b"] / np.log(rho), se_gamma=f["se_b"] / np.log(rho),
                      a1=f["c"] * float(i[k1]) ** f["omega"],
@@ -465,7 +496,8 @@ def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
         f["weight"] = float(wf)
     good = np.array([not (f["interval_open"] or f["omega_on_bound"]) for f in fits])
     head = {"criterion": "AIC = chi2 + 2*4 + 2*N_cut (Jay & Neil 2021), weight ~ exp(-AIC/2)",
-            "min_points": min_points, "weight_left_out": float(w[~good].sum())}
+            "min_points": min_points, "weight_left_out": float(w[~good].sum()),
+            "gamma_pin": None if gamma_pin is None else list(map(float, gamma_pin))}
     if not good.any():
         return {**head, "best": None, "omega": None, "gamma": None,
                 "reason": "every range's omega interval is open or omega sits on a bound",
@@ -479,7 +511,7 @@ def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
     g_syst = float(np.sqrt(wg @ (ga - wg @ ga) ** 2))
     stat = (best["omega_hi"] - best["omega_lo"]) / 2
     return {**head, "best": best,
-            "omega": best["omega"], "stat": stat, "systematic": syst,
+            "omega": best["omega"], "a1": best["a1"], "stat": stat, "systematic": syst,
             "total": float(np.hypot(stat, syst)),
             "weighted_mean": mean,
             "gamma": best["gamma"], "gamma_stat": best["se_gamma"], "gamma_systematic": g_syst,

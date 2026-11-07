@@ -402,6 +402,20 @@ the ladder where the correction has died, so refitting $\omega_1$ there fits
 noise. On this repo's own srw run the final refit returned $\omega_1 = 0.0295$
 with `converged = False`, against the pilot's $0.885$.
 
+The pilot is refitted with $\gamma$ pinned to $\hat\gamma$ (2026-11-02), and
+since 2026-11-07 on a range of pilot scales chosen by AIC with data cuts
+(`local_slope.omega_ranges`, $\ge 5$ consecutive scales) rather than on all of
+them: the smallest scales carry $\omega_2, \dots$, which an all-scales fit
+absorbs into $\omega_1$. Only $\omega_1, a_1$ come from it; $\gamma$ stays the
+log-log estimator's own. Its se is the profile error $\oplus$ the spread over
+ranges (the profile alone covered 52% at nominal 68% on planted data). On the 39
+finished srw/ERW studies with exact $\gamma$, eq. (720) covered 37/39 with it
+against 34/39 with the all-scales fit (kept in `answer.json` as
+`pilot_refit_all_scales`); half-widths moved by a median factor 1.10
+($0.46$–$2.5\times$, widest near $p = 3/4$). With no closed range there is no
+$\omega_1$ and no bound: on 6 of 116 studies, each of which the all-scales fit had
+already flagged ($\omega_1$ on its bound, or $p \approx 0$).
+
 ### The bound inherits $\omega_1$'s error bar exponentially
 
 $B_{\mathrm{fs}} \sim \rho^{-\omega_1 m_0}$, so a loose $\omega_1$ does not
