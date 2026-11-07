@@ -52,8 +52,9 @@ from tools import cost_cache  # noqa: E402
 from tools.correction import fit_correction  # noqa: E402
 from tools.loglog_plot import fit_plot  # noqa: E402
 from tools.cost_model import (  # noqa: E402
-    PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, aggregate,
-    estimate_cost_affine, fit_cost_probe, probe_batched, probe_window)
+    PROBE_MIN_SCALES, PROBE_REPEATS, PROBE_WINDOW_BUDGET, Deadline,
+    ProbeDeadline, aggregate, estimate_cost_affine, fit_cost_probe,
+    probe_batched, probe_window)
 from tools.models import get_model  # noqa: E402
 from tools import progress as P  # noqa: E402
 from tools.rng import spawn  # noqa: E402
@@ -92,6 +93,23 @@ D_PROBES = 5
 #: declared-vs-measured check at dof = 1 and a cutoff of |z| > 235.8, which
 #: cannot fire. Five cheap probes cost 12 s and give dof = 4, cutoff 6.62.
 D_PROBE_TIME_BUDGET = 30.0
+
+#: The cost probe's hard cap (user, 2026-11-07), in seconds:
+#:     max(PROBE_CAP_FLOOR, PROBE_CAP_PILOT_SHARE * pilot draw time,
+#:         PROBE_CAP_BUDGET_SHARE * study budget),
+#: either time taken as 0 when there is none (pilot.py alone has no budget).
+#: Unlike D_PROBE_TIME_BUDGET it is checked before every timed call, so it
+#: also stops a single probe -- the failure that prompted it: a batched probe
+#: that ran 4 h 46 m of a 9 h study after a 78 min pilot (experiment 53).
+PROBE_CAP_FLOOR = 10.0
+PROBE_CAP_PILOT_SHARE = 0.5
+PROBE_CAP_BUDGET_SHARE = 0.25
+
+
+def probe_cap(pilot_seconds: float | None, budget_seconds: float | None) -> float:
+    """The cost probe's cap in seconds; see PROBE_CAP_FLOOR."""
+    return max(PROBE_CAP_FLOOR, PROBE_CAP_PILOT_SHARE * (pilot_seconds or 0.0),
+               PROBE_CAP_BUDGET_SHARE * (budget_seconds or 0.0))
 
 
 def _now() -> str:
@@ -158,7 +176,8 @@ def _pilot_replicate(model, params, scales, n, seed_seq, on_scale=None,
 
 def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
                           probes: int = D_PROBES,
-                          seconds_budget: float = PROBE_WINDOW_BUDGET) -> dict:
+                          seconds_budget: float = PROBE_WINDOW_BUDGET,
+                          seconds_cap: float | None = None) -> dict:
     """Measure d = the cost exponent of Assumption cost_is_power_law (eq. 353).
 
     Both halves live in tools/cost_model.py and are shared with the standalone
@@ -209,6 +228,12 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     at z = +20.8 (user, 2026-09-16). The batched probe times the cost of one
     more sample at the scales the study draws. Both are repeated `probes`
     times and averaged the same way.
+
+    `seconds_cap` (see `probe_cap`) stops the probing, mid-probe if need be.
+    Probes already finished are kept; a batched probe cut short keeps the
+    scales it finished and is used if it has PROBE_MIN_SCALES of them. With
+    nothing usable it raises SystemExit rather than invent a d. The outcome
+    is recorded as `probe_cap` in the returned dict.
     """
     spec = get_model(model)
     n_probes = max(1, probes)
@@ -223,15 +248,38 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     else:
         P.say(f"  cost probe: measuring d over up to {n_probes} independent "
               f"windows ({model}, budget {seconds_budget:g}s each)")
+    if seconds_cap is not None:
+        P.say(f"  cost probe: capped at {seconds_cap:.0f}s")
+    deadline = Deadline(seconds_cap) if seconds_cap is not None else None
+    cap_hit, discarded = False, None
     fits, t0 = [], time.perf_counter()
     with P.bar(n_probes, "cost probe", unit="probe", unit_scale=False) as pb:
         for j in range(n_probes):
             rng_j = np.random.default_rng(COST_PROBE_SEED + j)
-            if spec.batched_cost:
-                win = probe_batched(spec, params, rng_j, scales, repeats=repeats)
-            else:
-                win = probe_window(spec, params, rng_j, scales, repeats=repeats,
-                                   seconds_budget=seconds_budget)
+            try:
+                if deadline is not None:
+                    deadline.check()
+                if spec.batched_cost:
+                    win = probe_batched(spec, params, rng_j, scales,
+                                        repeats=repeats, deadline=deadline)
+                else:
+                    win = probe_window(spec, params, rng_j, scales,
+                                       repeats=repeats,
+                                       seconds_budget=seconds_budget)
+            except ProbeDeadline:
+                cap_hit = True
+                break
+            if win.get("truncated_at") is not None:
+                cap_hit = True
+                # A cut probe is used only when no whole probe exists: its d
+                # comes from fewer scales than the others', and averaging it
+                # in would mix two windows.
+                if fits or len(win["scales"]) < PROBE_MIN_SCALES:
+                    discarded = {"scales": win["scales"],
+                                 "truncated_at": win["truncated_at"]}
+                    break
+                fits.append(fit_cost_probe(win, spec.cost_hint, params))
+                break
             fits.append(fit_cost_probe(win, spec.cost_hint, params))
             d_j = (fits[-1].get("affine") or {}).get("d")
             pb.update(1)
@@ -246,11 +294,25 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
                 break
     P.say(f"  cost probe: {len(fits)} window(s) timed in "
           f"{time.perf_counter() - t0:.1f}s")
+    if cap_hit:
+        P.say(f"  cost probe: STOPPED by its cap of {seconds_cap:.0f}s"
+              + (f"; the cut probe ({discarded['scales']}, stopped at scale "
+                 f"{discarded['truncated_at']}) is discarded" if discarded else ""))
+    if not fits:
+        raise SystemExit(
+            f"\nthe cost probe reached its cap of {seconds_cap:.0f}s before "
+            f"timing {PROBE_MIN_SCALES} scales, so there is no measured d.\n"
+            f"  The cap is max({PROBE_CAP_FLOOR:g}s, {PROBE_CAP_PILOT_SHARE:g} x "
+            f"pilot draw time, {PROBE_CAP_BUDGET_SHARE:g} x budget) "
+            f"(src/study/pilot.py: probe_cap).\n"
+            f"  Probe a smaller ladder, or state d:  --assert-d <value>\n")
     out = fits[-1]
     ds = [float(f["affine"]["d"]) for f in fits
           if (f.get("affine") or {}).get("d") is not None]
     out["d_probes"] = ds
     out["probe_seconds"] = float(time.perf_counter() - t0)
+    out["probe_cap"] = {"seconds": seconds_cap, "hit": cap_hit,
+                        "discarded": discarded}
     out["probe_seeds"] = [COST_PROBE_SEED + j for j in range(len(fits))]
     # Every probe's timings, not just the last one's: on a shared GPU one probe
     # can be disturbed (2026-10-28: d = 1.16 against four at 0.96), and the
@@ -264,7 +326,8 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     return out
 
 
-def resolve_cost(model, params, scales, *, reuse_cache: bool = False) -> dict:
+def resolve_cost(model, params, scales, *, reuse_cache: bool = False,
+                 seconds_cap: float | None = None) -> dict:
     """The cost probe, measured now or reused from this machine's cache.
 
     `reuse_cache` is --reuse-cost, and it is opt-in for the reason in
@@ -306,7 +369,7 @@ def resolve_cost(model, params, scales, *, reuse_cache: bool = False) -> dict:
             return cached
         P.say("  --reuse-cost: nothing cached for this model on this machine "
               "yet; measuring")
-    return measure_cost_exponent(model, params, scales)
+    return measure_cost_exponent(model, params, scales, seconds_cap=seconds_cap)
 
 
 #: |z| beyond which the clock and a declared cost are called a mismatch.
@@ -449,6 +512,16 @@ def _resolve_d(cost: dict, declared_override: float | None = None,
             f"floor the affine fit is not merely noisy but wrong (srw over "
             f"8..64 does not converge; over 32..256 it returns 3.42 +/- 0.69 "
             f"against a truth of 1). Treat d as indicative.")
+    cap = cost.get("probe_cap") or {}
+    if cap.get("hit"):
+        n_used = len(cost.get("d_probes") or [])
+        warnings.append(
+            f"the cost probe was stopped by its cap of {cap['seconds']:.0f} s "
+            f"(probe_cap) after {n_used} usable probe(s)"
+            + (f", the last cut at scale {cost['truncated_at']}, so d is fitted "
+               f"on {cost.get('scales')} only"
+               if cost.get("truncated_at") is not None else "")
+            + ". se(d) has fewer probes behind it than D_PROBES intends.")
     if cost.get("over_budget"):
         warnings.append(
             f"the probe window was packed to its tightest "
@@ -706,7 +779,7 @@ def reuse(source_sd: Path, sd: Path, *, recipe: dict | None = None,
 def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
           existing: list | None = None, assert_d: float | None = None,
           trust_declared_d: bool = False, cost: dict | None = None,
-          reuse_cache: bool = False) -> dict:
+          reuse_cache: bool = False, budget_seconds: float | None = None) -> dict:
     """Draw `replicates` replicates, fit the constants, write them to `sd`.
 
     `cost` re-uses a cost probe measured earlier instead of running another.
@@ -718,6 +791,9 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
     autopilot's doubling loop calls this function once per round and used to
     pay for the probe every time: at the measured 280 s per probe, a 3-round
     pilot spent 14 minutes on three bit-identical answers.
+
+    `budget_seconds` is the whole study's budget, if there is one; with this
+    call's draw time it sets the cost probe's cap (`probe_cap`).
     """
     model, params = recipe["model"], recipe.get("params", {})
     scales = [int(x) for x in recipe["scales"]]
@@ -796,7 +872,8 @@ def pilot(recipe: dict, sd: Path, replicates: int, seed=None,
         return float(np.std([p[key] for p in per], ddof=1) / np.sqrt(R)) if R > 1 else None
 
     if cost is None:
-        cost = resolve_cost(model, params, scales, reuse_cache=reuse_cache)
+        cost = resolve_cost(model, params, scales, reuse_cache=reuse_cache,
+                            seconds_cap=probe_cap(drawn_seconds, budget_seconds))
 
     cv_by_rep = np.array([r["cv"] for r in reps], float)     # (R, len(scales))
     cv_per_scale = cv_by_rep.mean(axis=0)

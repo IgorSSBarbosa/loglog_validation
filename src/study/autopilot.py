@@ -341,7 +341,8 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
         # again for a bit-identical answer. Measured at 280 s per probe on the
         # run that prompted this, a 3-round pilot spent 14 minutes on it.
         out = pilot_mod.pilot(this, sd, replicates, seed=round_seeds[k],
-                              cost=cost, reuse_cache=reuse_cache)
+                              cost=cost, reuse_cache=reuse_cache,
+                              budget_seconds=total_seconds)
         cost = out["cost"]
         reps, consts = out["reps"], out["constants"]
         spent = time.perf_counter() - t_start

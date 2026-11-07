@@ -391,6 +391,40 @@ PROBE_TIME_BUDGET = 20.0
 #: Fewest rungs worth fitting: `estimate_cost_affine` has 3 free parameters.
 PROBE_MIN_SCALES = 4
 
+
+class ProbeDeadline(Exception):
+    """The cost probe's wall-clock cap was reached (see `Deadline`)."""
+
+
+class Deadline:
+    """A wall-clock cap on the cost probe, checked before every timed call.
+
+    Why (user, 2026-11-07): percolation_susceptibility_explore at dim 2,
+    scales 4..256, ran its batched probe for 4 h 46 m of a 9 h study, with
+    nothing on the console, after a 78 min pilot. One call at x = 256 took
+    ~134 s and its 4x partner ~540 s, five pairs per scale, five probes. The
+    older caps (D_PROBE_TIME_BUDGET, PROBE_WINDOW_BUDGET) are consulted only
+    between whole probes or bound a predicted window, so neither could fire.
+
+    `check(predicted)` raises ProbeDeadline when now + predicted is past the
+    cap, so a call already predicted to cross it is never started. A call in
+    flight cannot be interrupted (it is one numba/CUDA call), so the cap is
+    exceeded by at most one call whose prediction was low.
+    """
+
+    def __init__(self, seconds: float):
+        self.seconds = float(seconds)
+        self.end = time.perf_counter() + self.seconds
+
+    def check(self, predicted: float = 0.0) -> None:
+        if time.perf_counter() + max(0.0, predicted) > self.end:
+            raise ProbeDeadline(f"cost probe cap of {self.seconds:.0f}s reached")
+
+
+def _check(deadline: "Deadline | None", predicted: float = 0.0) -> None:
+    if deadline is not None:
+        deadline.check(predicted)
+
 #: How many times a rung's WORK must exceed the per-call overhead before that
 #: rung is worth fitting. This is what PROBE_TARGET_SECONDS was a proxy for,
 #: and the proxy was wrong in both directions because it is an ABSOLUTE time
@@ -435,7 +469,8 @@ PROBE_WINDOW_BUDGET = 6.0
 
 def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
                   aggregator: str = DEFAULT_AGGREGATOR,
-                  n: int = 1) -> tuple[float, list[float]]:
+                  n: int = 1,
+                  deadline: Deadline | None = None) -> tuple[float, list[float]]:
     """Time `spec.simulate(i, n, params, rng)` `repeats` times.
 
     Returns (aggregated seconds, the raw timings). One warm-up call is thrown
@@ -448,13 +483,19 @@ def time_at_scale(spec, i: int, params: dict, rng, repeats: int = PROBE_REPEATS,
     one-sided, and a mean hands the whole of any hiccup to the estimate.
 
     `n` is 1 for every probe but `probe_batched`, which walks it up.
+    `deadline` is checked before each call, predicting each from the last.
     """
+    _check(deadline)
+    t0 = time.perf_counter()
     spec.simulate(i, n, params, rng)                     # warm the code path
+    last = time.perf_counter() - t0
     times = []
     for _ in range(repeats):
+        _check(deadline, last)
         t0 = time.perf_counter()
         spec.simulate(i, n, params, rng)
-        times.append(time.perf_counter() - t0)
+        last = time.perf_counter() - t0
+        times.append(last)
     return aggregate(times, aggregator), times
 
 def _probe(scales, times_by_scale, repeats, aggregator, **extra) -> dict:
@@ -857,7 +898,8 @@ def probe_batched(spec, params: dict, rng, scales,
                   aggregator: str = DEFAULT_AGGREGATOR,
                   overhead_factor: float = PROBE_OVERHEAD_FACTOR,
                   batch_factor: int = BATCH_FACTOR,
-                  max_n: int = BATCH_MAX_N) -> dict:
+                  max_n: int = BATCH_MAX_N,
+                  deadline: Deadline | None = None) -> dict:
     """The cost of ONE MORE sample at each scale, for a model with `batched_cost`.
 
     THE RULE, per scale k of the ladder given:
@@ -900,6 +942,11 @@ def probe_batched(spec, params: dict, rng, scales,
     The walk never reads `cost_hint`, so the clock still measures d and the
     declaration only checks it (src/study/pilot.py's `_resolve_d`).
 
+    `deadline` (see `Deadline`): the scales are timed smallest first, and when
+    the cap is reached the probe keeps the scales it finished and records the
+    one it was on as `truncated_at`. With no scale finished, ProbeDeadline
+    propagates.
+
     Fails loudly rather than fitting nonsense: RuntimeError if n reaches
     `max_n` below the floor, or if any pair's larger call was not the slower
     one -- something else was using the device between the two timings, and
@@ -910,47 +957,21 @@ def probe_batched(spec, params: dict, rng, scales,
                                     ceiling=scales[-1])
     floor_t = a0 * (1.0 + float(overhead_factor))
     times_by_scale, batch_n, call_seconds = {}, {}, {}
+    truncated_at = None
     for k in scales:
-        n = 1
-        t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
-        while t_n < floor_t:
-            if 2 * n > max_n:
-                raise RuntimeError(
-                    f"probe_batched: at scale {k}, {n} samples per call still "
-                    f"take {1e6 * t_n:.0f} us, under the floor of "
-                    f"{1e6 * floor_t:.0f} us = (1 + {overhead_factor:g}) x the "
-                    f"per-call overhead. The model's cost does not grow with n "
-                    f"here, so there is no per-sample cost to measure.")
-            n *= 2
-            t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
-        if spec.latency_bound:
-            n = _saturate(spec, k, params, rng, repeats, aggregator, n,
-                          batch_factor, max_n)
-        if spec.device_fill is not None:
-            n = _whole_waves(n, spec.device_fill(), k, batch_factor, max_n)
-        big = batch_factor * n
-        spec.simulate(k, big, params, rng)               # warm the larger call
-        marginal, calls = [], []
-        for _ in range(repeats):
-            t0 = time.perf_counter()
-            spec.simulate(k, n, params, rng)
-            t1 = time.perf_counter()
-            spec.simulate(k, big, params, rng)
-            t2 = time.perf_counter()
-            marginal.append(((t2 - t1) - (t1 - t0)) / (big - n))
-            calls.append(t1 - t0)
-        if min(marginal) <= 0:
-            raise RuntimeError(
-                f"probe_batched: at scale {k}, a call of {big} samples was "
-                f"timed no slower than one of {n} (marginal costs "
-                f"{[f'{1e6 * m:.3g}' for m in marginal]} us). Something else "
-                f"was using the device during the probe; re-run it when the "
-                f"machine is idle.")
-        times_by_scale[k] = marginal
-        batch_n[str(k)] = n
-        call_seconds[str(k)] = aggregate(calls, aggregator)
+        try:
+            _batched_scale(spec, params, rng, k, repeats, aggregator, floor_t,
+                           overhead_factor, batch_factor, max_n, deadline,
+                           times_by_scale, batch_n, call_seconds)
+        except ProbeDeadline:
+            if not times_by_scale:
+                raise
+            truncated_at = k
+            break
 
-    out = _probe(scales, times_by_scale, repeats, aggregator)
+    done = [k for k in scales if k in times_by_scale]
+    out = _probe(done, times_by_scale, repeats, aggregator)
+    out["truncated_at"] = truncated_at
     out["method"] = "batched"
     out["overhead_seconds"] = a0
     out["overhead_scale"] = a0_scale
@@ -969,6 +990,59 @@ def probe_batched(spec, params: dict, rng, scales,
     return out
 
 
+def _batched_scale(spec, params, rng, k, repeats, aggregator, floor_t,
+                   overhead_factor, batch_factor, max_n, deadline,
+                   times_by_scale, batch_n, call_seconds) -> None:
+    """One scale of `probe_batched`; fills the three dicts only on success."""
+    n = 1
+    t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n,
+                           deadline=deadline)
+    while t_n < floor_t:
+        if 2 * n > max_n:
+            raise RuntimeError(
+                f"probe_batched: at scale {k}, {n} samples per call still "
+                f"take {1e6 * t_n:.0f} us, under the floor of "
+                f"{1e6 * floor_t:.0f} us = (1 + {overhead_factor:g}) x the "
+                f"per-call overhead. The model's cost does not grow with n "
+                f"here, so there is no per-sample cost to measure.")
+        n *= 2
+        t_n, _ = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n,
+                               deadline=deadline)
+    if spec.latency_bound:
+        n = _saturate(spec, k, params, rng, repeats, aggregator, n,
+                      batch_factor, max_n, deadline)
+        t_n = 0.0      # n moved; the first pair's prediction starts unknown
+    if spec.device_fill is not None:
+        n = _whole_waves(n, spec.device_fill(), k, batch_factor, max_n)
+    big = batch_factor * n
+    _check(deadline, batch_factor * t_n)
+    t0 = time.perf_counter()
+    spec.simulate(k, big, params, rng)               # warm the larger call
+    pair = (time.perf_counter() - t0) * (1 + 1 / batch_factor)
+    marginal, calls = [], []
+    for _ in range(repeats):
+        # A pair is one call of n plus one of 4n; the last pair predicts it.
+        _check(deadline, pair)
+        t0 = time.perf_counter()
+        spec.simulate(k, n, params, rng)
+        t1 = time.perf_counter()
+        spec.simulate(k, big, params, rng)
+        t2 = time.perf_counter()
+        marginal.append(((t2 - t1) - (t1 - t0)) / (big - n))
+        calls.append(t1 - t0)
+        pair = t2 - t0
+    if min(marginal) <= 0:
+        raise RuntimeError(
+            f"probe_batched: at scale {k}, a call of {big} samples was "
+            f"timed no slower than one of {n} (marginal costs "
+            f"{[f'{1e6 * m:.3g}' for m in marginal]} us). Something else "
+            f"was using the device during the probe; re-run it when the "
+            f"machine is idle.")
+    times_by_scale[k] = marginal
+    batch_n[str(k)] = n
+    call_seconds[str(k)] = aggregate(calls, aggregator)
+
+
 def _whole_waves(n: int, wave: int, k: int, batch_factor: int, max_n: int) -> int:
     """n rounded UP to a multiple of `wave`, so n and batch_factor * n both fill
     the device exactly (see ModelSpec.device_fill). Up, not to the nearest: the
@@ -984,7 +1058,8 @@ def _whole_waves(n: int, wave: int, k: int, batch_factor: int, max_n: int) -> in
 
 
 def _saturate(spec, k: int, params: dict, rng, repeats: int, aggregator: str,
-              n: int, batch_factor: int, max_n: int) -> int:
+              n: int, batch_factor: int, max_n: int,
+              deadline: Deadline | None = None) -> int:
     """Double n until a call of batch_factor * n is SATURATION_RATIO times slower.
 
     Only for a `latency_bound` model, where one sample is a long serial chain
@@ -1000,11 +1075,12 @@ def _saturate(spec, k: int, params: dict, rng, repeats: int, aggregator: str,
     stopped rwre_gpu at n = 16 of k = 256 (2026-09-24), where the device is
     still latency-bound, and the pairs then differenced to zero.
     """
-    _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+    _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n,
+                                deadline=deadline)
     t_n = min(times)
     while True:
         _, times = time_at_scale(spec, k, params, rng, repeats, aggregator,
-                                 n=batch_factor * n)
+                                 n=batch_factor * n, deadline=deadline)
         t_big = min(times)
         if t_big >= SATURATION_RATIO * t_n:
             return n
@@ -1015,7 +1091,8 @@ def _saturate(spec, k: int, params: dict, rng, repeats: int, aggregator: str,
                 f"(need {SATURATION_RATIO:g}x), so the device never fills "
                 f"below {max_n} samples and no per-sample cost can be read.")
         n *= 2
-        _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n)
+        _, times = time_at_scale(spec, k, params, rng, repeats, aggregator, n=n,
+                                deadline=deadline)
         t_n = min(times)
 
 
