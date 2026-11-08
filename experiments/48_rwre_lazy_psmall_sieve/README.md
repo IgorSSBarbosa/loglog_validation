@@ -28,7 +28,7 @@ bash experiments/48_rwre_lazy_psmall_sieve/run_p.sh 0.02 3h 202610314800
 
 None proven for $p\ne\tfrac12$. For comparison only: 41 measured $\hat\gamma=0.5061$ at
 $p=0$ (2¹⁹..2²⁴), 19's `ap2h_fix` sweep gives the 2¹⁵..2²⁰ values at $p=0.05,0.1,0.15$.
-Checks that do apply: (A2) $Y>0$ fraction, (A4)–(A6) flat across the window, and the
+Checks that do apply: (A3) $Y>0$ fraction, (A4)–(A6) flat across the window, and the
 long run's time against the plan (A8).
 
 ## Results

@@ -440,7 +440,7 @@ $\mathrm{sd}/(\sqrt n\,\overline Y_i)$ — which is what the log-log fit weights
 $\mathrm{sd}/\overline Y_i$, which is what an allocation needs; and
 $\mathbb{E}|\log \xi|^{2+\delta}$ with $\xi = Y_i/\mathbb{E}Y_i$, which fed the
 old bad-event term and is no longer read by anything (kept so stored summaries share one
-schema); plus `abs_moment` and `n_nonpos` for checks (A4) and (A2).
+schema); plus `abs_moment` and `n_nonpos` for checks (A3) and (A4).
 `replicate_summary(stats, scales)` transposes `{scale: tuple}` into one list per
 name, ordered by `scales` rather than by the mapping's key order.
 

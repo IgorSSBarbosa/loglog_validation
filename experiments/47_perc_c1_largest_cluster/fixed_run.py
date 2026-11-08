@@ -317,7 +317,7 @@ def plot(sd: Path) -> None:
             rf"$p={rf['p_value']:.1g}$" + (", warning" if rf["warn"] else ""),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
     ax.set_ylabel(r"$\log\overline{Y}$")
-    ax.set_title("(A1)+(A3) extrapolation", fontsize=9, loc="left")
+    ax.set_title("(A1)+(A2) extrapolation", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
     for name in ("A1", "A4", "A5", "X"):
         ax_[name].set_xlabel(r"$\log_2 i$")

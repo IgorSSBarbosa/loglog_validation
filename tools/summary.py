@@ -18,7 +18,7 @@ over a ladder of scales -- and keeps the same four numbers per scale:
                assumption (A4). Here because it is an expectation over
                INDIVIDUAL draws, not a function of the sample mean, so it
                cannot be recovered afterwards from a summary (user, 2026-10-28).
-    n_nonpos   how many draws were <= 0, the positivity check (A2). Those
+    n_nonpos   how many draws were <= 0, the positivity check (A3). Those
                draws are the ones log_moment drops.
 
 Those four are the entire interface between drawing and fitting: nothing

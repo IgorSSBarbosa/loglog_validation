@@ -19,7 +19,7 @@ are in `experiments/11_erw/README.md`, and the sampler is described in
 
 ### What the Step 4 checks needed (user, 2026-10-28)
 
-A long run keeps per-scale summaries, not draws. The article's (A2) and (A4) checks
+A long run keeps per-scale summaries, not draws. The article's (A3) and (A4) checks
 need two expectations over individual draws that the summary didn't keep. So
 `tools/summary.py` gained `abs_moment` ($\overline{\lvert\xi_i\rvert^{3}}$) and
 `n_nonpos` (draws $\le 0$). Older artifacts don't have them.
@@ -82,7 +82,7 @@ Readings:
    at every scale (one ran 4–10% slow above $i=16$). The panel draws only their per-scale
    median, with one fit of eq. (cost) to it ($\hat d=1.00$). The planner uses the mean of the five probes' own
    exponents.
-2. **(A2) fails for $\lvert S_i\rvert$:** zeros at even $i$, fraction $3.4\times10^{-3}$ at
+2. **(A3) fails for $\lvert S_i\rvert$:** zeros at even $i$, fraction $3.4\times10^{-3}$ at
    $2^{15}$ down to $6.0\times10^{-4}$ at $2^{20}$ (ratio 5.7 over a factor 32, i.e. $\approx i^{-1/2}$).
 3. **(A4) is flat** at $\overline{\lvert\xi\rvert^3}=3.1414\pm0.0005$, which is the half-normal
    value $\pi$. **(A5) is flat** at $\hat\sigma^2=0.5708$, the half-normal value $\pi/2-1$.
@@ -91,7 +91,7 @@ Readings:
    used it (user). Panels are labelled as in the article's Step 4 list since then.
 5. **(A6):** the long run took 0.44× the plan's time. The throughput measured on the
    pilot's small scales understates the one at the long run's scales, as in 14.
-6. **(A1)+(A3):** the pilot fit, extrapolated, follows the long-run points on the
+6. **(A1)+(A2):** the pilot fit, extrapolated, follows the long-run points on the
    log-log plot and is off by at most $9.9\times10^{-3}$ in $\log\overline Y$ at
    $2^{20}$. That's mostly $\hat\gamma_{\rm pilot}$, $1.7\times10^{-3}$ high. The three
    per-replicate pilot fits agree to $10^{-4}$ (0.50170–0.50182, gaps 9.5–10.1e-3), so

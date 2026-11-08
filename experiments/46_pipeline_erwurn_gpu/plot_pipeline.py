@@ -11,13 +11,13 @@
    `pipeline_extrapolation`: the pilot correction extended over the planned window.
 3. `pipeline_longrun`: the long run's log-log plot with the fitted slope gamma-hat.
 4. `pipeline_checks`: the Step 4 checks on the long-run data, one panel each for
-   the local slopes, (A4), (A5), (A6) and (A1)+(A3), labelled as in the article's
+   the local slopes, (A4), (A5), (A6) and (A1)+(A2), labelled as in the article's
    Step 4 list. The 2026-11-04 article revision dropped the log-moment assumption, so
    its panel is gone and sigma^2 is (A5), the cost (A6) (user). The local slopes come from
    `src/study/local_slope.py` (local_slope.json), which brings every scale from the
    pilot's smallest to the window's top to the final's n. (A4)-(A5) are drawn as
    points, not lines: they are estimates at separate scales. (A6) compares the long run's time
-   with the planner's cost model; (A1)+(A3) is the log-log plot of pilot and long
+   with the planner's cost model; (A1)+(A2) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window and the pilot
    refitted with gamma pinned to gamma-hat (the omega1, a1 of B_fs), with its chi2.
 
@@ -327,7 +327,7 @@ def fig_checks(d: dict, rho: float):
             rf"$p={rf['p_value']:.1g}$" + (", warning" if rf["warn"] else ""),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
     ax.set_ylabel(r"$\log\overline{Y}$")
-    ax.set_title("(A1)+(A3) extrapolation", fontsize=9, loc="left")
+    ax.set_title("(A1)+(A2) extrapolation", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
     for name in ("A1", "A4", "A5", "X"):
