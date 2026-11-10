@@ -1,0 +1,27 @@
+{
+  "kind": "sweep",
+  "model": "percolation_tau_leath",
+  "params": {
+    "dim": 3,
+    "p": 0.3116077,
+    "batch_factor": 1.0,
+    "batch_exponent": 0.0
+  },
+  "m": 6,
+  "rho": 2.0,
+  "d": 0.8429324758965037,
+  "omega1": 0.6400881995910601,
+  "a1": -0.22137024297758087,
+  "cv": 1.5257578135515846,
+  "budgets": [
+    10000000000.0
+  ],
+  "m0_values": [
+    10,
+    12
+  ],
+  "replicates": 50,
+  "true_gamma": -0.1890900000000002,
+  "seed": 2026110860,
+  "_comment": "User, 2026-11-08: coverage of eq. (720) for 2 - tau, d = 3, one Leath cluster a sample. m0 = 10 is 2**11..2**16 (ends at the full pilot's top), m0 = 12 is 2**13..2**18 (two rungs past it). Constants from data/pilot_d3/constants.json. Budget sized from the pilot's wall time (~3.4 h). true_gamma = 2 - tau, tau = 2.18909(5), used ONLY to score (ground rule 4)."
+}

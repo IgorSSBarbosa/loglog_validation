@@ -1,0 +1,14 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_leath",
+  "params": {
+    "dim": 3,
+    "p": 0.3116077,
+    "batch_factor": 1.0,
+    "batch_exponent": 0.0
+  },
+  "scales": [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536],
+  "n": 1000000,
+  "seed": 2026110856,
+  "_comment": "User, 2026-11-08: pilot for 55's coverage sweep, d = 3, one Leath cluster a sample (batch_exponent 0). p is the tabulated p_c (Xu et al. 2014). Benchmark 2026-11-08 on purus: 122 us a sample at s = 2**16, sigma2 0.51 -> 6.1 over 16..65536; n = 1e6 gives ~0.25% relative se at the top, ~5 min a replicate."
+}

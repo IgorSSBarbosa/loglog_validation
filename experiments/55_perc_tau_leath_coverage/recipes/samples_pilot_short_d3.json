@@ -1,0 +1,24 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_leath",
+  "params": {
+    "dim": 3,
+    "p": 0.3116077,
+    "batch_factor": 1.0,
+    "batch_exponent": 0.0
+  },
+  "scales": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "n": 1000000,
+  "seed": 2026110956,
+  "_comment": "User, 2026-11-08: SHORT pilot for 55, d = 3, ladder 16..4096, so the sweep's 2**13..2**18 window lies past the pilot's top as in a real pipeline: score_theorems takes sigma_inf^2 as cv^2 at the pilot's top scale, which then underestimates the window's growing sigma^2 (Assumption sigma_converges broken). Scored against the same sweep as the full pilot; draws nothing for it."
+}
