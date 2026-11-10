@@ -191,8 +191,8 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=EXP / "images")
     ap.add_argument("--seed", type=int, default=20261108)
     ap.add_argument("--p", type=float, default=0.1)
-    ap.add_argument("--steps", type=int, default=120)
-    ap.add_argument("--half-width", type=int, default=32, help="sites shown each side")
+    ap.add_argument("--steps", type=int, default=50)
+    ap.add_argument("--half-width", type=int, default=24, help="sites shown each side")
     ap.add_argument("--check", type=int, default=0, metavar="N",
                     help="also KS-test the law of X_steps against MODELS['rwre'], N walks each")
     args = ap.parse_args()
