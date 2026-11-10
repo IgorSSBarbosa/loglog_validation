@@ -6,9 +6,12 @@ superdiffusive (p = 0.9) -- with a few independent walks, the envelope
 E S_{k+1}^2 = 1 + (1 + 2(2p-1)/k) E S_k^2 (Bercu 2018), and, on one walk, the
 observable Y_i = |S_i| at the last step.
 
-An illustration, not a measurement: the walks are drawn on the CPU by the
-definition in the article (step k uniform on 1..n, repeated with probability p),
-not by the GPU urn sampler, and nothing here is estimated.
+The paths come from the repo's CPU sampler, MODELS["erw"] (models/erw.py): the
+same uniforms and the same random-recursive-tree resolution that erw.walk uses,
+read out step by step (erw.steps) instead of summed. The script asserts that each
+path ends at the S_n that erw.walk returns for the same seed, so the figure shows
+the walks the sampler actually draws. Not the GPU urn sampler (it returns S_n
+only), and nothing here is estimated.
 
 CLI:
     python3 experiments/14_erw_urn_gpu/plot_paths.py [--out DIR] [--seed S]
@@ -18,6 +21,7 @@ Writes erw_paths.pdf/.png into --out (default experiments/14_erw_urn_gpu/images)
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -27,6 +31,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 EXP = Path(__file__).resolve().parent
+ROOT = EXP.parents[1]
+sys.path.insert(0, str(ROOT / "models"))
+import erw  # noqa: E402
 
 PATH = "#2a6fdb"      # walks
 HIGHLIGHT = "#e8622c" # the walk whose |S_i| is marked
@@ -38,15 +45,17 @@ REGIMES = ((0.6, "diffusive, $p = 0.6$", r"$\gamma = 1/2$"),
            (0.9, "superdiffusive, $p = 0.9$", r"$\gamma = 2p-1 = 0.8$"))
 
 
-def walk(p: float, n: int, rng: np.random.Generator) -> np.ndarray:
-    """S_1..S_n of one ERW, by the definition: X_{k+1} = +-X_u, u uniform on 1..k."""
-    x = np.empty(n, dtype=np.int8)
-    x[0] = 1 if rng.random() < 0.5 else -1
-    u = rng.integers(0, np.arange(1, n), endpoint=False)   # u_k uniform on 0..k-1
-    keep = rng.random(n - 1) < p
-    for k in range(1, n):
-        x[k] = x[u[k - 1]] if keep[k - 1] else -x[u[k - 1]]
-    return np.cumsum(x, dtype=np.int64)
+def paths(p: float, n: int, walks: int, ss: np.random.SeedSequence) -> np.ndarray:
+    """S_1..S_n of `walks` ERWs from MODELS["erw"], shape (walks, n).
+
+    Draws the (walks, 2n - 1) uniforms exactly as erw.walk does for one block,
+    and checks the endpoints against erw.walk on a twin generator.
+    """
+    u = np.random.default_rng(ss).random((walks, 2 * n - 1))
+    s = np.cumsum(erw.steps(u, n, p), axis=1, dtype=np.int64)
+    ends = erw.walk(n, walks, p, np.random.default_rng(ss), block_n=walks)
+    assert np.array_equal(s[:, -1], ends), "paths disagree with erw.walk"
+    return s
 
 
 def second_moment(p: float, n: int) -> np.ndarray:
@@ -71,15 +80,14 @@ def main() -> None:
     i = np.arange(1, args.n + 1)
     fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.3), sharex=True)
     for ax, (p, title, note), ss in zip(axes, REGIMES, children):
-        rng = np.random.default_rng(ss)
-        paths = [walk(p, args.n, rng) for _ in range(args.walks)]
+        walks = paths(p, args.n, args.walks, ss)
         env = 2.0 * np.sqrt(second_moment(p, args.n))
         ax.fill_between(i[::THIN], -env[::THIN], env[::THIN], color=REF, alpha=0.12, linewidth=0)
         ax.plot(i[::THIN], env[::THIN], color=REF, lw=1, ls="--")
         ax.plot(i[::THIN], -env[::THIN], color=REF, lw=1, ls="--")
-        for s in paths[1:]:
+        for s in walks[1:]:
             ax.plot(i[::THIN], s[::THIN], color=PATH, lw=0.8, alpha=0.55)
-        s0 = paths[0]
+        s0 = walks[0]
         ax.plot(i[::THIN], s0[::THIN], color=HIGHLIGHT, lw=1.2)
         # the observable: |S_n| on the highlighted walk, drawn from the axis to S_n
         ax.annotate("", xy=(args.n, s0[-1]), xytext=(args.n, 0),
@@ -92,7 +100,7 @@ def main() -> None:
         ax.set_title(title, fontsize=10, loc="left")
         ax.text(0.03, 0.96, note, transform=ax.transAxes, va="top", fontsize=9)
         ax.set_xlabel("step $i$")
-        lim = 1.15 * max(env[-1], max(np.abs(s).max() for s in paths))
+        lim = 1.15 * max(env[-1], np.abs(walks).max())
         ax.set_ylim(-lim, lim)
         ax.set_xlim(0, args.n * 1.02)
         for side in ("top", "right"):

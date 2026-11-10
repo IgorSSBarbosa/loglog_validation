@@ -118,7 +118,15 @@ def _check(params: dict) -> float:
 
 
 def _resolve(u: np.ndarray, k: int, p: float) -> np.ndarray:
-    """S_k for each row of u, a (rows, 2k - 1) block of uniforms.
+    """S_k for each row of u, a (rows, 2k - 1) block of uniforms."""
+    return steps(u, k, p).sum(axis=1, dtype=np.int64)
+
+
+def steps(u: np.ndarray, k: int, p: float) -> np.ndarray:
+    """The steps X_1..X_k (int8, +-1) for each row of u, a (rows, 2k - 1) block
+    of uniforms; their sum is _resolve's S_k. Public so that a figure can draw
+    the whole path S_1..S_k from the sampler itself (experiments/14's
+    plot_paths.py) rather than from a reimplementation.
 
     Column 0 is X_1's coin; columns 1..k-1 pick the parents of steps 2..k;
     columns k..2k-2 are their signs. Node k is a sentinel: sign 1, its own
@@ -145,7 +153,7 @@ def _resolve(u: np.ndarray, k: int, p: float) -> np.ndarray:
         sign[:, :k] *= np.take_along_axis(sign, head, axis=1)
         anc[:, :k] = np.take_along_axis(anc, head, axis=1)
         head = anc[:, :k]
-    return sign[:, :k].sum(axis=1, dtype=np.int64)
+    return sign[:, :k]
 
 
 def walk(k: int, n: int, p: float, rng: np.random.Generator | None = None,
