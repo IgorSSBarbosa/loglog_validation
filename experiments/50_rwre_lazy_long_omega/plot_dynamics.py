@@ -40,7 +40,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.colors import ListedColormap  # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch, Rectangle  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: E402
 
 EXP = Path(__file__).resolve().parent
 ROOT = EXP.parents[1]
@@ -50,6 +50,7 @@ PARTICLE = "#2a6fdb"
 EMPTY = "#ffffff"
 HIDDEN = "#cccccc"
 SWEEPS = 4
+SIDE = 1 / 1.8                 # schematic squares: gap = 4/5 of the side
 UNREVEALED, HOLE, PART = -1, 0, 1
 
 
@@ -139,44 +140,55 @@ def check_law(p: float, steps: int, n: int, seed: int) -> None:
 
 
 def schematic(ax: plt.Axes) -> None:
-    """One step: the walker's read and jump, then one sweep's swaps."""
-    ax.set_xlim(-0.6, 8.6)
-    ax.set_ylim(-3.3, 2.4)
+    """One step: the walker's read and jump, then one sweep's swaps.
+
+    Sites are squares of side SIDE at unit pitch, so the gap is 4/5 of the side
+    (user, 2026-11-10). The swapped bonds are not every other one (user: a
+    regular pattern reads as if the swaps, too, alternated by parity).
+    """
+    ax.set_xlim(-0.6, 9.6)
+    ax.set_ylim(-3.6, 2.4)
     ax.set_aspect("equal")
     ax.axis("off")
-    occ = [1, 0, 1, 1, 0, 0, 1, 0, 1]
+    half = SIDE / 2
+    occ = [1, 0, 0, 1, 1, 0, 1, 0, 0, 1]
     xw = 4
-    for row_y, label in ((0.0, "time $t$"), (-2.4, "after one sweep ($b = 0$)")):
-        ax.text(-0.6, row_y + 0.4, label, fontsize=8, ha="left", va="bottom")
-    # top row: environment at time t
-    for k, o in enumerate(occ):
-        ax.add_patch(Circle((k, 0), 0.28, facecolor=PARTICLE if o else EMPTY,
-                            edgecolor="black", lw=0.8))
-    ax.plot([xw], [0.75], marker="v", ms=11, color=WALKER)
+
+    def row(values: list[int], y: float) -> None:
+        for k, o in enumerate(values):
+            ax.add_patch(Rectangle((k - half, y - half), SIDE, SIDE,
+                                   facecolor=PARTICLE if o else EMPTY,
+                                   edgecolor="black", lw=0.8))
+
+    for row_y, label in ((0.0, "time $t$"), (-2.7, "after one sweep ($b = 0$)")):
+        ax.text(-0.6, row_y + half + 0.12, label, fontsize=8, ha="left", va="bottom")
+    # top row: environment at time t, the walker's site outlined as in panel (b)
+    row(occ, 0.0)
+    ax.add_patch(Rectangle((xw - half, -half), SIDE, SIDE, facecolor="none",
+                           edgecolor=WALKER, lw=2.2, zorder=3))
     ax.text(xw, 1.75, r"walker at $X_t$ reads $\eta_t(X_t)$", fontsize=8, ha="center")
     for dx in (-1, 1):
-        ax.add_patch(FancyArrowPatch((xw, 0.75), (xw + dx, 0.75), arrowstyle="-|>",
-                                     mutation_scale=9, color=WALKER, lw=1.1,
-                                     connectionstyle=f"arc3,rad={-0.5 * dx}"))
-    ax.text(xw - 1.15, 1.05, r"left: $p$ if $\eta=1$," "\n" r"$1-p$ if $\eta=0$",
+        ax.add_patch(FancyArrowPatch((xw, half + 0.05), (xw + dx, half + 0.05),
+                                     arrowstyle="-|>", mutation_scale=9, color=WALKER,
+                                     lw=1.1, connectionstyle=f"arc3,rad={-0.6 * dx}"))
+    ax.text(xw - 1.15, 1.0, r"left: $p$ if $\eta=1$," "\n" r"$1-p$ if $\eta=0$",
             fontsize=7.5, ha="right", va="center")
-    ax.text(xw + 1.15, 1.05, "right: otherwise", fontsize=7.5, ha="left", va="center")
-    # one sweep, parity b = 0: bonds {0,1}, {2,3}, {4,5}, {6,7}; each swaps w.p. 1/2
-    swapped = [True, False, True, False]
+    ax.text(xw + 1.15, 1.0, "right: otherwise", fontsize=7.5, ha="left", va="center")
+    # one sweep, parity b = 0: bonds {0,1}, {2,3}, ..., {8,9}; each swaps w.p. 1/2
+    swapped = [True, True, False, True, False]
     new = occ.copy()
-    for j, s in enumerate(swapped):
+    for j, sw in enumerate(swapped):
         a = 2 * j
-        ax.add_patch(FancyArrowPatch((a, -0.45), (a + 1, -0.45), arrowstyle="<|-|>",
-                                     mutation_scale=7, lw=1.0,
-                                     color="black" if s else "#aaaaaa",
+        ax.add_patch(FancyArrowPatch((a, -half - 0.08), (a + 1, -half - 0.08),
+                                     arrowstyle="<|-|>", mutation_scale=7, lw=1.0,
+                                     color="black" if sw else "#aaaaaa",
                                      connectionstyle="arc3,rad=0.6"))
-        if s:
+        if sw:
             new[a], new[a + 1] = new[a + 1], new[a]
-    ax.text(4, -1.25, r"each of $4$ sweeps: draw a parity $b$, swap every bond "
-            r"$\{x, x{+}1\}$, $x \equiv b$, w.p. $1/2$", fontsize=7.5, ha="center")
-    for k, o in enumerate(new):
-        ax.add_patch(Circle((k, -2.4), 0.28, facecolor=PARTICLE if o else EMPTY,
-                            edgecolor="black", lw=0.8))
+    ax.text(4.5, -1.55, r"each of the $4$ sweeps draws a parity $b$, then swaps every"
+            "\n" r"bond $\{x, x{+}1\}$ with $x \equiv b\ (\mathrm{mod}\ 2)$ with probability $1/2$",
+            fontsize=7.5, ha="center", va="center")
+    row(new, -2.7)
 
 
 def main() -> None:
