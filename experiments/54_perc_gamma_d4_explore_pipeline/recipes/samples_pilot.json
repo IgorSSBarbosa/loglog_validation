@@ -1,0 +1,24 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 4,
+    "eps0": 0.09,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1,
+    "max_sites": 1000000000
+  },
+  "scales": [
+    2,
+    4,
+    8,
+    16,
+    32,
+    64
+  ],
+  "n": 150000000,
+  "seed": null,
+  "_comment": "User, 2026-11-08: pilot of experiment 54, sized for sigma(omega)/omega <= 10% (Fisher on eq. (232) J = 1, gamma free: 1.5-2.3e8 samples per rung in total over 5 replicates for omega = 1.65 +- 0.47, a1 = -0.131 from 38's 3 h run). n = 1.5e8 per rung PER replicate, i.e. ~4.5x that, for a ~1 h pilot (user): margin for AIC's range cuts, omega_2 at x = 2, and the 30% uncertainty of the omega, a1 used to size it."
+}
