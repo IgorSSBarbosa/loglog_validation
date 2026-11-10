@@ -33,7 +33,9 @@ from models import percolation_tau_gpu as model_percolation_tau_gpu
 from models import percolation_susceptibility as model_percolation_susceptibility
 from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
 from models import percolation_susceptibility_L_gpu as model_percolation_susceptibility_L_gpu
+from models import percolation_susceptibility_explore as model_percolation_susceptibility_explore
 from models import percolation_c1_gpu as model_percolation_c1_gpu
+from models import percolation_tau_leath as model_percolation_tau_leath
 from models import percolation_tau_zd as model_percolation_tau_zd
 from models import percolation_zd as model_percolation_zd
 from models import percolation_zd_gpu as model_percolation_zd_gpu
@@ -367,6 +369,31 @@ MODELS: dict[str, ModelSpec] = {
         # hand, the drivers never learn nu_box. GPU only (user, 2026-09-21).
         cost_hint=model_percolation_susceptibility_L_gpu.cost_hint,
         batched_cost=True,              # as percolation2d_gpu
+    ),
+    "percolation_susceptibility_explore": ModelSpec(
+        # The same S(p) as percolation_susceptibility, measured on Z^dim itself
+        # by growing the clusters of seeds on an axis segment -- memory ~
+        # cluster, not box (user, 2026-11-03). No cost_hint: the work is
+        # ~ m * S(p), and S(p) is the estimand (ground rule 4); the planner
+        # times it. See models/percolation_susceptibility_explore.py.
+        simulate=model_percolation_susceptibility_explore.simulate,
+        # One call runs its samples across threads and a sample's cost is
+        # heavy-tailed and usually ~0 (a closed seed): only a big call shows
+        # i**d, and a small one takes the slowest sample's latency. Timed one
+        # sample per call, the probe climbed to x = 32768 (user, 2026-11-03).
+        batched_cost=True,
+        latency_bound=True,
+        device_fill=model_percolation_susceptibility_explore.device_fill,
+    ),
+    "percolation_tau_leath": ModelSpec(
+        # Q(s) = P(|C(0)| >= s) ~ s**(2-tau) by Leath growth from the origin,
+        # Mertens & Moore Sec. V (user, 2026-11-08). gamma = 2 - tau. No
+        # cost_hint: the work ~ s**(3-tau) holds the estimand (ground rule 4).
+        # Timed as the exploration model, for the same reasons.
+        simulate=model_percolation_tau_leath.simulate,
+        batched_cost=True,
+        latency_bound=True,
+        device_fill=model_percolation_tau_leath.device_fill,
     ),
     "percolation_tau_zd": ModelSpec(
         simulate=model_percolation_tau_zd.simulate,

@@ -17,6 +17,7 @@ scipy==1.13.1
 matplotlib==3.9.4
 psutil==7.2.2
 tqdm==4.67.1
+numba==0.60.0
 
 # GPU models (models/*_gpu.py). Imported lazily: installing needs no GPU, and
 # nothing else in the repo imports it. A cuRAND stream is only reproducible on
