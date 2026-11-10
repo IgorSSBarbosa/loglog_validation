@@ -48,7 +48,7 @@ ROOT = EXP.parents[1]
 WALKER = "#e8622c"
 PARTICLE = "#2a6fdb"
 EMPTY = "#ffffff"
-HIDDEN = "#ececec"
+HIDDEN = "#cccccc"
 SWEEPS = 4
 UNREVEALED, HOLE, PART = -1, 0, 1
 
