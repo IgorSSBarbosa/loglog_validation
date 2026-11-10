@@ -50,7 +50,10 @@ open-addressing table.
 Keys pack the coordinates, each offset by 2**(bits-1), into bits = 63 // dim
 bits apiece, so a neighbour is key +- 2**(bits*j). A cluster that reaches the
 edge of that range (+-2**20 sites at dim 3) is reported, never wrapped:
-`simulate` raises. dim is 2..4; at dim >= 5 the range is too short to trust.
+`simulate` raises. dim is 2..5. At dim = 5 the range is +-2**11 = 2047 sites
+(user, 2026-11-07, for experiment 39's exploration pilot): short, but the edge is
+checked on every visited site, so a cluster that reaches it raises rather than wraps.
+At x <= 512, eps0 = 0.07 the correlation length is ~170 sites.
 
 A cluster larger than `max_sites` open sites (default 2e8, ~6 GiB of table)
 raises MemoryError instead of growing on. Near p_c one seed can hit a cluster
@@ -82,7 +85,7 @@ from numba import njit, prange
 from models.percolation_susceptibility import _MAX_MOMENT, p_at
 
 #: dimensions the key packing supports (bits per coordinate = 63 // dim)
-DIMS = (2, 3, 4)
+DIMS = (2, 3, 4, 5)
 
 #: open sites one sample may store before MemoryError (12 bytes a table slot,
 #: 8 with one seed, load <= 1/2: ~6 GiB at the cap). See the docstring.
@@ -269,6 +272,7 @@ def explore(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
             axis_factor: float = 1.0, nu_axis: float = 0.0,
             axis_spacing: int = 1, moment: int = 1,
             max_sites: int = DEFAULT_MAX_SITES,
+            ladder_exponent: float = 1.0,
             rng: np.random.Generator | None = None,
             ) -> tuple[np.ndarray, dict]:
     """n i.i.d. samples of Y, plus per-sample work and memory.
@@ -283,7 +287,14 @@ def explore(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
     if not 1 <= moment <= _MAX_MOMENT:
         raise ValueError(f"moment must be in 1..{_MAX_MOMENT}; got {moment}")
     x = int(x)
-    p = p_at(x, dim, eps0, p_c) if p is None else float(p)
+    k = float(ladder_exponent)
+    if k <= 0:
+        raise ValueError(f"ladder_exponent must be > 0; got {k}")
+    # eps = eps0 * x**(-1/k), i.e. x = (eps/eps0)**(-k), so log Y has slope
+    # gamma/k in log x. Written as p_at's eps0'/x with eps0' = eps0 x**(1-1/k)
+    # to keep its range check. User, 2026-11-07: tests whether experiment 38's
+    # flat residuals depend on the ladder (k = 1 is the original eps0/x).
+    p = p_at(x, dim, eps0 * x ** (1.0 - 1.0 / k), p_c) if p is None else float(p)
     if not 0.0 < p < 1.0:
         raise ValueError(f"p must be in (0, 1); got {p}")
     m = n_seeds(x, axis_factor, nu_axis)
@@ -317,7 +328,8 @@ def simulate(x: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
              "p_c": as percolation_susceptibility, "axis_factor": float
              (default 1), "nu_axis": float (default 0: one seed),
              "axis_spacing": int (default 1), "moment": 1|2|3,
-             "max_sites": int (default DEFAULT_MAX_SITES)}.
+             "max_sites": int (default DEFAULT_MAX_SITES),
+             "ladder_exponent": k (default 1), eps = eps0 * x**(-1/k)}.
     """
     y, _ = explore(
         x, n=n, dim=int(params.get("dim", 3)),
@@ -327,5 +339,6 @@ def simulate(x: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
         nu_axis=float(params.get("nu_axis", 0.0)),
         axis_spacing=int(params.get("axis_spacing", 1)),
         moment=int(params.get("moment", 1)),
-        max_sites=int(params.get("max_sites", DEFAULT_MAX_SITES)), rng=rng)
+        max_sites=int(params.get("max_sites", DEFAULT_MAX_SITES)),
+        ladder_exponent=float(params.get("ladder_exponent", 1.0)), rng=rng)
     return y
