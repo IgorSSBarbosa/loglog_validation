@@ -214,3 +214,23 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `long_p0.3_24h` | 0.524801 | 0.0588 ± 0.00053 | 1.67e+04/14 ⚠ | 2.72 | 0.307 ± 0.075 | 4096..131072 | 2.33/3 | 0.0463 |
 | `long_p0.3_smoke_cap131072` | 0.519779 | 0.022 ± 0.00089 | 1.55e+04/14 ⚠ | 65.9 | 0.253 ± 0.058 | 4096..131072 | 1.42/3 | 0.0889 |
 | `long_p0.3_smoke_pool` | 0.531202 | 0.0339 ± 0.001 | 1.61e+04/14 ⚠ | 16.9 | 0.369 ± 0.12 | 4096..65536 | 0.314/2 | 0.0348 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `long_p0.04_24h` | 0.512469 | 0.192 | 0.109 | 0.192 ± 0.00116 | 32..512 (1.00) | -0.717 | 0.108 | 0.109 |
+| `long_p0.04_smoke_cap131072` | 0.512748 | 0.189 | 0.125 | 0.188 ± 0.00676 | 32..512 (0.98) | -0.733 | 0.118 | 0.126 |
+| `long_p0.04_smoke_pool` | 0.516285 | 0.201 | 0.109 | 0.201 ± 0.00551 | 32..512 (1.00) | -0.682 | 0.101 | 0.109 |
+| `long_p0.3_24h` | 0.524801 | 0.307 | 0.0463 | 0.292 ± 0.0758 | 4096..131072 (0.29) | -1.77 | 0.0519 | 0.053 |
+| `long_p0.3_smoke_cap131072` | 0.519779 | 0.253 | 0.0889 | 0.243 ± 0.0593 | 4096..131072 (0.29) | -1.65 | 0.0885 | 0.1 |
+| `long_p0.3_smoke_pool` | 0.531202 | 0.369 | 0.0348 | 0.341 ± 0.117 | 4096..65536 (0.49) | -2.05 | 0.0286 | 0.0422 |

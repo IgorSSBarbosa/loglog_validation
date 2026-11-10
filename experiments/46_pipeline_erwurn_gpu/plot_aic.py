@@ -1,4 +1,4 @@
-"""The article's Step 5 figure: the ranges eq. (aic) compares, and the one it keeps.
+"""The article's Step 5 figure: the ranges eq. (aic) weighs, and the average over them.
 
 Recomputes the pinned refit of `src/study/report.py` (`pinned_refit`: every range of
 >= REFIT_MIN_POINTS consecutive pilot scales, gamma pinned to the long run's
@@ -7,12 +7,13 @@ study's pilot.json and answer.json, checks that it picks the range and omega1
 stored in answer.json, and draws:
 
 (a) the pilot's correction log Y_bar_i - gamma-hat log i with its error bars, the
-    fit on the chosen range (solid on it, dashed beyond) and the fit on all pilot
-    scales (dotted), with their chi2/dof;
+    fit on the highest-weight range (solid on it, dashed beyond) and the fit on all
+    pilot scales (dotted), with their chi2/dof, and the AIC-weighted omega1 the
+    interval uses (user, 2026-11-09: the average, not the highest-weight range);
 (b) every candidate range as a bar over the scales it keeps, sorted by AIC, shaded
-    by its weight exp(-AIC/2) normalised over the ranges; the chosen range is
-    outlined, and ranges that cannot be chosen (omega1 on a bound, or an open
-    profile interval) are hatched.
+    by its weight exp(-AIC/2) normalised over the ranges, with its AIC, cut count
+    and omega1; the highest-weight range is outlined, and ranges left out of the
+    average (omega1 on a bound, or an open profile interval) are hatched.
 
 Reads a finished study directory only; truths appear nowhere (ground rule 4).
 
@@ -94,7 +95,7 @@ def main() -> None:
 
     on = (grid >= best["i_min"]) & (grid <= best["i_max"])
     a.plot(grid[on], model(best, grid[on]), color=FIT, lw=2,
-           label=(rf"chosen range: $\hat\omega_1 = {best['omega']:.2f}$, "
+           label=(rf"highest weight ({rf['best_weight']:.2f}): $\hat\omega_1 = {best['omega']:.2f}$, "
                   rf"$\chi^2 = {best['chi2']:.1f}/{best['dof']}$"))
     a.plot(grid[~on], model(best, grid[~on]), color=FIT, lw=1.2, ls="--")
     if full:
@@ -102,6 +103,8 @@ def main() -> None:
         a.plot(grid, model(f, grid), color=REF, lw=1.2, ls=":",
                label=(rf"all scales: $\hat\omega_1 = {f['omega']:.2f}$, "
                       rf"$\chi^2 = {f['chi2']:.1f}/{f['dof']}$"))
+    a.text(0.03, 0.97, rf"AIC-weighted $\hat\omega_1 = {rf['omega']:.2f} \pm {rf['total']:.2f}$",
+           transform=a.transAxes, fontsize=8.5, va="top")
     a.set_xscale("log", base=2)
     a.set_xlabel("pilot scale $i$")
     a.set_ylabel(r"$\log\overline{Y}_i - \hat\gamma\log i$")
@@ -127,11 +130,11 @@ def main() -> None:
         if f is best or (f["i_min"], f["i_max"]) == (best["i_min"], best["i_max"]):
             b.add_patch(Rectangle((x0, y - 0.38), x1 - x0, 0.76, facecolor="none",
                                   edgecolor=FIT, lw=2))
-        b.text(lk[-1] + 0.9, y, f"{f['aic']:.1f}   {N - f['points']}", fontsize=6.5,
-               va="center", family="monospace")
-    b.text(lk[-1] + 0.9, len(order) + 0.2, "AIC  cut", fontsize=7, va="bottom",
+        b.text(lk[-1] + 0.9, y, f"{f['aic']:5.1f} {N - f['points']:3d} {f['omega']:5.2f}",
+               fontsize=6.5, va="center", family="monospace")
+    b.text(lk[-1] + 0.9, len(order) + 0.2, "  AIC cut   ω₁", fontsize=7, va="bottom",
            family="monospace")
-    b.set_xlim(lk[0] - 0.6, lk[-1] + 3.6)
+    b.set_xlim(lk[0] - 0.6, lk[-1] + 5.0)
     b.set_ylim(-0.8, len(order) + 1.2)
     b.set_xticks(lk)
     b.set_xticklabels([f"{int(s)}" for s in scales], fontsize=7)
@@ -142,7 +145,7 @@ def main() -> None:
     for s in ("top", "right", "left"):
         b.spines[s].set_visible(False)
     handles = [Rectangle((0, 0), 1, 1, facecolor=DATA, label=r"weight $\propto e^{-\mathrm{AIC}/2}$"),
-               Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=FIT, lw=2, label="chosen"),
+               Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=FIT, lw=2, label="highest weight"),
 ]
     if any(f["interval_open"] or f["omega_on_bound"] for f in fits):
         handles.append(Rectangle((0, 0), 1, 1, facecolor="white", hatch="////", edgecolor=REF,
@@ -153,9 +156,10 @@ def main() -> None:
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(out / f"pipeline_aic.{ext}", dpi=200)
-    print(f"wrote {out}/pipeline_aic.pdf/.png  ({len(fits)} ranges; chosen "
-          f"{best['i_min']}..{best['i_max']}, omega1 {rf['omega']:.4f}, "
-          f"weight {best['weight']:.3f})")
+    print(f"wrote {out}/pipeline_aic.pdf/.png  ({len(fits)} ranges; highest weight "
+          f"{best['i_min']}..{best['i_max']} ({rf['best_weight']:.3f} of the kept weight, "
+          f"omega1 {best['omega']:.4f}); AIC-weighted omega1 {rf['omega']:.4f} "
+          f"+- {rf['total']:.4f}")
 
 
 if __name__ == "__main__":

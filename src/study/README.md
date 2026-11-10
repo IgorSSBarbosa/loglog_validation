@@ -435,19 +435,38 @@ the kept points alone (their eq. 17, used by BMW, Nature 593, 51 (2021)), which
 What the derivation assumes, and how it holds here:
 - *Cut and kept data uncorrelated* (their eq. 15). This holds exactly: every scale
   draws independent randomness (ground rule 2).
-- *Gaussian data, large $N$.* $\log\overline Y_i$ is Gaussian only via the CLT and
-  the delta method, and the $2k$ penalty is an asymptotic correction. On 5–10 pilot
-  points the criterion is a heuristic, which is why the coverage numbers above are
-  what justify it.
+- *Gaussian data, large sample.* $\log\overline Y_i$ is Gaussian via the CLT and the
+  delta method, and the $2k$ penalty is an asymptotic correction. The sample size of
+  those asymptotics is the pilot's $n$ per scale (hundreds of thousands), not the
+  5–10 scales of a range.
 - *The pin is a Gaussian prior on $\gamma$.* $k$ stays 4 on every range, so the pin
-  moves no weight. Strictly this is the prior-augmented setting of Neil & Sitison,
-  arXiv:2208.14983 (BAIC).
+  moves no weight. The score uses the augmented $\chi^2$ (data plus pin), the form
+  Neil & Sitison (arXiv:2208.14983) call ABIC$_{\rm CV}$; they prefer the BAIC, which
+  scores by the data $\chi^2$ alone. Not switched yet (open item in the article).
 
-One departure: the papers *average* over ranges ($\langle\omega\rangle = \sum w_r
-\omega_r$, variance $\sum w_r\sigma_r^2 + \sum w_r\omega_r^2 - \langle\omega\rangle^2$).
-We take the highest-weight closed range and add the weighted spread over ranges in
-quadrature with its profile error. The averaged value is in `omega_ranges`'
-`weighted_mean`, unused.
+**Averaging over ranges (user, 2026-11-09).** Like the papers, $\hat\omega_1$ is the
+AIC-weighted average over the kept ranges, $\sum_r P_r\hat\omega_{1,r}$ (Jay & Neil
+eq. 15), with error from their eq. (18): $\sum_r P_r\sigma_r^2$ ($\sigma_r$ the range's
+profile half-width) plus the weighted spread. Until 2026-11-07 we took the single
+highest-weight range instead; but that range never carried more than half the weight
+(median 0.31 over 102 studies), so selection was not the dominant-weight limit in which
+the two agree. On planted data the average has half the rms error (0.026 against 0.057),
+and its eq. (18) error over-covers (98–100% at nominal 68%). It enters only the reported
+B_fs span, not the interval.
+
+$a_1$ is not averaged. $a_1$ and $\omega_1$ trade off, so averaging both pairs values
+from different fits: on `pipeline_p0.6_1h` one range of weight 0.02 ($256..4096$,
+$\omega_1 = 1.6$, $a_1 = -43$) moved the average $a_1$ from $-0.3$ to $-1.16$ and B_fs
+3.7$\times$. Instead $a_1$ is refitted on the highest-weight range with $\omega_1$ fixed
+at the average, so eq. (720) gets one coherent $(a_1, \omega_1)$ (user, 2026-11-09). We
+also tried averaging B_fs itself over the ranges (Jay & Neil eq. 10 with $f = B_{\rm fs}$):
+it covered 39/39 but widened RWRE intervals up to 27$\times$, driven by low-weight
+ranges with small $\omega_1$. Rerun 2026-11-10 on 119 studies: eq. (720) covers the
+exact $\gamma$ in 38/39 srw/ERW studies (37/39 with the highest-weight range; the miss
+is ERW $p = 0.7$ in both), half-widths moved by a median factor 1.00
+($0.23$–$2.9\times$, the extremes RWRE studies where the best range fits the averaged
+$\omega_1$ poorly, $\chi^2$ up to 79 against 0.5 at its own optimum). Per-study tables:
+each experiment README's 2026-11-10 section.
 
 ### The bound inherits $\omega_1$'s error bar exponentially
 

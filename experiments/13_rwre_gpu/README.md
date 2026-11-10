@@ -263,3 +263,25 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `sweep_p0_neymanPilot` | 0.525883 | 0.308 ± 0.034 | 10.9/6 | 0.0463 | 0.323 ± 0.11 | 4..128 | 1.85/3 | 0.04 |
 
 No bound now (`sweep_data/longsieve/sweep_p0.3333_RWRE_longsieve`, `sweep_data/longsieve/sweep_p0.3_RWRE_longsieve`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.1_neymanPilot` | 0.531750 | 0.237 | 0.103 | 0.244 ± 0.0343 | 8..1024 (0.27) | -0.534 | 0.0931 | 0.0954 |
+| `sweep_p0.2_neymanPilot` | 0.540024 | 0.119 | 0.575 | 0.133 ± 0.0717 | 4..512 (0.21) | -0.557 | 0.431 | 0.433 |
+| `sweep_p0.3333_neymanPilot` | 0.559580 | 0.954 | 0.00229 | 0.954 ± 1.34 | 8..128 (1.00) | 0.0837 | 1.28e-05 | 0.00229 |
+| `sweep_p0.3_neymanPilot` | 0.553609 | 0.487 | 0.00341 | 0.487 ± 0.297 | 4..64 (1.00) | -0.091 | 0.00113 | 0.00341 |
+| `sweep_p0.45_neymanPilot` | 0.515876 | 2.61 | 5.93e-05 | 2.8 ± 2.86 | 4..64 (0.52) | -1.16 | 1.68e-05 | 5e-05 |
+| `sweep_p0.4_neymanPilot` | 0.573891 | 0.134 | 0.383 | 0.192 ± 0.172 | 8..512 (0.34) | 0.433 | 0.145 | 0.147 |
+| `sweep_p0.5_neymanPilot` | 0.500182 | 0.709 | 0.00163 | 0.728 ± 0.205 | 8..1024 (0.32) | -0.142 | 0.0013 | 0.0015 |
+| `sweep_p0_neymanPilot` | 0.525883 | 0.323 | 0.04 | 0.385 ± 0.132 | 4..128 (0.25) | -0.534 | 0.0191 | 0.0214 |

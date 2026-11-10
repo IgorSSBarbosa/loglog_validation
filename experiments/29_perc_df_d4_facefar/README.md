@@ -94,3 +94,18 @@ Same box cap, rungs round(4 sqrt(2)^k), 11 points, so AIC has ranges to choose a
 ```
 
 Result (2026-11-07, 5 x 1281 s on xingu): **the odd rungs are off the curve.** Local slopes 3.40, 3.26, 3.66, 2.74, 3.32, 2.86, 3.20, 2.95, 3.12, 2.98: every odd i (11, 23, 45, 91) sits above the trend by tens of se, and AIC rejects every range (chi2 > 1000). Not the GPU: the CPU `percolation_zd` agrees at i = 8, 11, 16, 23 (|z| <= 1.1). Cause: `face_far` counts x_0 >= i//2 (models/percolation_zd.py:676), exactly the far half for even i, one layer more and half a layer nearer the anchor for odd i -- an O(1/i) parity offset of the observable's definition, the kind of artifact the torus's ceil(L) is suspected of in 38. The earlier ladders were all powers of 2, so never saw it. Even rungs only (4, 6, 8, 16, 32, 64, 128): AIC picks 6..128, omega = 1.29 +- 0.04, d_f = 3.0522 +- 0.0024 +- 0.0011 (chi2 4.4/2); pooled with 29 + 08, omega = 1.25 +- 0.03, d_f = 3.0492 +- 0.0021 (chi2 6.1/2), 2.1 sigma above 3.0446(7).
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 3.093896 | 1.87 | 0.0321 | 1.87 ± 0.0595 | 4..64 (1.00) ⚠ | -3.17 | 0.026 | 0.0321 |

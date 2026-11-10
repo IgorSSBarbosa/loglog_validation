@@ -315,3 +315,41 @@ regenerated with `plot_sweep.py --tag 2h --article`. For $0.1 \le p \le 0.35$ th
 $\hat\omega_1 = 1.00$–$1.05$, the conjectured 1, where the all-scales refit gave up to 1.23. The one
 miss, $p = 0.775$, and $p = 3/4$ both chose the short range $8..128$ and no longer warn: there the
 length of the range, not the $\chi^2$, is what says one correction does not describe the pilot.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.05_2h` | 0.500028 | 1.09 | 3.61e-05 ✓ | 1.06 ± 0.124 | 8..2048 (0.21) | -1.12 | 3.09e-05 | 4.25e-05 ✓ |
+| `sweep_p0.05_smoke` | 0.500069 | 1.07 | 9.76e-05 ✓ | 1.11 ± 0.16 | 16..4096 (0.20) | -1.24 | 4.73e-05 | 8.58e-05 ✓ |
+| `sweep_p0.15_2h` | 0.500020 | 1.01 | 5.07e-05 ✓ | 1.01 ± 0.102 | 16..4096 (0.18) | -0.834 | 3.8e-05 | 4.96e-05 ✓ |
+| `sweep_p0.1_2h` | 0.500027 | 1 | 5.48e-05 ✓ | 1.01 ± 0.214 | 16..4096 (0.31) | -0.899 | 3.96e-05 | 5.13e-05 ✓ |
+| `sweep_p0.25_2h` | 0.500003 | 1.02 | 3.04e-05 ✓ | 1.03 ± 0.13 | 8..4096 (0.34) | -0.722 | 1.38e-05 | 2.98e-05 ✓ |
+| `sweep_p0.2_2h` | 0.500018 | 1.05 | 4.38e-05 ✓ | 1.07 ± 0.114 | 8..4096 (0.20) | -0.887 | 2.25e-05 | 3.98e-05 ✓ |
+| `sweep_p0.35_2h` | 0.500006 | 1.03 | 2.6e-05 ✓ | 1.01 ± 0.101 | 8..4096 (0.20) | -0.489 | 1.1e-05 | 2.74e-05 ✓ |
+| `sweep_p0.3_2h` | 0.499989 | 1 | 4.19e-05 ✓ | 1.01 ± 0.0883 | 8..4096 (0.23) | -0.587 | 1.38e-05 | 4.12e-05 ✓ |
+| `sweep_p0.45_2h` | 0.500002 | 1.54 | 2.26e-05 ✓ | 1.16 ± 0.336 | 32..2048 (0.17) | -0.518 | 1.13e-06 | 2.37e-05 ✓ |
+| `sweep_p0.4_2h` | 0.500012 | 0.992 | 4e-05 ✓ | 0.995 ± 0.191 | 4..1024 (0.16) | -0.364 | 1.92e-05 | 3.94e-05 ✓ |
+| `sweep_p0.55_2h` | 0.499998 | 0.89 | 3.4e-05 ✓ | 0.91 ± 0.13 | 4..4096 (0.20) | -0.256 | 8.75e-06 | 3.21e-05 ✓ |
+| `sweep_p0.5_2h` | 0.500007 | 0.954 | 3.35e-05 ✓ | 0.978 ± 0.111 | 4..4096 (0.27) | -0.235 | 7.47e-06 | 3.18e-05 ✓ |
+| `sweep_p0.65_2h` | 0.500390 | 0.437 | 0.000993 ✓ | 0.426 ± 0.0501 | 16..2048 (0.16) | -0.353 | 0.00104 | 0.00113 ✓ |
+| `sweep_p0.6_2h` | 0.500052 | 0.701 | 0.000127 ✓ | 0.67 ± 0.0889 | 4..2048 (0.21) | -0.288 | 9.48e-05 | 0.000154 ✓ |
+| `sweep_p0.725_2h` | 0.510474 | 0.249 | 0.0205 ✓ | 0.251 ± 0.0128 | 32..4096 (0.26) | -0.69 | 0.0194 | 0.0198 ✓ |
+| `sweep_p0.75_2h` | 0.527070 | 0.296 | 0.00822 | 0.26 ± 0.0355 | 8..128 (0.36) | -0.783 | 0.0155 | 0.0161 |
+| `sweep_p0.775_2h` | 0.560184 | 0.315 | 0.00657 ✗ | 0.283 ± 0.0415 | 8..128 (0.38) | -0.722 | 0.0111 | 0.0115 ✓ |
+| `sweep_p0.7_2h` | 0.503048 | 0.295 | 0.00747 ✓ | 0.304 ± 0.0165 | 32..4096 (0.14) | -0.583 | 0.00613 | 0.00649 ✓ |
+| `sweep_p0.85_2h` | 0.700201 | 0.426 | 0.000761 ✓ | 0.453 ± 0.0307 | 16..512 (0.18) | -0.388 | 0.000403 | 0.000557 ✓ |
+| `sweep_p0.8_2h` | 0.602985 | 0.286 | 0.00881 ✓ | 0.294 ± 0.0232 | 32..4096 (0.15) | -0.58 | 0.00736 | 0.00778 ✓ |
+| `sweep_p0.95_2h` | 0.900004 | 0.809 | 2.27e-05 ✓ | 0.892 ± 0.202 | 4..2048 (0.13) | -0.141 | 3.2e-06 | 1.82e-05 ✓ |
+| `sweep_p0.9_2h` | 0.800050 | 0.634 | 0.000135 ✓ | 0.632 ± 0.0258 | 4..4096 (0.27) | -0.25 | 8.46e-05 | 0.000138 ✓ |
+
+Coverage of the exact $\gamma$: old 20/21, new 21/21.

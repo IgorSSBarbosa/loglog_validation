@@ -249,12 +249,15 @@ Verified: `tools/tests/test_allocation_table.py` (20 cases).
 `omega_aic.py` — the AIC fit (user, 2026-11-05), for any study with `local_slope.json`:
 $a + bk + c\rho^{-\omega k}$ by weighted LS (CLT se per point) on every run of $\ge 6$
 consecutive log-log points, each range scored by AIC with data cuts (Jay & Neil 2021,
-$\chi^2 + 2\cdot4 + 2N_\text{cut}$). Reports the best closed range's $\hat\omega$ and
-$\hat\gamma = b/\log\rho$, each $\pm$ stat $\pm$ range systematic; with no closed fit it
-reports none. `omega_aic.json` + `omega_aic_fit.png`. `src/study/local_slope.py` runs it
+$\chi^2 + 2\cdot4 + 2N_\text{cut}$). Reports $\hat\omega$ and $\hat\gamma = b/\log\rho$
+averaged over the closed ranges with weights $\propto e^{-\mathrm{AIC}/2}$ (Jay & Neil
+eq. 15; user, 2026-11-09), each $\pm$ stat $\pm$ range systematic (their eq. 18); with no
+closed fit it reports none. The figure draws the highest-weight range. `omega_aic.json` + `omega_aic_fit.png`. `src/study/local_slope.py` runs it
 on every completed run; `--all` runs it on every study under a data root.
-On planted data (`tools/tests/test_local_slope.py`) stat alone under-covers (ω 52%,
-γ 42% at nominal 68%) and stat ⊕ systematic over-covers (93%, 90%).
+On the planted data of `tools/tests/test_local_slope.py` (400 draws, 2026-11-09) the
+averaged $\hat\omega$ has rms error 0.026, against 0.057 for the highest-weight range
+alone, and stat ⊕ systematic over-covers at nominal 68% (ω 100%, γ 100%; with a
+planted $\omega_2$, ω 100%, γ 98%). The best range's profile error alone covered its own ω̂ 52%.
 
 ```bash
 python3 src/estimate/omega_aic.py --data-root $D --study mystudy [other ...]

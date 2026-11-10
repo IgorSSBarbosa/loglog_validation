@@ -7,9 +7,11 @@ least squares on every run of >= 6 consecutive points: the triple (i_min, i_max,
 omega). The left cut drops scales where omega_2, ... still act, the right cut scales
 the model does not describe. Each range is scored by AIC with data cuts (Jay & Neil,
 Phys. Rev. D 103, 114502 (2021)), AIC = chi2 + 2*4 + 2*N_cut, weight ~ exp(-AIC/2), so
-dropping a point must buy a chi2 drop > 2. Reported: the best closed range's omega and
-gamma = b / log rho, each +- stat (profile interval / linearized covariance) +- range
-systematic (AIC-weighted sd over closed ranges). See `tools/local_slope.omega_ranges`.
+dropping a point must buy a chi2 drop > 2. Reported: omega and gamma = b / log rho
+averaged over the closed ranges with those weights (Jay & Neil eq. 15; user,
+2026-11-09), each +- stat (weighted rms of the ranges' profile intervals / linearized
+se) +- range systematic (weighted sd over closed ranges), their eq. 18. The figure
+draws the highest-weight range. See `tools/local_slope.omega_ranges`.
 
 Points are weighted by the CLT se, sqrt(sum_r cv_r^2 / n_r) / R, from each cell's own cv
 and n (user, 2026-11-05): the sd of R = 3 replicate means rests on 2 dof.
@@ -131,8 +133,9 @@ def plot_aic_fit(res: dict, out: Path) -> None:
     a2.set(xlabel=f"k = log_{rho:g} i", ylabel=f"{'' if sgn > 0 else '−'}(mean log Ȳ − line), log scale",
            title=f"(c) the same, log scale: slope −ω̂·log ρ  (▽: ≤ 0, no log)")
     a0.legend(fontsize=8, loc="upper left")
-    fig.suptitle(f"{res['study']}: AIC fit on i = {b['i_min']}..{b['i_max']} ({b['points']} points)"
-                 f"  —  ω̂ = {rf['omega']:.3f} ± {rf['stat']:.3f} (stat) ± {rf['systematic']:.3f}"
+    fig.suptitle(f"{res['study']}: highest-weight range i = {b['i_min']}..{b['i_max']} "
+                 f"({b['points']} points, weight {rf['best_weight']:.2f})"
+                 f"  —  AIC-weighted ω̂ = {rf['omega']:.3f} ± {rf['stat']:.3f} (stat) ± {rf['systematic']:.3f}"
                  f" (range),  γ̂ = b / log ρ = {rf['gamma']:.6f} ± {rf['gamma_stat']:.6f} ± "
                  f"{rf['gamma_systematic']:.6f},  χ² = {b['chi2']:.1f} / {b['dof']}",
                  fontsize=10)
@@ -163,13 +166,14 @@ def omega_aic(sd: Path, min_points: int = 6) -> Path | None:
         print(f"{f['i_min']:>8} {f['i_max']:>8} {f['points']:>4} {f['omega']:7.3f} "
               f"[{f['omega_lo']:6.3f}, {f['omega_hi']:6.3f}]{bad}"
               f" {f['chi2']:5.1f}/{f['dof']:<3} {f['gamma']:9.5f} {f['weight']:7.3f}")
-    print("(* = interval open or omega on a bound: not eligible as best, left out of the "
-          f"systematic; weight {rf['weight_left_out']:.3f})")
+    print("(* = interval open or omega on a bound: left out of the average; weight "
+          f"{rf['weight_left_out']:.3f})")
     if rf["best"] is None:
         print(f"no estimate: {rf['reason']}")
     else:
         print(f"omega = {rf['omega']:.3f} +- {rf['stat']:.3f} (stat) +- {rf['systematic']:.3f}"
-              f" (range)  [AIC-weighted mean {rf['weighted_mean']:.3f}]")
+              f" (range), AIC-weighted over the kept ranges; the highest-weight range "
+              f"{rf['best']['i_min']}..{rf['best']['i_max']} carries {rf['best_weight']:.2f}")
         print(f"gamma = {rf['gamma']:.6f} +- {rf['gamma_stat']:.6f} (stat) +- "
               f"{rf['gamma_systematic']:.6f} (range)")
         plot_aic_fit(res, artifact_path(sd, "omega_aic_fit_figure"))

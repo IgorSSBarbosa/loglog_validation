@@ -934,3 +934,20 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `omega_windows_30m` | 0.500099 | 1 ± 0.012 | 3.01/3 | 0.000441 ✓ | 1 ± 0.018 | 8..256 | 3.01/3 | 0.000441 ✓ |
 
 Coverage of the exact $\gamma$: old 1/1, new 1/1.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `omega_windows_30m` | 0.500099 | 1 | 0.000441 ✓ | 1.01 ± 0.0225 | 8..256 (0.42) | -0.252 | 0.000188 | 0.000429 ✓ |
+
+Coverage of the exact $\gamma$: old 1/1, new 1/1.

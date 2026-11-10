@@ -184,3 +184,29 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `fixed_p0.4_3h` | 0.542650 | 0.313 ± 0.0035 | 2.23e+04/16 ⚠ | 0.0101 | 0.262 ± 0.076 | 16384..262144 | 3.18/2 | 0.086 |
 | `fixed_p0.5_3h` | 0.500002 | 0.995 ± 0.018 | 20.7/16 | 0.00147 | 0.781 ± 0.21 | 16..131072 | 6.9/11 | 0.00148 |
 | `fixed_p0_3h` | 0.511764 | 0.228 ± 0.0019 | 698/14 ⚠ | 0.0615 | 0.263 ± 0.039 | 512..32768 | 0.507/4 | 0.0396 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `fixed_p0.05_3h` | 0.512466 | 0.192 | 0.114 | 0.227 ± 0.0462 | 16..2048 (0.12) | -0.644 | 0.0538 | 0.0569 |
+| `fixed_p0.15_3h` | 0.516438 | 0.142 | 0.319 | 0.22 ± 0.0854 | 64..1024 (0.12) | -0.753 | 0.0707 | 0.074 |
+| `fixed_p0.1_3h` | 0.513663 | 0.212 | 0.0895 | 0.255 ± 0.0622 | 128..4096 (0.09) | -0.832 | 0.0442 | 0.0474 |
+| `fixed_p0.25_3h` | 0.522603 | 0.223 | 0.0985 | 0.18 ± 0.079 | 1024..16384 (0.48) | -0.978 | 0.183 | 0.186 |
+| `fixed_p0.2_3h` | 0.517929 | 0.342 | 0.0294 | 0.223 ± 0.0973 | 8192..131072 (0.09) | -0.921 | 0.0821 | 0.0853 |
+| `fixed_p0.35_3h` | 0.531069 | 0.257 | 0.0859 | 0.304 ± 0.127 | 4096..131072 (0.38) | -2.1 | 0.0511 | 0.0543 |
+| `fixed_p0.3_3h` | 0.525873 | 0.304 | 0.0482 | 0.301 ± 0.082 | 4096..65536 (0.32) | -1.81 | 0.0462 | 0.0493 |
+| `fixed_p0.3_smoke` | 0.525522 | 0.3 | 0.0717 | 0.297 ± 0.0801 | 4096..65536 (0.31) | -1.79 | 0.0601 | 0.0739 |
+| `fixed_p0.45_3h` | 0.565990 | 0.255 | 0.0485 | 0.184 ± 0.0841 | 256..4096 (0.51) | 0.767 | 0.132 | 0.135 |
+| `fixed_p0.4_3h` | 0.542650 | 0.262 | 0.086 | 0.191 ± 0.0756 | 16384..262144 (0.40) | -1.14 | 0.175 | 0.178 |
+| `fixed_p0.5_3h` | 0.500002 | 0.781 | 0.00148 | 0.87 ± 0.427 | 16..131072 (0.15) | -0.177 | 1.57e-06 | 0.00147 |
+| `fixed_p0_3h` | 0.511764 | 0.263 | 0.0396 | 0.257 ± 0.0397 | 512..32768 (0.19) | -0.775 | 0.0393 | 0.0426 |

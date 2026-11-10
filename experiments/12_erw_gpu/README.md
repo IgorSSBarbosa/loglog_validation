@@ -127,3 +127,33 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `sweep_p0.9_ERW_GPU` | 0.800261 | 0.65 ± 0.012 | 3.31/8 | 0.000497 ✓ | 0.65 ± 0.025 | 4..4096 | 3.31/8 | 0.000497 ✓ |
 
 Coverage of the exact $\gamma$: old 11/11, new 10/11.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.75_20m` | 0.534430 | 0.25 | 0.047 | 0.253 ± 0.0223 | 32..4096 (0.34) | -0.661 | 0.0432 | 0.0454 |
+| `sweep_p0.2_ERWGPU` | 0.500123 | 1.21 | 0.000171 ✓ | 1.14 ± 0.258 | 16..4096 (0.23) | -1.08 | 7.1e-05 | 0.000196 ✓ |
+| `sweep_p0.2_ERW_GPU` | 0.500089 | 1.06 | 0.000232 ✓ | 1.05 ± 0.216 | 8..4096 (0.32) | -0.858 | 0.00011 | 0.000235 ✓ |
+| `sweep_p0.3_ERW_GPU` | 0.500074 | 1.06 | 0.000206 ✓ | 1.05 ± 0.147 | 4..4096 (0.28) | -0.649 | 8.67e-05 | 0.000211 ✓ |
+| `sweep_p0.4_ERW_GPU` | 0.500028 | 0.779 | 0.00044 ✓ | 0.765 ± 0.21 | 8..4096 (0.22) | -0.236 | 0.000346 | 0.000471 ✓ |
+| `sweep_p0.5_ERW_GPU` | 0.500093 | 1.07 | 0.000155 ✓ | 1.07 ± 0.225 | 4..4096 (0.34) | -0.276 | 6.6e-05 | 0.000154 ✓ |
+| `sweep_p0.6_ERW_GPU` | 0.500192 | 0.725 | 0.000482 ✓ | 0.697 ± 0.0961 | 4..2048 (0.17) | -0.296 | 0.000298 | 0.000547 ✓ |
+| `sweep_p0.725_ERW_GPU` | 0.514138 | 0.243 | 0.041 ✓ | 0.266 ± 0.0306 | 64..4096 (0.18) | -0.64 | 0.0285 | 0.0299 ✓ |
+| `sweep_p0.75_ERWGPU` | 0.531716 | 0.296 | 0.0202 | 0.273 ± 0.0467 | 128..4096 (0.16) | -0.755 | 0.0249 | 0.0269 |
+| `sweep_p0.75_ERW_GPU` | 0.533544 | 0.23 | 0.0576 | 0.274 ± 0.0518 | 16..256 (0.41) | -0.704 | 0.0276 | 0.029 |
+| `sweep_p0.775_ERW_GPU` | 0.564643 | 0.271 | 0.0285 ✓ | 0.288 ± 0.0678 | 16..256 (0.31) | -0.662 | 0.0207 | 0.0221 ✓ |
+| `sweep_p0.7_ERW_GPU` | 0.506394 | 0.43 | 0.00396 ✗ | 0.413 ± 0.0707 | 4..128 (0.31) | -0.586 | 0.00373 | 0.00473 ✗ |
+| `sweep_p0.8_ERW_GPU` | 0.605853 | 0.367 | 0.00869 ✓ | 0.342 ± 0.0474 | 64..2048 (0.18) | -0.6 | 0.0103 | 0.0113 ✓ |
+| `sweep_p0.9_ERW_GPU` | 0.800261 | 0.65 | 0.000497 ✓ | 0.657 ± 0.0502 | 4..4096 (0.31) | -0.252 | 0.000242 | 0.000481 ✓ |
+
+Coverage of the exact $\gamma$: old 10/11, new 10/11.

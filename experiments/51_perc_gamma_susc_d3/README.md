@@ -98,3 +98,19 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 |---|---|---|---|---|---|---|---|---|
 | `gsusc_d3_explore` | 1.786715 | 0.782 ± 0.11 | 2.05/3 | 0.0255 | 0.782 ± 0.14 | 4..128 | 2.05/3 | 0.0255 |
 | `gsusc_d3_x4_4h` | 1.787570 | 1.09 ± 0.16 | 1.27/3 | 0.0201 | 1.09 ± 0.16 | 4..128 | 1.27/3 | 0.0201 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `gsusc_d3_explore` | 1.786715 | 0.782 | 0.0255 | 0.812 ± 0.181 | 4..128 (0.39) | 0.225 | 0.00368 | 0.0249 |
+| `gsusc_d3_x4_4h` | 1.787570 | 1.09 | 0.0201 | 1.08 ± 0.212 | 4..128 (0.54) | 0.352 | 0.00693 | 0.0203 |

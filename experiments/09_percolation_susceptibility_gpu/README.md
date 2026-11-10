@@ -486,3 +486,19 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `autopilot_gsusc_d4_210m` | 1.429691 | 0.001 ± 1.7 | 3.7/3 ⚠ | 692 | none | — | — | no bound |
 
 No bound now (`autopilot_gsusc_L_d4`, `autopilot_gsusc_d4_210m`): every range's omega interval is open or omega sits on a bound; the old refit had flagged each (⚠).
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `autopilot_gsusc_L_d4` | 2.100666 | — | — | none: every range's omega interval is open or omega sits on a bound | — | — | — | — |
+| `autopilot_gsusc_d4_210m` | 1.429691 | — | — | none: every range's omega interval is open or omega sits on a bound | — | — | — | — |

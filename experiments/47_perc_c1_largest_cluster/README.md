@@ -121,3 +121,21 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `pipe_c1_d3_9h` | 2.523407 | 2.2 ± 0.067 | 1.13/5 | 0.00124 | 2.2 ± 0.096 | 4..512 | 1.13/5 | 0.00124 |
 | `pipe_c1_d4_9h` | 3.067902 | 3.89 ± 0.06 | 1.03e+03/8 ⚠ | 0.0147 | 3.54 ± 0.053 | 4..16 | 71/2 ⚠ | 0.0152 |
 | `pipe_c1_d5_9h` | 3.587979 | 4.3 ± 0.14 | 304/6 ⚠ | 0.0291 | 4.18 ± 0.13 | 4..16 | 60.1/2 ⚠ | 0.0288 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `a3_c1_d2_1h` | 1.895895 | 1.67 | 0.000185 | 1.67 ± 0.336 | 8..1024 (0.40) | -0.2 | 5.77e-05 | 0.000185 |
+| `pipe_c1_d3_9h` | 2.523407 | 2.2 | 0.00124 | 2.24 ± 0.33 | 4..512 (0.42) | -1.12 | 0.000584 | 0.0012 |
+| `pipe_c1_d4_9h` | 3.067902 | 3.54 | 0.0152 | 3.54 ± 0.053 | 4..16 (1.00) ⚠ | -8.51 | 0.0141 | 0.0152 |
+| `pipe_c1_d5_9h` | 3.587979 | 4.18 | 0.0288 | 4.18 ± 0.13 | 4..16 (1.00) ⚠ | -27.3 | 0.0255 | 0.0288 |

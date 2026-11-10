@@ -52,16 +52,23 @@ the warning is the answer.
 
 Which pilot scales (user, 2026-11-07). The pinned refit is no longer one fit on
 every pilot scale: it is `local_slope.omega_ranges` with gamma pinned, i.e. eq.
-(232) at J = 1 on every run of >= 5 consecutive pilot scales, the range chosen
-by AIC with data cuts (Jay & Neil 2021). The smallest scales are where omega_2,
+(232) at J = 1 on every run of >= 5 consecutive pilot scales, the ranges
+weighted by AIC with data cuts (Jay & Neil 2021). The smallest scales are where omega_2,
 ... still act, and a single all-scales fit absorbs them into omega1. Only omega1
 and a1 come from it; gamma stays the log-log estimator's own, so the theory
-behind gamma-hat is untouched. omega1_se is the profile error in quadrature
-with the spread over ranges: on planted data the profile error alone covered
-omega 52% of the time (nominal 68%), the sum 93%. Measured on the 39 finished
-ERW/srw studies with exact gamma: eq. (720) covered 37/39, against 34/39 with
-the all-scales pinned fit; the two misses (ERW p = 0.7, urn p = 0.775) picked
-ranges ending at 128. The all-scales fit stays in answer.json as
+behind gamma-hat is untouched. omega1 is the AIC-weighted average over
+the kept ranges (Jay & Neil eq. (15); user, 2026-11-09), not the single best
+range: the highest-weight range carried a median 0.31 of the kept weight over
+102 studies, so selection was not the dominant-weight limit.
+omega1_se is their eq. (18): the weighted mean of the ranges' profile variances
+plus the weighted spread over ranges. On planted data it over-covers (98-100% at
+nominal 68%; the averaged omega1 has half the rms error of the best range's).
+a1 is not averaged: a1 and omega1 trade off, so the averaged pair fits nothing
+(one range of weight 0.02 moved a1 from -0.3 to -1.16 on pipeline_p0.6_1h).
+a1 is refitted on the highest-weight range with omega1 fixed at the average,
+so B_fs takes one coherent (a1, omega1), as eq. (720) assumes (user,
+2026-11-09). chi2, dof, p_value, i_min, i_max describe the highest-weight
+range, the one the warning reads. The all-scales fit stays in answer.json as
 `pilot_refit_all_scales`, for comparison only. With no closed range there is no
 omega1 and no bound, and `wilson_why` says so.
 
@@ -72,10 +79,10 @@ Neil & Sitison (PRE 108, 045308 (2023), eq. 26) derive it from the KL divergence
 It equals ours up to a range-independent constant, and they prefer it to the AIC
 on the kept points alone, which cuts too much data. It assumes cut and kept
 points are uncorrelated, which holds exactly here (independent scales, ground
-rule 2), and Gaussian data at large N, which 5-10 pilot points only approximate,
-hence the coverage check above. The pin is a Gaussian prior on gamma and k = 4 on
-every range, so it moves no weight. Unlike the papers, which average over ranges,
-we take the best closed range plus the weighted spread (src/study/README.md).
+rule 2), and Gaussian data at large sample size, where the sample size is the
+pilot's n per scale, not the 5-10 scales of a range. The pin is a Gaussian prior
+on gamma and k = 4 on every range, so it moves no weight. As in the papers, the
+estimate is the average over ranges (src/study/README.md).
 
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
@@ -183,8 +190,13 @@ def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
     """omega1, a1 for B_fs: the pilot's AIC range fit with gamma pinned to gamma-hat.
 
     Keeps the field names of the all-scales fit (omega1, omega1_se, a1, chi2, dof,
-    p_value, omega1_at_bound, warn), read off the chosen range, so every reader of
-    answer.json's pilot_refit still works. omega1_se is stat (+) range systematic.
+    p_value, omega1_at_bound, warn), so every reader of answer.json's pilot_refit
+    still works. omega1 is the AIC-weighted average over the kept ranges and
+    omega1_se its eq. (18) error (Jay & Neil; user, 2026-11-09). a1 and a0 come from
+    refitting the highest-weight range with omega fixed at that average, so
+    (gamma, a0, a1, omega1) is one fit, the curve to draw; `chi2_at_omega1` is its
+    chi2. chi2, dof,
+    p_value, i_min, i_max and the warning are the highest-weight range's own fit.
     Natural log as the base: omega1 and a1 do not depend on it, and pilots need not
     sit on the run's rho^k ladder.
     """
@@ -202,9 +214,9 @@ def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
             "omega1_stat": rf["stat"], "omega1_systematic": rf["systematic"],
             "omega1_lo": b["omega_lo"], "omega1_hi": b["omega_hi"],
             "i_min": b["i_min"], "i_max": b["i_max"], "points": b["points"],
-            # natural-log base, so b = gamma and log a0 = a - gamma log i_min
-            "a0": float(np.exp(b["a"] - b["gamma"] * np.log(b["i_min"]))),
-            "gamma": b["gamma"], "chi2": b["chi2"], "dof": b["dof"],
+            "a0": float(np.exp(rf["log_a0"])), "best_weight": rf["best_weight"],
+            "chi2_at_omega1": rf["chi2_at_omega"],
+            "gamma": rf["gamma_at_omega"], "chi2": b["chi2"], "dof": b["dof"],
             "p_value": b["p_value"], "omega1_at_bound": False,
             "warn": bool(b["p_value"] < REFIT_WARN_P)}
 
@@ -372,9 +384,9 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
             "| term | value | what it is |",
             "|---|---|---|",
             f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot "
-            f"refitted with gamma pinned to gamma-hat on its AIC range "
-            f"{res['pilot_refit']['i_min']}..{res['pilot_refit']['i_max']} (omega1 = "
-            f"{res['pilot_refit']['omega1']:.3g}) |",
+            f"refitted with gamma pinned to gamma-hat, omega1 = "
+            f"{res['pilot_refit']['omega1']:.3g} averaged over its AIC ranges, a1 = "
+            f"{res['pilot_refit']['a1']:+.3g} refitted at it |",
             f"| B_good | {w['B_good']:.3g} | Taylor remainder of the log on the "
             f"good event (lem:Q-prob b) |",
             f"| {w['quantile']:.3g}·sigma_se | {w['se_term']:.3g} | the only "
@@ -464,11 +476,12 @@ def _refit_lines(res: dict) -> list[str]:
                 f"usable range ({r['reason']}), so the eq. (720) bound is not assembled.", ""]
     o0 = (res.get("omega1_pilot_fit") or {}).get("value")
     ra = res.get("pilot_refit_all_scales") or {}
-    out = [f"B_fs comes from the pilot refitted with gamma pinned to gamma-hat, on the "
-           f"range of pilot scales {r['i_min']}..{r['i_max']} chosen by AIC with data cuts "
-           f"out of {r['ranges']}: "
-           f"omega1 = {_fmt(r['omega1'], r['omega1_se'])} (profile ± {r['omega1_stat']:.2g} "
-           f"⊕ range ± {r['omega1_systematic']:.2g}), a1 = {r['a1']:+.4g}, "
+    out = [f"B_fs comes from the pilot refitted with gamma pinned to gamma-hat on "
+           f"{r['ranges']} ranges of pilot scales, weighted by AIC with data cuts: "
+           f"omega1 = {_fmt(r['omega1'], r['omega1_se'])}, their weighted average "
+           f"(profiles ± {r['omega1_stat']:.2g} ⊕ range ± {r['omega1_systematic']:.2g}), "
+           f"and a1 = {r['a1']:+.4g}, refitted at it on the highest-weight range "
+           f"{r['i_min']}..{r['i_max']} (weight {r['best_weight']:.2f}), whose own fit has "
            f"chi2 = {r['chi2']:.3g} on {r['dof']} dof, p = {r['p_value']:.3g}"
            + (f". The all-scales pinned fit had omega1 = {ra['omega1']:.4g}" if ra else "")
            + (f"; the plan's gamma-free pilot fit, {o0:.4g}." if o0 is not None else "."),

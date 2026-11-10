@@ -53,3 +53,25 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `tau_d2_smoke` | -1.053865 | 0.548 ± 0.017 | 51.1/8 ⚠ | 0.0112 | 0.88 ± 0.12 | 32..2048 | 4.55/4 | 0.00581 |
 | `tau_d3_9h` | -1.188980 | 0.596 ± 0.027 | 11.7/7 | 0.0103 | 0.828 ± 0.27 | 32..4096 | 6.04/5 | 0.00725 |
 | `tau_d3_smoke` | -1.178067 | 0.689 ± 0.052 | 17.1/7 | 0.0279 | 1.48 ± 0.51 | 32..4096 | 3.1/5 | 0.0209 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `df_d2_9h_refit` | 1.896069 | 0.72 | 0.00131 | 0.754 ± 0.0895 | 8..128 (0.39) | -0.0773 | 0.000599 | 0.00118 |
+| `df_d2_smoke` | 1.896441 | 0.759 | 0.00227 | 0.917 ± 0.571 | 8..128 (0.20) | -0.0848 | 0.000433 | 0.00174 |
+| `df_d3_9h` | 2.521996 | 2.03 | 0.00346 | 2.11 ± 0.312 | 4..512 (0.45) | -2.06 | 0.000368 | 0.00338 |
+| `df_d3_smoke` | 2.523749 | 3.8 | 0.0102 | 3.63 ± 2.88 | 8..128 (0.60) | -48.6 | 0.000464 | 0.0103 |
+| `tau_d2_9h_rerun` | -1.054830 | 0.729 | 0.00172 | 0.774 ± 0.213 | 16..8192 (0.22) | -0.607 | 0.000283 | 0.0016 |
+| `tau_d2_smoke` | -1.053865 | 0.88 | 0.00581 | 0.889 ± 0.177 | 32..2048 (0.20) | -0.907 | 0.000858 | 0.00577 |
+| `tau_d3_9h` | -1.188980 | 0.828 | 0.00725 | 0.81 ± 0.325 | 32..4096 (0.17) | -1.21 | 0.00121 | 0.00737 |
+| `tau_d3_smoke` | -1.178067 | 1.48 | 0.0209 | 1.32 ± 0.741 | 32..4096 (0.26) | -4.01 | 0.000915 | 0.0213 |

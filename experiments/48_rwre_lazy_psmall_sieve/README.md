@@ -54,3 +54,24 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `sieve_p0.12_3h_cap131072` | 0.513606 | 0.27 ± 0.0013 | 9.61e+03/6 ⚠ | 0.0223 | 0.142 ± 0.0012 | 16..256 | 1.57/2 | 0.325 |
 | `sieve_p0.14_3h_cap131072` | 0.514370 | 0.264 ± 0.0015 | 8.21e+03/6 ⚠ | 0.0223 | 0.124 ± 0.0019 | 16..256 | 3.37/2 | 0.49 |
 | `sieve_p0.1_3h_cap131072` | 0.515666 | 0.272 ± 0.001 | 1.26e+04/6 ⚠ | 0.0264 | 0.162 ± 0.00095 | 16..256 | 12.6/2 ⚠ | 0.222 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sieve_p0.02_3h_cap131072` | 0.515547 | 0.212 | 0.0951 | 0.212 ± 0.0012 | 32..512 (1.00) | -0.649 | 0.0935 | 0.0951 |
+| `sieve_p0.04_3h_cap131072` | 0.517032 | 0.21 | 0.0991 | 0.21 ± 0.000917 | 32..512 (1.00) | -0.655 | 0.0975 | 0.0991 |
+| `sieve_p0.06_3h_cap131072` | 0.514772 | 0.19 | 0.129 | 0.191 ± 0.00195 | 32..512 (0.68) | -0.712 | 0.125 | 0.128 |
+| `sieve_p0.08_3h_cap131072` | 0.516271 | 0.182 | 0.15 | 0.182 ± 0.00125 | 16..256 (1.00) ⚠ | -0.721 | 0.147 | 0.15 |
+| `sieve_p0.12_3h_cap131072` | 0.513606 | 0.142 | 0.325 | 0.142 ± 0.00124 | 16..256 (1.00) | -0.853 | 0.321 | 0.325 |
+| `sieve_p0.14_3h_cap131072` | 0.514370 | 0.124 | 0.49 | 0.124 ± 0.00194 | 16..256 (1.00) | -0.909 | 0.487 | 0.49 |
+| `sieve_p0.1_3h_cap131072` | 0.515666 | 0.162 | 0.222 | 0.162 ± 0.000952 | 16..256 (1.00) ⚠ | -0.77 | 0.22 | 0.222 |

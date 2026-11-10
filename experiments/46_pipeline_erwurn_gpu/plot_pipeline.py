@@ -322,8 +322,9 @@ def fig_checks(d: dict, rho: float):
     pinned, _ = pilot_curve(rf, rho)
     ax.plot(np.concatenate([kin, kout]), pinned(np.concatenate([kin, kout])), ":", color=REF,
             label=r"pilot refit, $\gamma=\hat\gamma$")
-    ax.text(0.97, 0.04, rf"refit on $[{rf['i_min']}, {rf['i_max']}]$ (AIC): "
-            rf"$\chi^2/\mathrm{{dof}}={rf['chi2']:.1f}/{rf['dof']}$" "\n"
+    ax.text(0.97, 0.04, rf"refit: AIC-weighted $\hat\omega_1={rf['omega1']:.2f}$" "\n"
+            rf"highest weight $[{rf['i_min']}, {rf['i_max']}]$" "\n"
+            rf"$\chi^2/\mathrm{{dof}}={rf['chi2']:.1f}/{rf['dof']}$, "
             rf"$p={rf['p_value']:.1g}$" + (", warning" if rf["warn"] else ""),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
     ax.set_ylabel(r"$\log\overline{Y}$")

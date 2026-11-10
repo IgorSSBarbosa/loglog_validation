@@ -141,3 +141,22 @@ Coverage of the exact $\gamma$: old 3/3, new 3/3.
 $0.59 \pm 0.06$ on $16..4096$ (conjecture $|4p-3| = 0.6$), the interval
 $[0.49974, 0.50044]$, and `images/pipeline_checks.png` (and the article's
 `pipeline_checks.pdf`) draw this refit and name its range.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pipeline_p0.6_1h` | 0.500103 | 0.689 | 0.000173 ✓ | 0.697 ± 0.18 | 8..4096 (0.16) | -0.29 | 0.000111 | 0.000164 ✓ |
+| `pipeline_p0.6_1h_missouri` | 0.500093 | 0.59 | 0.000349 ✓ | 0.604 ± 0.0897 | 16..4096 (0.25) | -0.232 | 0.000263 | 0.000313 ✓ |
+| `pipeline_p0.6_1h_v3` | 0.500106 | 0.583 | 0.000352 ✓ | 0.635 ± 0.102 | 32..4096 (0.16) | -0.247 | 0.000194 | 0.000244 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.

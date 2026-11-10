@@ -132,7 +132,7 @@ def report(ladders: dict, delta: float) -> tuple[dict, dict]:
         f = fits[name] = line_fit(c)
         o = omega_ranges(c["x"], c["L"], c["se"], 2.0)
         aic = ("none (open or on a bound)" if o["best"] is None else
-               f"omega {o['omega']:.2f} [{o['best']['omega_lo']:.2f}, {o['best']['omega_hi']:.2f}]")
+               f"omega {o['omega']:.2f} +- {o['total']:.2f} (AIC-weighted)")
         print(f"{name:11} {c['eps0']:7.4f} {c['k']:4.2f} {c['eps'].min():9.2e}-{c['eps'].max():8.2e} "
               f"{f['gamma']:8.4f} {f['se']:7.4f} {f['chi2']:5.1f}/{f['dof']} {f['p']:5.2f}  {aic}")
     g = np.array([f["gamma"] for f in fits.values()])

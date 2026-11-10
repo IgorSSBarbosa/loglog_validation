@@ -170,3 +170,25 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | `ERW_p0.9` | 0.800466 | 0.662 ± 0.032 | 14/8 | 0.00253 ✓ | 1.16 ± 0.5 | 64..4096 | 2.46/4 | 0.00138 ✓ |
 
 Coverage of the exact $\gamma$: old 3/3, new 3/3.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.799 | 0.00223 ✓ | 0.789 ± 0.11 | 4..512 (0.28) | -0.316 | 0.00112 | 0.0023 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.355 | 0.0286 | 0.36 ± 0.0245 | 8..512 (0.24) | -0.618 | 0.0224 | 0.0272 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.387 | 0.0162 | 0.355 ± 0.0367 | 4..128 (0.20) | -0.668 | 0.0202 | 0.0229 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.341 | 0.0318 | 0.358 ± 0.0296 | 16..512 (0.31) | -0.613 | 0.0229 | 0.0275 |
+| `ERW_p0.78` | 0.577894 | 0.328 | 0.0358 ✓ | 0.346 ± 0.0241 | 16..512 (0.25) | -0.604 | 0.0257 | 0.0303 ✓ |
+| `ERW_p0.9` | 0.800466 | 1.16 | 0.00138 ✓ | 0.872 ± 0.446 | 64..4096 (0.29) | -0.728 | 0.000786 | 0.00189 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.
