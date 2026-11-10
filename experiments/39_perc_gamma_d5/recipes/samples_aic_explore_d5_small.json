@@ -1,0 +1,9 @@
+{
+  "_comment": "User, 2026-11-08: x = 4, 8 added to the 10 h run (16..512, recipes/samples_aic_explore_d5_final.json) so the AIC refit has the pilot's 8 rungs. Not part of the pipeline's closed-form window. n = (cv_i / cv_512)^2 * 704,073,267 with the pilot's cv (6.67, 8.34 vs 42.23), so se(log Ybar) matches the top rung. Drawn once per replicate seed.",
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {"axis_factor": 1.0, "axis_spacing": 1, "dim": 5, "eps0": 0.07, "max_sites": 1000000000, "moment": 1, "nu_axis": 0.0},
+  "scales": [4, 8],
+  "n": [17600000, 27500000],
+  "seed": null
+}
