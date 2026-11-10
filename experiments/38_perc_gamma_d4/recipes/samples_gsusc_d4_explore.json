@@ -1,0 +1,35 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 4,
+    "eps0": 0.09,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1,
+    "max_sites": 1000000000
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "n": [
+    310000,
+    430000,
+    660000,
+    1010000,
+    1450000,
+    2720000,
+    4110000,
+    6110000
+  ],
+  "seed": null,
+  "_comment": "User, 2026-11-07: AIC-quality pilot for gamma, d = 4, by exploration (no box). The pooled torus data (38 + 09, 2..256) zig-zag in their local slopes at 5-8 sigma and reject every AIC range (chi2 61/4); the explore sampler has no ceil'd box side. eps0 = 0.09 as 38 (p_c = 0.1969). n = (cv / 0.01)^2 per rung (1% se of log Ybar per replicate), cv from a purus probe the same day: 5.5 at x = 4 to 24.7 at x = 512. Stops at 512: one sample costs 83 us there and 1.2 ms at 1024, a 15x jump in one doubling (the cache wall seen in experiment 53)."
+}

@@ -1,0 +1,36 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 4,
+    "eps0": 0.06364,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1,
+    "max_sites": 1000000000,
+    "ladder_exponent": 1.0
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "n": [
+    620000,
+    860000,
+    1320000,
+    2020000,
+    2900000,
+    5440000,
+    8220000,
+    12220000
+  ],
+  "seed": null,
+  "_comment": "User, 2026-11-07: is experiment 38's flat log-log (eps0 = 0.09, eps = eps0/x) a lucky ladder? Config 'half': eps = eps0 * x**(-1/k), eps0 = 0.0636396, k = 1.0; gamma = k * slope. n = 2 x the aic_explore_d4 pilot's per-replicate n; one replicate, CLT se."
+}
