@@ -7,16 +7,15 @@
 (b) A space-time diagram of a short walk drawn by exactly those rules, with the
     environment revealed lazily as in the article: a site is drawn Bernoulli(1/2)
     only the first time the walker reads it, and the walker reads it only when its
-    uniform u falls between min(p, 1-p) and max(p, 1-p). Occupied, empty and
-    still-unrevealed sites are shaded differently, and the walker's path is drawn on top.
+    uniform u falls between min(p, 1-p) and max(p, 1-p). Each site is a square,
+    shaded occupied, empty or still unrevealed, and the walker's site is outlined.
 
-    One row per SWEEP, not per walker step (user, 2026-11-10): with 4 sweeps a step,
-    rows per step showed revealed states jumping up to 4 sites and seemingly
-    appearing away from the walker. Per sweep, a revealed state moves at most one
-    site between rows, and every reveal is marked where the walker read it. The
-    walker's path is a staircase: read and jump at integer t, then the sweeps.
-    `simulate` asserts both rules (a new revealed cell appears only at a read, at
-    the walker's site; a revealed state moves at most one site per sweep).
+    One row per walker step, as the walker reads it (user, 2026-11-10, after trying
+    one row per sweep with tracks of the revealed states: the squares read better).
+    So a revealed state can move up to 4 sites between rows, one per sweep, and a
+    reveal happens only inside the outlined square. `simulate` asserts both rules
+    on every sweep (a new revealed cell appears only at a read, at the walker's
+    site; a revealed state moves at most one site per sweep).
 
 An illustration, not a measurement: drawn on the CPU on a window wide enough that
 nothing revealed reaches its edge, not by the GPU sampler, and nothing is estimated.
@@ -40,7 +39,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch  # noqa: E402
+from matplotlib.colors import ListedColormap  # noqa: E402
+from matplotlib.patches import Circle, FancyArrowPatch, Rectangle  # noqa: E402
 
 EXP = Path(__file__).resolve().parent
 ROOT = EXP.parents[1]
@@ -49,20 +49,18 @@ WALKER = "#e8622c"
 PARTICLE = "#2a6fdb"
 EMPTY = "#ffffff"
 HIDDEN = "#ececec"
-TRACK_EMPTY = "#555555"
 SWEEPS = 4
 UNREVEALED, HOLE, PART = -1, 0, 1
 
 
 def simulate(p: float, steps: int, rng: np.random.Generator
-             ) -> tuple[np.ndarray, np.ndarray, list[tuple[int, int]], list[np.ndarray]]:
-    """(environment rows, walker positions, reveals, tracks), on a centred window.
+             ) -> tuple[np.ndarray, np.ndarray, list[tuple[int, int]]]:
+    """(environment rows, walker positions, reveals), on a centred window.
 
     rows[SWEEPS * t + s] is the environment after s sweeps of step t (s = 0: what
     the walker reads at time t); the last row is time `steps`. Rows hold -1
     (unrevealed), 0 (empty), 1 (particle). positions[t] = X_t, t = 0..steps.
-    reveals lists (t, X_t) for each read of an unrevealed site; tracks[j] is the
-    site of the j-th revealed state in every row from its reveal on. The window has
+    reveals lists (t, X_t) for each read of an unrevealed site. The window has
     2*W+1 sites with W = 4*steps: the walker moves at most `steps`, and a revealed
     state moves at most one site per sweep, so nothing revealed reaches the edge.
     """
@@ -72,7 +70,7 @@ def simulate(p: float, steps: int, rng: np.random.Generator
     ident = np.full(eta.size, -1, dtype=np.int64)
     x = w
     lo, hi = min(p, 1 - p), max(p, 1 - p)
-    rows, pos, reveals, where = [], [x], [], []
+    rows, pos, reveals = [], [x], []
     for t in range(steps):
         rows.append(eta.copy())
         u = rng.random()
@@ -87,7 +85,6 @@ def simulate(p: float, steps: int, rng: np.random.Generator
                 reveals.append((t, x - w))
                 rows[-1][x] = eta[x]           # revealed at the read, drawn there
             left = u < (p if eta[x] == PART else 1 - p)
-        where.append(_where(ident, len(reveals)) - w)
         x += -1 if left else 1
         for s in range(SWEEPS):
             where_before = _where(ident, len(reveals))
@@ -100,15 +97,11 @@ def simulate(p: float, steps: int, rng: np.random.Generator
                 "a revealed state moved more than one site in a sweep"
             if s < SWEEPS - 1:
                 rows.append(eta.copy())
-                where.append(_where(ident, len(reveals)) - w)
         pos.append(x)
     rows.append(eta.copy())
-    where.append(_where(ident, len(reveals)) - w)
     rows = np.array(rows)
     _check_reveals(rows, reveals, w)
-    tracks = [np.array([wr[j] for wr in where[SWEEPS * t:]])
-              for j, (t, _) in enumerate(reveals)]
-    return rows, np.array(pos) - w, reveals, tracks
+    return rows, np.array(pos) - w, reveals
 
 
 def _where(ident: np.ndarray, count: int) -> np.ndarray:
@@ -200,7 +193,7 @@ def main() -> None:
     if args.check:
         check_law(args.p, args.steps, args.check, args.seed + 1)
 
-    rows, pos, reveals, tracks = simulate(args.p, args.steps, np.random.default_rng(args.seed))
+    rows, pos, reveals = simulate(args.p, args.steps, np.random.default_rng(args.seed))
     w = (rows.shape[1] - 1) // 2
     h = args.half_width
     assert np.all(rows[:, :w - h] == UNREVEALED) and np.all(rows[:, w + h + 1:] == UNREVEALED), \
@@ -210,43 +203,30 @@ def main() -> None:
                                gridspec_kw={"width_ratios": [1.15, 1]})
     schematic(a)
     a.set_title("(a) one time step", fontsize=10, loc="left")
-    # Each revealed state is drawn as its own track, one segment per sweep, from
-    # the walker's read on; every site off the tracks is unrevealed.
-    b.set_facecolor(HIDDEN)
-    for (t0, _), tr in zip(reveals, tracks):
-        y = t0 + np.arange(tr.size + 1) / SWEEPS
-        y[-1] = args.steps                     # the last row is time `steps` itself
-        value = rows[SWEEPS * t0, tr[0] + w]
-        b.plot(np.repeat(tr, 2), np.repeat(y, 2)[1:-1], lw=0.9,
-               color=PARTICLE if value == PART else TRACK_EMPTY)
-    # staircase: read and jump at integer t, then the sweeps with the walker still
-    t = np.arange(args.steps + 1)
-    sx = np.repeat(pos, 2)[1:]
-    sy = np.repeat(t, 2)[:-1]
-    b.plot(sx, sy, color=WALKER, lw=1.4, zorder=2)
-    rt, rx = np.array(reveals).T
-    b.plot(rx, rt, ls="", marker="o", ms=3.2, mfc="white", mec="black", mew=0.7,
-           zorder=3)
-    b.set_xlim(-h - 0.5, h + 0.5)
-    b.set_ylim(0, args.steps)
+    # Row t: the environment the walker reads at time t (its reveal included);
+    # the last row is time `steps`, after the last sweeps.
+    view = rows[::SWEEPS, w - h:w + h + 1]
+    b.imshow(view + 1, cmap=ListedColormap([HIDDEN, EMPTY, PARTICLE]), vmin=0, vmax=2,
+             origin="lower", aspect="equal", interpolation="nearest",
+             extent=(-h - 0.5, h + 0.5, -0.5, args.steps + 0.5))
+    for t, x in enumerate(pos):
+        b.add_patch(Rectangle((x - 0.5, t - 0.5), 1, 1, facecolor="none",
+                              edgecolor=WALKER, lw=0.9))
     b.set_xlabel("site $x$")
     b.set_ylabel("time $t$")
     b.set_title(f"(b) the walk at $p = {args.p:g}$, environment revealed lazily",
                 fontsize=10, loc="left")
-    handles = [plt.Line2D([], [], color=WALKER, lw=1.2, label="walker $X_t$"),
-               plt.Line2D([], [], ls="", marker="o", ms=4, mfc="none", mec="black",
-                          label="site revealed")] + [
-        plt.Line2D([], [], marker="s", ls="", ms=8, markerfacecolor=c,
-                   markeredgecolor="#888888", label=lab)
-        for c, lab in ((HIDDEN, "unrevealed"),)] + [
-        plt.Line2D([], [], color=c, lw=1.2, label=lab)
-        for c, lab in ((PARTICLE, "revealed particle"), (TRACK_EMPTY, "revealed empty"))]
-    b.legend(handles=handles, fontsize=8, loc="upper left", framealpha=0.95)
+    handles = [Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=WALKER, lw=1.2,
+                         label="walker $X_t$")] + [
+        Rectangle((0, 0), 1, 1, facecolor=c, edgecolor="#888888", lw=0.6, label=lab)
+        for c, lab in ((PARTICLE, "particle"), (EMPTY, "empty"), (HIDDEN, "unrevealed"))]
+    b.legend(handles=handles, fontsize=8, loc="center left", bbox_to_anchor=(1.02, 0.5),
+             frameon=False)
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(args.out / f"rwre_dynamics.{ext}", dpi=200)
     print(f"wrote {args.out}/rwre_dynamics.pdf/.png  (seed {args.seed}, p {args.p}, "
-          f"{args.steps} steps, {SWEEPS} rows per step; {len(reveals)} reveals; "
+          f"{args.steps} steps; {len(reveals)} reveals; "
           f"walker ends at {pos[-1]})")
 
 
