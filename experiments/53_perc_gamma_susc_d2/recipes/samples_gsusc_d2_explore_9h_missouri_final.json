@@ -1,0 +1,32 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "gsusc_d2_explore_9h_missouri",
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "n": 11744,
+  "params": {
+    "axis_factor": 1.0,
+    "axis_spacing": 1,
+    "dim": 2,
+    "eps0": 0.5,
+    "max_sites": 1000000000,
+    "moment": 1,
+    "nu_axis": 0.0
+  },
+  "replicates": 5,
+  "scales": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "seed": null
+}

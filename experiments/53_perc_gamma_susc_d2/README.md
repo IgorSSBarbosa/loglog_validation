@@ -1,6 +1,6 @@
 # Experiment 53 — the article's pipeline on percolation: susceptibility exponent $\gamma$, $d=2$
 
-**Status: running (launched 2026-11-05 on purus).**
+**Status: torus study done (2026-11-05), interval misses 43/18; exploration study stopped (2026-11-07) to investigate its cost.**
 
 ## Question (user, 2026-11-05)
 
@@ -12,12 +12,27 @@ Fill the $d=2$ cell of the article's percolation table: experiment 51's pipeline
 | study | model | params | pilot ladder | seed |
 |---|---|---|---|---|
 | `gsusc_d2_x4_4h` | `percolation_susceptibility_gpu` (x-ladder) | dim 2, $\varepsilon_0=0.5$, `box_factor` 4, $\nu_{\rm box}=4/3$, torus, moment 1 | x = 4..128, $n=10^4$ per rung | 2026110553 |
+| `gsusc_d2_explore_9h_missouri` | `percolation_susceptibility_explore` (x-ladder, CPU) | dim 2, $\varepsilon_0=0.5$, one seed on $\mathbb Z^2$, no box, `max_sites` $10^9$ | x = 4..256, $n=2\cdot10^5$ per rung | 2026110753 |
 
 ```bash
 bash experiments/53_perc_gamma_susc_d2/run_study.sh gsusc_d2_x4 4h 2026110553 4h --max-scale 512
 ```
 
 `--max-scale 512`: $L(1024)=41{,}285$, i.e. $1.7\cdot10^9$ sites, does not fit on a 32 GB card.
+
+Exploration study (user, 2026-11-07): 9 h total, `--max-scale 2048`, on missouri (30 threads,
+idle at launch). A first launch on purus (`gsusc_d2_explore_9h`) was stopped after 11 min,
+inside the first pilot replicate, to move to an idle machine (user, 2026-11-07); it had
+written only its log, since deleted.
+
+```bash
+bash experiments/53_perc_gamma_susc_d2/run_study.sh gsusc_d2_explore 9h 2026110753 9h_missouri --max-scale 2048
+```
+
+Why: the torus study's window is capped at x = 512 by GPU memory, and there more budget
+buys no bias (plan.py at the cap: |bias| 0.0307 at every budget). The exploration sampler
+has no box. Probe before launch (x = 16 / 64 / 128): cv 2.20 / 2.46 / 2.60, 478 s per
+$10^6$ samples at x = 128, mean 703 at x = 16 against the torus's 699.
 
 ## Known values — acceptance criteria, not inputs (ground rule 4)
 
@@ -27,7 +42,19 @@ Pass: the eq. (wilson) 95% interval contains 43/18.
 
 ## Results
 
-Not yet.
+`gsusc_d2_x4_4h` (2026-11-05): $\hat\gamma = 2.37021 \pm 0.01850$, 95% [2.35171, 2.38871]:
+**misses** 43/18 by $1.8\cdot10^{-4}$. B_fs 0.0146 from the pinned refit ($\omega_1 = 1.19$,
+$\chi^2 = 18.1/3$, p = 4e-4: the refit warning) against an actual bias of 0.0187. Flags
+visible without the answer: the refit warning; the plan's predicted bias (0.0307, pilot
+$\omega_1 = 0.73$) twice the report's B_fs; $\omega_1$ moved 0.46 in the refit; the
+gamma-free AIC fit, $2.3979 \pm 0.0044$, 0.028 above $\hat\gamma$. The AIC fit also misses
+43/18, from above (by $3\cdot10^{-4}$ at 95%); its $\gamma$ falls toward 43/18 as the left
+cut grows (16..512: $2.3924 \pm 0.0058$, $\omega = 0.99$).
+
+`gsusc_d2_explore_9h_missouri`: stopped by the user (2026-11-07, 18:45) after 6 h 05 m, inside
+the cost probe. Pilot round 1 had finished (5 x ~935 s); the probe then ran 4 h 46 m with no
+output. No study files were written, only the log. Stopped to find out why cost per sample
+grows like x^3 rather than x^gamma.
 
 ## Wilson interval with the AIC pilot refit (2026-11-07)
 
