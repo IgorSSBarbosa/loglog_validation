@@ -79,3 +79,18 @@ reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ o
 | study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
 |---|---|---|---|---|---|---|---|---|
 | `pilot` | 3.093896 | 1.88 ± 0.062 | 37.9/3 ⚠ | 0.0316 | 1.87 ± 0.06 | 4..64 | 23.8/2 ⚠ | 0.0321 |
+
+## AIC-quality check on all existing data (user, 2026-11-07)
+
+Every dataset with these exact params was pooled (duplicates dropped; the sets agree at shared scales, chi2 p = 0.63) and fitted by `tools/local_slope.omega_ranges` (CLT se). Pooled 4..128 (6 rungs): one range only, chi2 3.1/2, omega 1.28 +- 0.04, d_f 3.0479 +- 0.0034; AIC had no range to choose.
+
+### Pilot `aic_sqrt2` (launched 2026-11-07 on xingu (RTX 5090), seed 2026110829)
+
+Same box cap, rungs round(4 sqrt(2)^k), 11 points, so AIC has ranges to choose among. Not geometric: `pilot.py` only, no autopilot.
+
+```bash
+.venv/bin/python src/study/pilot.py -meta experiments/29_perc_df_d4_facefar/recipes/samples_df_d4_sqrt2.json \
+    --study aic_sqrt2 --data-root experiments/29_perc_df_d4_facefar/data --replicates 5 --seed 2026110829
+```
+
+Result (2026-11-07, 5 x 1281 s on xingu): **the odd rungs are off the curve.** Local slopes 3.40, 3.26, 3.66, 2.74, 3.32, 2.86, 3.20, 2.95, 3.12, 2.98: every odd i (11, 23, 45, 91) sits above the trend by tens of se, and AIC rejects every range (chi2 > 1000). Not the GPU: the CPU `percolation_zd` agrees at i = 8, 11, 16, 23 (|z| <= 1.1). Cause: `face_far` counts x_0 >= i//2 (models/percolation_zd.py:676), exactly the far half for even i, one layer more and half a layer nearer the anchor for odd i -- an O(1/i) parity offset of the observable's definition, the kind of artifact the torus's ceil(L) is suspected of in 38. The earlier ladders were all powers of 2, so never saw it. Even rungs only (4, 6, 8, 16, 32, 64, 128): AIC picks 6..128, omega = 1.29 +- 0.04, d_f = 3.0522 +- 0.0024 +- 0.0011 (chi2 4.4/2); pooled with 29 + 08, omega = 1.25 +- 0.03, d_f = 3.0492 +- 0.0021 (chi2 6.1/2), 2.1 sigma above 3.0446(7).

@@ -1,0 +1,37 @@
+{
+  "kind": "samples",
+  "model": "percolation_zd_gpu",
+  "params": {
+    "dim": 4,
+    "anchor": "face_far",
+    "geometry": "cylinder"
+  },
+  "scales": [
+    4,
+    6,
+    8,
+    11,
+    16,
+    23,
+    32,
+    45,
+    64,
+    91,
+    128
+  ],
+  "n": [
+    11427840,
+    5079040,
+    2856960,
+    1511120,
+    714240,
+    345640,
+    178560,
+    90290,
+    44640,
+    22080,
+    11160
+  ],
+  "seed": null,
+  "_comment": "User, 2026-11-07: AIC-quality pilot for d_f, d = 4. The pooled data (29 + 08, 4..128) fit one range only, 6 points, so AIC had nothing to choose. Same box cap (128, int32 labels), rungs round(4 * sqrt(2)^k): 11 points. Not geometric, so pilot.py draws no pilot_fit.png; tools/local_slope.omega_ranges takes any increasing scales. n = 20 x 29's pilot rule 558 * (128 / i)^2: with cv ~ 0.8 at 128, 5 replicates give se(log Ybar) ~ 0.0034 there, the pooled data's 0.0028. 29's pilot took 44 s per replicate at 1x on niagara."
+}
