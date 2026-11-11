@@ -34,6 +34,7 @@ from models import percolation_susceptibility as model_percolation_susceptibilit
 from models import percolation_susceptibility_gpu as model_percolation_susceptibility_gpu
 from models import percolation_susceptibility_L_gpu as model_percolation_susceptibility_L_gpu
 from models import percolation_susceptibility_explore as model_percolation_susceptibility_explore
+from models import percolation_susceptibility_layers as model_percolation_susceptibility_layers
 from models import percolation_c1_gpu as model_percolation_c1_gpu
 from models import percolation_tau_leath as model_percolation_tau_leath
 from models import percolation_tau_zd as model_percolation_tau_zd
@@ -384,6 +385,17 @@ MODELS: dict[str, ModelSpec] = {
         batched_cost=True,
         latency_bound=True,
         device_fill=model_percolation_susceptibility_explore.device_fill,
+    ),
+    "percolation_susceptibility_layers": ModelSpec(
+        # The explore model's S(p) from the origin, grown breadth first by
+        # chemical layer, keeping only the last three layers once the table
+        # holds max_live sites: memory ~ three layers, not |C| (user,
+        # 2026-11-11). Same lattice and seed draw, so the same Y sample by
+        # sample. No cost_hint and timed batched, as the explore model.
+        simulate=model_percolation_susceptibility_layers.simulate,
+        batched_cost=True,
+        latency_bound=True,
+        device_fill=model_percolation_susceptibility_layers.device_fill,
     ),
     "percolation_tau_leath": ModelSpec(
         # Q(s) = P(|C(0)| >= s) ~ s**(2-tau) by Leath growth from the origin,

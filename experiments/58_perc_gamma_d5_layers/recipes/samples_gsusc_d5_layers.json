@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers",
+  "params": {
+    "dim": 5,
+    "eps0": 0.07,
+    "max_live": 1048576
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "n": [112500, 175000, 280000, 485000, 785000, 1235000, 2370000, 4200000, 8000000, 11800000, 23000000],
+  "seed": null,
+  "_comment": "User, 2026-11-11: pilot for gamma, d = 5, by layered exploration (experiment 39's eps0 = 0.07, top raised from 512 to 4096). n = (cv / 0.02)^2 per rung: cv at 4..256 from experiment 39's pilot, at 512..4096 from this experiment's bench (41, 57, 69, 96). Cost from the bench: about 24 thread-hours, about 1.5 h on 16 threads. Not launched."
+}
