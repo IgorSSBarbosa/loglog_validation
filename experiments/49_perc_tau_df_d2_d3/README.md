@@ -75,3 +75,27 @@ gives the warning (⚠).
 | `tau_d2_smoke` | -1.053865 | 0.88 | 0.00581 | 0.889 ± 0.177 | 32..2048 (0.20) | -0.907 | 0.000858 | 0.00577 |
 | `tau_d3_9h` | -1.188980 | 0.828 | 0.00725 | 0.81 ± 0.325 | 32..4096 (0.17) | -1.21 | 0.00121 | 0.00737 |
 | `tau_d3_smoke` | -1.178067 | 1.48 | 0.0209 | 1.32 ± 0.741 | 32..4096 (0.26) | -4.01 | 0.000915 | 0.0213 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `df_d2_9h_refit` | 1.896069 | 0.754 | 0.00118 ✓ | 0.733 ± 0.13 | 8..4096 (0.20) | -0.0771 | 0.000686 | 0.00126 ✓ |
+| `df_d2_smoke` | 1.896441 | 0.917 | 0.00174 ✓ | 0.679 ± 0.374 | 8..4096 (0.25) | -0.0753 | 0.00154 | 0.00284 ✓ |
+| `df_d3_9h` | 2.521996 | 2.11 | 0.00338 ✓ | 2.11 ± 0.377 | 4..1024 (0.39) | -2.08 | 0.000368 | 0.00338 ✓ |
+| `df_d3_smoke` | 2.523749 | 3.63 | 0.0103 ✓ | 1.89 ± 0.528 | 4..512 (0.37) | -1.61 | 0.0024 | 0.0122 ✓ |
+| `tau_d2_9h_rerun` | -1.054830 | 0.774 | 0.0016 ✓ | 0.81 ± 0.327 | 16..65536 (0.13) | -0.651 | 0.000211 | 0.00152 ✓ |
+| `tau_d2_smoke` | -1.053865 | 0.889 | 0.00577 ✓ | 0.725 ± 0.241 | 32..32768 (0.18) | -0.616 | 0.00211 | 0.00703 ✓ |
+| `tau_d3_9h` | -1.188980 | 0.81 | 0.00737 ✓ | 0.736 ± 0.316 | 32..65536 (0.24) | -1.02 | 0.00191 | 0.00807 ✓ |
+| `tau_d3_smoke` | -1.178067 | 1.32 | 0.0213 ✓ | 0.732 ± 0.455 | 16..8192 (0.22) | -0.816 | 0.00728 | 0.0276 ✓ |
+
+Coverage of every reference: old 8/8, new 8/8.

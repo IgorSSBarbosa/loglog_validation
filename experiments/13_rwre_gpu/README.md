@@ -285,3 +285,39 @@ gives the warning (⚠).
 | `sweep_p0.4_neymanPilot` | 0.573891 | 0.134 | 0.383 | 0.192 ± 0.172 | 8..512 (0.34) | 0.433 | 0.145 | 0.147 |
 | `sweep_p0.5_neymanPilot` | 0.500182 | 0.709 | 0.00163 | 0.728 ± 0.205 | 8..1024 (0.32) | -0.142 | 0.0013 | 0.0015 |
 | `sweep_p0_neymanPilot` | 0.525883 | 0.323 | 0.04 | 0.385 ± 0.132 | 4..128 (0.25) | -0.534 | 0.0191 | 0.0214 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_data/gpu_sieve/sweep_p0.45_RWRE_gpu_sieve` | 0.519609 | 1.09 | 0.00141 | 1.11 ± 0.26 | 4..128 (1.00) | -0.237 | 0.000897 | 0.000982 |
+| `sweep_data/longsieve/sweep_p0.1_RWRE_longsieve` | 0.530761 | 0.231 | 0.115 | 0.108 ± 0.0688 | 16..131072 (0.16) | -1.52 | 1.77 | 1.77 |
+| `sweep_data/longsieve/sweep_p0.2_RWRE_longsieve` | 0.539511 | 0.109 | 0.718 | 0.448 ± 0.974 | 128..65536 (0.35) | -1.23 | 0.0228 | 0.0251 |
+| `sweep_data/longsieve/sweep_p0.3333_RWRE_longsieve` | 0.559960 | — | — | 0.846 ± 0.659 | 32..8192 (0.33) | 0.803 | 0.000328 | 0.00256 |
+| `sweep_data/longsieve/sweep_p0.3_RWRE_longsieve` | 0.553700 | — | — | 1.36 ± 1.62 | 4096..131072 (0.35) | -2.21e+03 | 0.00915 | 0.0114 |
+| `sweep_data/longsieve/sweep_p0.45_RWRE_longsieve_neyman` | 0.531894 | 0.574 | 0.0155 | 1.47 ± 0.452 | 4..256 (0.47) | -0.299 | 2.72e-05 | 0.000252 |
+| `sweep_data/longsieve/sweep_p0.4_RWRE_longsieve` | 0.574067 | 0.245 | 0.0828 | 1.33 ± 1.55 | 512..65536 (0.26) | 87 | 0.000448 | 0.00267 |
+| `sweep_data/longsieve/sweep_p0.5_RWRE_longsieve` | 0.500206 | 0.762 | 0.000974 ✓ | 1.04 ± 0.275 | 4..8192 (0.12) | -0.261 | 0.000317 | 0.000521 ✓ |
+| `sweep_data/longsieve/sweep_p0_RWRE_longsieve` | 0.529136 | 0.343 | 0.0363 | 0.205 ± 0.134 | 8..65536 (0.27) | -0.746 | 0.243 | 0.245 |
+| `sweep_data/sweep_1h/sweep_p0.5_1h` | 0.500019 | 1.12 | 0.000639 ✓ | 1.12 ± 0.317 | 4..16384 (0.39) | -0.289 | 0.000101 | 0.000639 ✓ |
+| `sweep_data/sweep_smoke/sweep_p0.5_smoke` | 0.500126 | 1.01 | 0.000877 ✓ | 0.917 ± 0.242 | 4..8192 (0.29) | -0.232 | 0.000628 | 0.00112 ✓ |
+| `sweep_data/sweep_smoke/sweep_p0.5_smoke34` | 0.500073 | 0.878 | 0.00192 ✓ | 0.855 ± 0.4 | 4..4096 (0.31) | -0.215 | 0.000864 | 0.00206 ✓ |
+| `sweep_p0.1_neymanPilot` | 0.531750 | 0.244 | 0.0954 | 0.115 ± 0.0447 | 8..131072 (0.37) | -1.39 | 1.45 | 1.45 |
+| `sweep_p0.2_neymanPilot` | 0.540024 | 0.133 | 0.433 | 0.846 ± 1.06 | 4..256 (0.32) | -0.0979 | 4.01e-05 | 0.00233 |
+| `sweep_p0.3333_neymanPilot` | 0.559580 | 0.954 | 0.00229 | 0.588 ± 0.424 | 16..8192 (0.30) | 0.312 | 0.00145 | 0.00372 |
+| `sweep_p0.3_neymanPilot` | 0.553609 | 0.487 | 0.00341 | 1.03 ± 0.865 | 16..4096 (0.46) | 0.442 | 3.27e-05 | 0.00231 |
+| `sweep_p0.45_neymanPilot` | 0.515876 | 2.8 | 5e-05 | 2.21 ± 0.196 | 4..128 (1.00) | -0.695 | 8.69e-05 | 0.00012 |
+| `sweep_p0.4_neymanPilot` | 0.573891 | 0.192 | 0.147 | 0.514 ± 0.223 | 32..131072 (0.24) | 0.809 | 0.00772 | 0.00998 |
+| `sweep_p0.5_neymanPilot` | 0.500182 | 0.728 | 0.0015 ✓ | 0.832 ± 0.39 | 8..4096 (0.29) | -0.188 | 0.000879 | 0.00108 ✓ |
+| `sweep_p0_neymanPilot` | 0.525883 | 0.385 | 0.0214 | 0.381 ± 0.566 | 4..65536 (0.17) | -0.578 | 0.0216 | 0.0239 |
+
+Coverage of every reference: old 5/5, new 5/5.

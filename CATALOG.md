@@ -215,7 +215,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `fit_power`, `fit_log` | local_slope | (P) $\gamma + c\,i^{-\omega}$ and (L) $\gamma + c/\ln i$ on $s_k$, with $\chi^2$, dof, $p$ |
 | `omega_windows` | local_slope | $a + bk + c\rho^{-\omega k}$ by weighted LS on each run of `width` consecutive log-log points; $\omega$ profiled, 68% interval at $\chi^2_{\min}+1$ |
 | `clt_se_log` | local_slope | se of mean $\log\overline Y$ per scale from each replicate's own cv and $n$: $\sqrt{\sum_r \mathrm{cv}_r^2/n_r}/R$ |
-| `omega_ranges` | local_slope | $a + bk + c\rho^{-\omega k}$ on every run of $\ge 6$ points (any increasing scales); range scored by AIC with data cuts (Jay & Neil 2021); best closed $(i_{\min}, i_{\max}, \hat\omega)$ (none if no fit closes), stat and range-systematic errors. `gamma_pin` ties $\gamma$ to $\hat\gamma$: `report.pinned_refit`, the $\omega_1, a_1$ of $B_{fs}$ |
+| `omega_ranges` | local_slope | $a + bk + c\rho^{-\omega k}$ on every run of $\ge 6$ points (any increasing scales); range scored by AIC with data cuts (Jay & Neil 2021); best closed $(i_{\min}, i_{\max}, \hat\omega)$ (none if no fit closes), stat and range-systematic errors. Without `gamma_pin`, on pilot + long run (`report.joint_refit`, since 2026-11-11): the $\omega_1, a_1$ of $B_{fs}$. `gamma_pin` ties $\gamma$ to $\hat\gamma$: `report.pinned_refit`, kept in `answer.json` for comparison only |
 | `merge_means` | local_slope | exact $(n, \bar Y, \mathrm{cv})$ of two independent samples' union |
 | `total_cost` | allocation | `lem:budget` geometric sum |
 | `feasible` | allocation | $\theta_1+d\theta_2=1$ self-check |

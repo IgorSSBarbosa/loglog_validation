@@ -1,18 +1,18 @@
 """The article's Step 5 figure: the ranges eq. (aic) weighs, and the average over them.
 
-Recomputes the pinned refit of `src/study/report.py` (`pinned_refit`: every range of
->= REFIT_MIN_POINTS consecutive pilot scales, gamma pinned to the long run's
-gamma-hat with its replicate se, scored by AIC = chi2 + 2*4 + 2*N_cut) from the
-study's pilot.json and answer.json, checks that it picks the range and omega1
-stored in answer.json, and draws:
+Recomputes the joint refit of `src/study/report.py` (`joint_refit`, user 2026-11-11:
+the pilot and the long run in one set of log-log points, every range of
+>= JOINT_MIN_POINTS consecutive scales, gamma free, scored by AIC = chi2 + 2*4 +
+2*N_cut) from the study's pilot.json and final.json, checks that it picks the
+range and omega1 stored in answer.json, and draws:
 
-(a) the pilot's correction log Y_bar_i - gamma-hat log i with its error bars, the
-    fit on the highest-weight range (solid on it, dashed beyond) and the fit on all
-    pilot scales (dotted), with their chi2/dof, and the AIC-weighted omega1 the
-    interval uses (user, 2026-11-09: the average, not the highest-weight range);
+(a) the correction log Y_bar_i - gamma_r log i (gamma_r the best range's own slope)
+    with its error bars, pilot and long-run points marked apart, the fit on the
+    best-AIC range (solid on it, dashed beyond) and the fit on all scales (dotted),
+    with their chi2/dof, and the AIC-weighted omega1 the interval uses;
 (b) every candidate range as a bar over the scales it keeps, sorted by AIC, shaded
     by its weight exp(-AIC/2) normalised over the ranges, with its AIC, cut count
-    and omega1; the highest-weight range is outlined, and ranges left out of the
+    and omega1; the best-AIC range is outlined, and ranges left out of the
     average (omega1 on a bound, or an open profile interval) are hatched.
 
 Reads a finished study directory only; truths appear nowhere (ground rule 4).
@@ -47,6 +47,7 @@ import report  # noqa: E402
 DATA = "#2a6fdb"
 FIT = "#e8622c"
 REF = "#7a7a7a"
+SHOWN = 25
 
 
 def main() -> None:
@@ -59,14 +60,12 @@ def main() -> None:
 
     pilot = json.loads((args.study / "pilot.json").read_text())
     answer = json.loads((args.study / "answer.json").read_text())
-    gamma, pin_se = answer["gamma"], answer["se"]
-    scales = np.array(pilot["scales"], float)
-    logy = np.log(np.array(pilot["y_bar"], float))
-    sig = np.array(pilot["sigma_log"], float)
-    rf = report.omega_ranges(pilot["scales"], logy, pilot["sigma_log"], np.e,
-                             min_points=report.REFIT_MIN_POINTS, gamma_pin=(gamma, pin_se))
+    scales, logy, sig, src = report.joint_points(pilot, answer["scales"], answer["y_bar"],
+                                                 answer["sigma_log"])
+    rf = report.omega_ranges(scales, logy, sig, np.e,
+                             min_points=report.JOINT_MIN_POINTS, gamma_pin=None)
     best = rf["best"]
-    stored = answer["pilot_refit"]
+    stored = answer["joint_refit"]
     # the figure must show the refit the interval used, not a re-derivation of it
     assert (best["i_min"], best["i_max"]) == (stored["i_min"], stored["i_max"]), (best, stored)
     assert math.isclose(rf["omega"], stored["omega1"], rel_tol=1e-9), (rf["omega"], stored)
@@ -83,10 +82,12 @@ def main() -> None:
     slope = best["b"]
     r = logy - slope * np.log(scales)
     keep = (scales >= best["i_min"]) & (scales <= best["i_max"])
-    a.errorbar(scales[keep], r[keep], yerr=sig[keep], fmt="o", ms=5, color=DATA,
-               capsize=2, lw=1, label="pilot, kept")
-    a.errorbar(scales[~keep], r[~keep], yerr=sig[~keep], fmt="o", ms=5, mfc="white",
-               color=REF, capsize=2, lw=1, label="pilot, cut")
+    for name, mk, sel in (("pilot", "o", src != "run"), ("long run", "s", src == "run")):
+        for on_, col, mfc, tag in ((keep, DATA, None, "kept"), (~keep, REF, "white", "cut")):
+            j = sel & on_
+            if j.any():
+                a.errorbar(scales[j], r[j], yerr=sig[j], fmt=mk, ms=5, color=col, mfc=mfc,
+                           capsize=2, lw=1, label=f"{name}, {tag}")
     grid = np.geomspace(scales[0], scales[-1], 300)
 
     def model(f: dict, i: np.ndarray) -> np.ndarray:
@@ -95,7 +96,7 @@ def main() -> None:
 
     on = (grid >= best["i_min"]) & (grid <= best["i_max"])
     a.plot(grid[on], model(best, grid[on]), color=FIT, lw=2,
-           label=(rf"highest weight ({rf['best_weight']:.2f}): $\hat\omega_1 = {best['omega']:.2f}$, "
+           label=(rf"best AIC ({rf['best_weight']:.2f}): $\hat\omega_1 = {best['omega']:.2f}$, "
                   rf"$\chi^2 = {best['chi2']:.1f}/{best['dof']}$"))
     a.plot(grid[~on], model(best, grid[~on]), color=FIT, lw=1.2, ls="--")
     if full:
@@ -106,15 +107,16 @@ def main() -> None:
     a.text(0.03, 0.97, rf"AIC-weighted $\hat\omega_1 = {rf['omega']:.2f} \pm {rf['total']:.2f}$",
            transform=a.transAxes, fontsize=8.5, va="top")
     a.set_xscale("log", base=2)
-    a.set_xlabel("pilot scale $i$")
-    a.set_ylabel(r"$\log\overline{Y}_i - \hat\gamma\log i$")
+    a.set_xlabel("scale $i$")
+    a.set_ylabel(r"$\log\overline{Y}_i - \gamma_r\log i$")
     a.set_title("(a) the correction and the refit", fontsize=10, loc="left")
     a.legend(fontsize=7.5, frameon=False, loc="lower right")
     for s in ("top", "right"):
         a.spines[s].set_visible(False)
 
-    # (b) every candidate range, best AIC on top
-    order = sorted(fits, key=lambda f: f["aic"])
+    # (b) the candidate ranges, best AIC on top. The union of pilot and long-run scales
+    # gives ~80 ranges, unreadable as rows, so only the SHOWN lowest-AIC ones are drawn.
+    order = sorted(fits, key=lambda f: f["aic"])[:SHOWN]
     wmax = max(f["weight"] for f in fits)
     lk = np.log2(scales)
     for row, f in enumerate(order):
@@ -137,17 +139,17 @@ def main() -> None:
     b.set_xlim(lk[0] - 0.6, lk[-1] + 5.0)
     b.set_ylim(-0.8, len(order) + 1.2)
     b.set_xticks(lk)
-    b.set_xticklabels([f"{int(s)}" for s in scales], fontsize=7)
+    b.set_xticklabels([f"$2^{{{int(round(k))}}}$" for k in lk], fontsize=6)
     b.set_yticks([])
-    b.set_xlabel("pilot scales kept")
-    b.set_title(r"(b) the ranges, by AIC $= \chi^2 + 2\cdot4 + 2\,(N-K)$",
+    b.set_xlabel("scales kept")
+    b.set_title(rf"(b) the {len(order)} best of {len(fits)} ranges, by AIC $= \chi^2 + 2\cdot4 + 2\,(N-K)$",
                 fontsize=10, loc="left")
     for s in ("top", "right", "left"):
         b.spines[s].set_visible(False)
     handles = [Rectangle((0, 0), 1, 1, facecolor=DATA, label=r"weight $\propto e^{-\mathrm{AIC}/2}$"),
-               Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=FIT, lw=2, label="highest weight"),
+               Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=FIT, lw=2, label="best AIC"),
 ]
-    if any(f["interval_open"] or f["omega_on_bound"] for f in fits):
+    if any(f["interval_open"] or f["omega_on_bound"] for f in order):
         handles.append(Rectangle((0, 0), 1, 1, facecolor="white", hatch="////", edgecolor=REF,
                                  lw=0.5, label=r"$\hat\omega_1$ not determined"))
     b.legend(handles=handles, fontsize=7.5, loc="upper center", bbox_to_anchor=(0.45, -0.13),
@@ -156,7 +158,7 @@ def main() -> None:
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(out / f"pipeline_aic.{ext}", dpi=200)
-    print(f"wrote {out}/pipeline_aic.pdf/.png  ({len(fits)} ranges; highest weight "
+    print(f"wrote {out}/pipeline_aic.pdf/.png  ({len(fits)} ranges; best AIC "
           f"{best['i_min']}..{best['i_max']} ({rf['best_weight']:.3f} of the kept weight, "
           f"omega1 {best['omega']:.4f}); AIC-weighted omega1 {rf['omega']:.4f} "
           f"+- {rf['total']:.4f}")

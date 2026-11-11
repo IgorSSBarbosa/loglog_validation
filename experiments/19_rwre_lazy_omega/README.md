@@ -230,3 +230,19 @@ gives the warning (⚠).
 |---|---|---|---|---|---|---|---|---|
 | `autopilot_p0` | 0.529412 | 0.325 | 0.046 | 0.321 ± 0.0148 | 16..256 (0.89) ⚠ | -0.465 | 0.0417 | 0.0483 |
 | `autopilot_p0_fix` | 0.517998 | 0.231 | 0.0766 | 0.231 ± 0.00189 | 32..512 (1.00) | -0.596 | 0.0753 | 0.0766 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `autopilot_p0` | 0.529412 | 0.321 | 0.0483 | 0.134 ± 0.0463 | 64..65536 (0.31) | -1.07 | 0.892 | 0.898 |
+| `autopilot_p0_fix` | 0.517998 | 0.231 | 0.0766 | 0.148 ± 0.0355 | 128..131072 (0.12) | -0.958 | 0.435 | 0.436 |

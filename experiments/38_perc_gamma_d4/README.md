@@ -97,3 +97,18 @@ Each panel: one ladder's local slopes x k (CLT se) against the rung's mean eps. 
 ![straight-line gamma against window](images/ladder_gamma_vs_window.png)
 
 Filled: each ladder's straight-line gamma at the geometric mean eps of its window. Open: what the pooled correction predicts that ladder's straight line gives. Dashed: the pooled fit's gamma.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `aic_explore_d4` | 1.429813 | — | — | 1.4 ± 0.495 | 4..128 (0.53) | -0.11 | 0.00307 | 0.005 ✓ |

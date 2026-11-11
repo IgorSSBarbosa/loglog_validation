@@ -396,29 +396,49 @@ that mistake until `calibration/check_coverage.py` measured it.
 The bound needs two things the replicate interval does not. (Since the 2026-11-04
 article revision it no longer needs $\Lambda$: the log-moment assumption and
 $B_{\mathrm{bad}}$ are gone.) $\sigma_\infty^2$ and
-$\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ come **from the pilot,
-never from a refit on the final data** — the plan deepens $m_0$ precisely to put
-the ladder where the correction has died, so refitting $\omega_1$ there fits
-noise. On this repo's own srw run the final refit returned $\omega_1 = 0.0295$
-with `converged = False`, against the pilot's $0.885$.
+$\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ **never come from a refit on the
+final data alone** — the plan deepens $m_0$ precisely to put the ladder where the
+correction has died, so refitting $\omega_1$ there fits noise. On this repo's own srw
+run the final-only refit returned $\omega_1 = 0.0295$ with `converged = False`,
+against the pilot's $0.885$.
 
-The pilot is refitted with $\gamma$ pinned to $\hat\gamma$ (2026-11-02), and
-since 2026-11-07 on a range of pilot scales chosen by AIC with data cuts
-(`local_slope.omega_ranges`, $\ge 5$ consecutive scales) rather than on all of
-them: the smallest scales carry $\omega_2, \dots$, which an all-scales fit
-absorbs into $\omega_1$. Only $\omega_1, a_1$ come from it; $\gamma$ stays the
-log-log estimator's own. Its se is the profile error $\oplus$ the spread over
-ranges (the profile alone covered 52% at nominal 68% on planted data). On the 39
-finished srw/ERW studies with exact $\gamma$, eq. (720) covered 37/39 with it
-against 34/39 with the all-scales fit (kept in `answer.json` as
-`pilot_refit_all_scales`); half-widths moved by a median factor 1.10
-($0.46$–$2.5\times$, widest near $p = 3/4$). With no closed range there is no
-$\omega_1$ and no bound: on 6 of 116 studies, each of which the all-scales fit had
-already flagged ($\omega_1$ on its bound, or $p \approx 0$).
+**The joint refit (user, 2026-11-11).** $\omega_1, a_1$ come from one AIC range fit
+(`local_slope.omega_ranges`, $\gamma$ free, $\ge 6$ consecutive scales) on the pilot
+and the long run together (`report.joint_refit`): one log-log point per scale, a
+scale drawn by both merged by inverse variance (the two draws are independent). The
+pilot's small scales anchor $\omega_1$, the long run adds the scales where the
+correction is decided; on srw it gives $\omega_1 = 1.00 \pm 0.09$. Only
+$\omega_1, a_1$ come from it; $\gamma$ stays the log-log estimator's own.
+
+It replaced the pilot refitted with $\gamma$ pinned to $\hat\gamma$ (2026-11-02; on
+AIC ranges of pilot scales since 2026-11-07), which is kept in `answer.json` as
+`pilot_refit` (and its all-scales version as `pilot_refit_all_scales`) for comparison
+only. The pin was circular: its width is $\hat\gamma$'s replicate se, which carries the
+scatter and not the finite-size bias, so wherever $B_{\rm fs} \gg$ se the pin forced
+$\omega_1$ to whatever makes the correction vanish on the window. Measured on perc
+$\gamma_{\rm susc}$, $d = 5$: bias 0.024 against se $2.3\times10^{-4}$, pinned
+$\omega_1 = 1.23$, joint $0.45 \pm 0.08$ (literature $\approx 0.4$–$0.55$). Widening
+the pin by the plan's bias recovered coverage too, but fed a pilot estimate of
+$\omega_1$ back into the prior of the fit that re-estimates it (user: "getting
+circular"). Rerun 2026-11-11 on every saved study (121
+reports): of the 67 with a reference (exact $\gamma$ for srw/ERW, literature values for
+percolation; scoring only), eq. (720) covers every reference in 64 with the joint
+refit against 59 with the pinned average. It newly covers ERW $p = 0.7$ (`12_erw_gpu`),
+$d_f$ $d = 4$ (face-far pilot and $C_1$), $\gamma_{\rm susc}$ $d = 2, 3, 5$; it newly
+misses ERW-urn $p = 0.775$ (by 0.0102 against a radius of 0.0097); it still misses
+$C_1$ $d = 5$ and `gsusc_d3_x4_4h` against 1.819. Three studies have no bound, as
+before: two with only 5 scales in all, one with no closed range. Per-study tables:
+each experiment README's 2026-11-11 section.
+
+What the joint refit does not fix: where $\omega_1$ is undetermined (RWRE without a
+known $\gamma$, $\omega_1 = 1.3 \pm 1.6$) $B_{\rm fs}$ can come out far smaller than
+before. The $B_{\rm fs}$ span warning is then the only signal, and it is not selective
+(it fires on most studies). Also, $B_{\rm fs}$ and $\hat\gamma$ now share the long-run
+data, while eq. (720) treats $a_1, \omega_1$ as constants; coverage is checked
+empirically above.
 
 **Why AIC with data cuts.** The model is $\log\overline Y_i = a + \gamma\log i +
-a_1 i^{-\omega_1}$ (eq. 232 at $J = 1$), with $\gamma$ held at $\hat\gamma$ by one
-extra Gaussian residual $(\gamma - \hat\gamma)/\mathrm{se}(\hat\gamma)$. The left
+a_1 i^{-\omega_1}$ (eq. 232 at $J = 1$), all four parameters free. The left
 cut drops scales where $\omega_2, \dots$ still act, the right cut scales where the
 correction has sunk below the noise. $\chi^2$ cannot choose the range, since
 dropping points always lowers it. Jay & Neil (PRD 103, 114502 (2021),
@@ -437,12 +457,10 @@ What the derivation assumes, and how it holds here:
   draws independent randomness (ground rule 2).
 - *Gaussian data, large sample.* $\log\overline Y_i$ is Gaussian via the CLT and the
   delta method, and the $2k$ penalty is an asymptotic correction. The sample size of
-  those asymptotics is the pilot's $n$ per scale (hundreds of thousands), not the
-  5–10 scales of a range.
-- *The pin is a Gaussian prior on $\gamma$.* $k$ stays 4 on every range, so the pin
-  moves no weight. The score uses the augmented $\chi^2$ (data plus pin), the form
-  Neil & Sitison (arXiv:2208.14983) call ABIC$_{\rm CV}$; they prefer the BAIC, which
-  scores by the data $\chi^2$ alone. Not switched yet (open item in the article).
+  those asymptotics is the $n$ per scale (hundreds of thousands), not the
+  6–20 scales of a range.
+- *$a_1, \omega_1$ treated as constants by eq. (720).* They are estimates, and since
+  2026-11-11 they share the long-run averages with $\hat\gamma$; see above.
 
 **Averaging over ranges (user, 2026-11-09).** Like the papers, $\hat\omega_1$ is the
 AIC-weighted average over the kept ranges, $\sum_r P_r\hat\omega_{1,r}$ (Jay & Neil

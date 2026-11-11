@@ -24,9 +24,9 @@ gap wherever the final ladder doesn't start at 8192.
     final's gamma-hat) ± se, next to the pilot's eq. (232) omega1 and the conjecture.
     Run that driver on every study first; a missing file raises.
   - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
-    appendix (user, 2026-11-02), without titles. The omega figure draws only the pilot
-    refitted with gamma pinned to gamma-hat (answer.json's pilot_refit), open where its chi2
-    warns; the other two estimates are in the article's table. The gamma figure adds a panel of
+    appendix (user, 2026-11-02), without titles. The omega figure draws only the joint
+    refit of pilot and long run (answer.json's joint_refit, user 2026-11-11), open where
+    its chi2 warns; the other two estimates are in the article's table. The gamma figure adds a panel of
     gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
     --omega-loglog's inputs.
 
@@ -251,19 +251,19 @@ def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> No
         fig.savefig(out_dir / "erw_gamma_vs_p.pdf")
         plt.close(fig)
 
-        # Only the refit with gamma pinned to the final's gamma-hat: the omega1 of B_fs
-        # (report.py). The pilot fit and the loglog-log stay in the article's table (user,
+        # Only the joint refit of pilot and long run: the omega1 of B_fs (report.py,
+        # user 2026-11-11). The pilot fit and the loglog-log stay in the article's table (user,
         # 2026-11-02). Open where its chi2 warns.
         fig, ax = plt.subplots(figsize=(5.4, 3.4), constrained_layout=True)
         pp = np.linspace(0, 1, 801)
         ax.plot(pp, omega_conjecture(pp), color=grey, lw=1.2,
                 label=r"conjecture $\omega=\min\{1,|4p-3|\}$")
-        rf = [res[p]["answer"]["pilot_refit"] for p in ps]
+        rf = [res[p]["answer"]["joint_refit"] for p in ps]
         om = np.array([r["omega1"] for r in rf])
         se = np.array([r["omega1_se"] for r in rf])
         warn = np.array([r["warn"] for r in rf])
-        for sel, face, lab in ((~warn, blue, r"pilot refit $\hat\omega_1$, $\gamma=\hat\gamma$"),
-                               (warn, "white", r"pilot refit, $\chi^2$ warning")):
+        for sel, face, lab in ((~warn, blue, r"joint refit $\hat\omega_1$"),
+                               (warn, "white", r"joint refit, $\chi^2$ warning")):
             if not sel.any():
                 continue
             ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="o", color=blue, mfc=face, ms=4.5,

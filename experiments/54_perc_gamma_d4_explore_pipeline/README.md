@@ -92,3 +92,19 @@ Result (602.7 min drawn against 600.0 predicted, ratio 1.00x with the missouri t
 
 Contains gamma = 1.430(6) (literature central value inside). The t interval excludes 1.430, so the scatter-only interval would have failed if 1.430 were exact; the bound did not. B_fs over omega1 +- 1 se spans 2.5e-05..2.6e-04: even its top is 13 % of the se term, so the bound is insensitive to omega1 here (half-width <= 0.0023). Predicted half-width 0.0026; measured 0.0021 because cv at 512 came out lower than the plan assumed. The pinned refit chose 4..64, not 2..64 (x = 2 cut by AIC). Bound marked incomplete: the omega2 piece of B_fs (needs phi_plus) is missing. Reading the final data alone, the eq. (232) fit does not converge (omega1 -> 0.03): over 16..512 the correction is below the noise, consistent with B_fs ~ 1e-4.
 
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `gsusc_d4` | 1.428606 | 2.47 | 0.00209 ✓ | 2.67 ± 0.554 | 4..512 (0.56) | -0.393 | 5.93e-05 | 0.00206 ✓ |
+
+Coverage of every reference: old 1/1, new 1/1.

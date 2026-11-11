@@ -192,3 +192,25 @@ gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gam
 | `ERW_p0.9` | 0.800466 | 1.16 | 0.00138 ✓ | 0.872 ± 0.446 | 64..4096 (0.29) | -0.728 | 0.000786 | 0.00189 ✓ |
 
 Coverage of the exact $\gamma$: old 3/3, new 3/3.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.789 | 0.0023 ✓ | 0.834 ± 0.319 | 4..16384 (0.23) | -0.337 | 0.000873 | 0.00205 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.36 | 0.0272 | 0.3 ± 0.0675 | 16..262144 (0.24) | -0.671 | 0.0494 | 0.0542 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.355 | 0.0229 | 0.222 ± 0.113 | 32..524288 (0.25) | -0.73 | 0.123 | 0.126 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.358 | 0.0275 | 0.276 ± 0.0597 | 16..262144 (0.32) | -0.677 | 0.0666 | 0.0713 |
+| `ERW_p0.78` | 0.577894 | 0.346 | 0.0303 ✓ | 0.206 ± 0.127 | 64..262144 (0.30) | -0.719 | 0.175 | 0.179 ✓ |
+| `ERW_p0.9` | 0.800466 | 0.872 | 0.00189 ✓ | 0.627 ± 0.471 | 64..32768 (0.21) | -0.346 | 0.00263 | 0.00373 ✓ |
+
+Coverage of every reference: old 3/3, new 3/3.

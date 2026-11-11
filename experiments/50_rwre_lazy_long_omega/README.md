@@ -234,3 +234,23 @@ gives the warning (⚠).
 | `long_p0.3_24h` | 0.524801 | 0.307 | 0.0463 | 0.292 ± 0.0758 | 4096..131072 (0.29) | -1.77 | 0.0519 | 0.053 |
 | `long_p0.3_smoke_cap131072` | 0.519779 | 0.253 | 0.0889 | 0.243 ± 0.0593 | 4096..131072 (0.29) | -1.65 | 0.0885 | 0.1 |
 | `long_p0.3_smoke_pool` | 0.531202 | 0.369 | 0.0348 | 0.341 ± 0.117 | 4096..65536 (0.49) | -2.05 | 0.0286 | 0.0422 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `long_p0.04_24h` | 0.512469 | 0.192 | 0.109 | 0.147 ± 0.072 | 64..524288 (0.19) | -1 | 0.339 | 0.341 |
+| `long_p0.04_smoke_cap131072` | 0.512748 | 0.188 | 0.126 | 0.131 ± 0.0178 | 64..8388608 (0.16) | -1.13 | 0.522 | 0.53 |
+| `long_p0.04_smoke_pool` | 0.516285 | 0.201 | 0.109 | 0.139 ± 0.0683 | 64..4194304 (0.27) | -1.05 | 0.463 | 0.472 |
+| `long_p0.3_24h` | 0.524801 | 0.292 | 0.053 | 0.127 ± 0.0683 | 4096..8388608 (0.22) | -1.93 | 0.961 | 0.962 |
+| `long_p0.3_smoke_cap131072` | 0.519779 | 0.243 | 0.1 | 0.0729 ± 0.0377 | 2048..16777216 (0.28) | -3.3 | 5.29 | 5.3 |
+| `long_p0.3_smoke_pool` | 0.531202 | 0.341 | 0.0422 | 0.129 ± 0.128 | 2048..4194304 (0.17) | -1.84 | 0.887 | 0.901 |

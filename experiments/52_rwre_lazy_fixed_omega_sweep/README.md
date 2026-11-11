@@ -210,3 +210,31 @@ gives the warning (⚠).
 | `fixed_p0.4_3h` | 0.542650 | 0.262 | 0.086 | 0.191 ± 0.0756 | 16384..262144 (0.40) | -1.14 | 0.175 | 0.178 |
 | `fixed_p0.5_3h` | 0.500002 | 0.781 | 0.00148 | 0.87 ± 0.427 | 16..131072 (0.15) | -0.177 | 1.57e-06 | 0.00147 |
 | `fixed_p0_3h` | 0.511764 | 0.263 | 0.0396 | 0.257 ± 0.0397 | 512..32768 (0.19) | -0.775 | 0.0393 | 0.0426 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `fixed_p0.05_3h` | 0.512466 | 0.227 | 0.0569 | 0.131 ± 0.0351 | 16..1048576 (0.13) | -1.16 | 0.536 | 0.539 |
+| `fixed_p0.15_3h` | 0.516438 | 0.22 | 0.074 | 0.379 ± 0.459 | 65536..4194304 (0.08) | -3.65 | 0.0286 | 0.0319 |
+| `fixed_p0.1_3h` | 0.513663 | 0.255 | 0.0474 | 0.144 ± 0.0152 | 128..8388608 (0.33) | -1.15 | 0.414 | 0.417 |
+| `fixed_p0.25_3h` | 0.522603 | 0.18 | 0.186 | 0.334 ± 0.29 | 32768..4194304 (0.23) | -2.7 | 0.0419 | 0.0451 |
+| `fixed_p0.2_3h` | 0.517929 | 0.223 | 0.0853 | 0.122 ± 0.0453 | 512..4194304 (0.10) | -1.57 | 0.879 | 0.882 |
+| `fixed_p0.35_3h` | 0.531069 | 0.304 | 0.0543 | 0.377 ± 0.389 | 65536..8388608 (0.20) | -6.65 | 0.0541 | 0.0573 |
+| `fixed_p0.3_3h` | 0.525873 | 0.301 | 0.0493 | 0.117 ± 0.0605 | 4096..8388608 (0.14) | -2.02 | 1.25 | 1.25 |
+| `fixed_p0.3_smoke` | 0.525522 | 0.297 | 0.0739 | 0.0904 ± 0.0759 | 2048..4194304 (0.36) | -2.56 | 2.99 | 3.01 |
+| `fixed_p0.45_3h` | 0.565990 | 0.184 | 0.135 | 0.868 ± 0.506 | 8192..262144 (0.29) | 84.4 | 0.000767 | 0.00379 |
+| `fixed_p0.4_3h` | 0.542650 | 0.191 | 0.178 | 0.249 ± 0.154 | 131072..8388608 (0.30) | -3.92 | 0.227 | 0.23 |
+| `fixed_p0.5_3h` | 0.500002 | 0.87 | 0.00147 ✓ | 0.799 ± 0.525 | 16..131072 (0.11) | -0.15 | 3.42e-06 | 0.00147 ✓ |
+| `fixed_p0_3h` | 0.511764 | 0.257 | 0.0426 | 0.151 ± 0.0414 | 256..8388608 (0.08) | -0.965 | 0.303 | 0.306 |
+
+Coverage of every reference: old 1/1, new 1/1.

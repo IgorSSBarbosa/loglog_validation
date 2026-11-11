@@ -19,7 +19,7 @@
    points, not lines: they are estimates at separate scales. (A6) compares the long run's time
    with the planner's cost model; (A1)+(A2) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window and the pilot
-   refitted with gamma pinned to gamma-hat (the omega1, a1 of B_fs), with its chi2.
+   and long run refitted together (report.joint_refit: the omega1, a1 of B_fs), with its chi2.
 
 Reads a finished study directory only (pilot.json, plan.json, final.json, answer.json).
 Truths appear nowhere (ground rule 4).
@@ -316,12 +316,12 @@ def fig_checks(d: dict, rho: float):
     ax.plot(k, np.log(pooled(reps, "y_bar")), "s", color=DATA, mfc="white", ms=4, label="long run")
     ax.plot(kin, full(kin), color=FIT, label="pilot fit $f(k)$")
     ax.plot(kout, full(kout), "--", color=FIT, label="...extrapolated")
-    # The refit with gamma pinned to gamma-hat is what B_fs is built from (report.py,
-    # user 2026-11-02); its chi2 p-value is the warning that one correction is not enough.
-    rf = d["answer"]["pilot_refit"]
+    # The joint refit of pilot and long run is what B_fs is built from (report.py,
+    # user 2026-11-11); its chi2 p-value is the warning that one correction is not enough.
+    rf = d["answer"]["joint_refit"]
     pinned, _ = pilot_curve(rf, rho)
     ax.plot(np.concatenate([kin, kout]), pinned(np.concatenate([kin, kout])), ":", color=REF,
-            label=r"pilot refit, $\gamma=\hat\gamma$")
+            label="joint refit")
     ax.text(0.97, 0.04, rf"refit: AIC-weighted $\hat\omega_1={rf['omega1']:.2f}$" "\n"
             rf"highest weight $[{rf['i_min']}, {rf['i_max']}]$" "\n"
             rf"$\chi^2/\mathrm{{dof}}={rf['chi2']:.1f}/{rf['dof']}$, "

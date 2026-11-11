@@ -86,3 +86,21 @@ unchanged from the table above):
 - `run_study.sh`'s last step, experiment 46's `plot_pipeline.py`, fails on both studies with
   `AssertionError: eq. (m0-star) disagrees with the plan` (its `tradeoff` recomputes $m_0^*$ and
   asserts it equals the plan's). The report is written before it and unaffected; no figure.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `tau_leath_d2_9h` | -0.054872 | 0.909 | 0.000276 ✓ | 0.896 ± 0.423 | 16..65536 (0.16) | -0.122 | 5.85e-05 | 0.00027 ✓ |
+| `tau_leath_d3_9h` | -0.189352 | 0.73 | 0.000995 ✓ | 0.695 ± 0.178 | 16..262144 (0.24) | -0.24 | 0.000248 | 0.00106 ✓ |
+
+Coverage of every reference: old 2/2, new 2/2.

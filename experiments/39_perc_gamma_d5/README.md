@@ -68,3 +68,20 @@ Result (584.6 min drawn, predicted 600.0, ratio 0.97x):
 Why it fails: the Step 4 refit pins gamma to gamma-hat. That assumes the bias of gamma-hat is small next to its se, which holds in d = 4 (B_fs 8e-5) but not here, where the bias is 20x the se term. Forced to the slope 1.2027, the fit needs a faster correction (omega1 1.03, against 0.44 free on the same pilot), and B_fs comes out about 11x too small. With omega1, a1 from the long-run AIC fit below (free gamma), the same eq. (720) gives B_fs 0.105, bound [1.0968, 1.3086], containing 1.1792; over omega1 +- 1 se, B_fs 0.086..0.130, all containing it. Correction to the budget table above: it used m = 5; report.py's m is the number of scales (6), which gives B_fs 0.089 from the pilot constants, not 0.124.
 
 AIC on the whole long run (`tools/local_slope.omega_ranges`, gamma free, min_points 6, CLT se, x = 4..512: 16..512 from run.py plus 4, 8 from `data/aic_explore_d5_small/rep1..5`): best range 4..256 (chi2 0.93/3, weight 0.29; 4..512 weight 0.27), **omega 0.421 +- 0.029 (stat) +- 0.032 (range) = +- 0.043 (10 %)**, a1 -0.414, **gamma 1.1743 +- 0.0030 (stat) +- 0.0028 (range) = +- 0.0041**: 1.2 sigma below 1.1792, error about 6x the literature's. omega is in x = 1/eps units, so it is Delta_1 directly: 0.42 against 0.412 from Wikipedia's omega x nu.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `aic_explore_d5` | 1.202687 | 1.23 | 0.00632 ✗ | 0.453 ± 0.0821 | 4..512 (0.32) | -0.397 | 0.0866 | 0.0877 ✓ |
+
+Coverage of every reference: old 0/1, new 1/1.
