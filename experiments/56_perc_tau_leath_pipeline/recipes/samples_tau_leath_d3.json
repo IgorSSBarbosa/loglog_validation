@@ -1,0 +1,28 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_leath",
+  "params": {
+    "dim": 3,
+    "p": 0.3116077,
+    "batch_factor": 1.0,
+    "batch_exponent": 0.0
+  },
+  "scales": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768,
+    65536
+  ],
+  "n": 1000000,
+  "seed": null,
+  "_comment": "User, 2026-11-10: 9 h pipeline (autopilot) for 2 - tau, d = 3, Leath sampler, one cluster a sample. Experiment 55's pilot recipe (ladder 16..65536, n = 1e6), seed from autopilot --seed. Peak memory measured 2026-11-10: 32 bytes * s per thread (512 MiB at s = 2**24)."
+}
