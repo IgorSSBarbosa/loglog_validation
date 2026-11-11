@@ -459,6 +459,17 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
       `wilson_score_interval` remains a **different object** (binomial score interval, for
       putting a CI on a measured coverage proportion)
 - [ ] `tools/bootstrap.py` — resampling for constants
+- [ ] **Make the Step 4 (A1) local-slope stage cheap** (Igor, 2026-11-10: "it should
+      not take so much time"; fix later, the running studies were left to finish).
+      Seen on `56_perc_tau_leath_pipeline` `tau_leath_d2_9h`/`d3_9h`: after the 9h
+      autopilot budget was spent, `src/study/local_slope.py` ran for hours more
+      (d2: est. ~7h, d3: ~3h) because every pilot mean ($n = 10^6$) is topped up to the
+      final's $n_f$ (7.5M / 5.7M) at every scale up to 65536, per the equal-$n$ rule of
+      2026-09-28. Its draws sit outside `--time`, and its printed prediction is wrong
+      by ~2000× (3.2 s / 4.2 s predicted vs. hours), so nothing warns about the cost.
+      At minimum: fix the prediction, and count the stage in the budget (or print its
+      real cost before drawing). The equal-$n$ requirement itself stays (article
+      Step 4, (A1), `main.tex` ~l. 2539) unless decided otherwise.
 
 ## Later phases (not started, not designed yet)
 - [ ] Resolve open question: Bethe-lattice closed form (article appendix is an empty
