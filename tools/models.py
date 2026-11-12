@@ -36,6 +36,7 @@ from models import percolation_susceptibility_L_gpu as model_percolation_suscept
 from models import percolation_susceptibility_explore as model_percolation_susceptibility_explore
 from models import percolation_susceptibility_layers as model_percolation_susceptibility_layers
 from models import percolation_susceptibility_layers_gpu as model_percolation_susceptibility_layers_gpu
+from models import percolation_susceptibility_hybrid as model_percolation_susceptibility_hybrid
 from models import percolation_c1_gpu as model_percolation_c1_gpu
 from models import percolation_tau_leath as model_percolation_tau_leath
 from models import percolation_tau_zd as model_percolation_tau_zd
@@ -406,6 +407,15 @@ MODELS: dict[str, ModelSpec] = {
         simulate=model_percolation_susceptibility_layers_gpu.simulate,
         batched_cost=True,
         latency_bound=True,
+    ),
+    "percolation_susceptibility_hybrid": ModelSpec(
+        # The layers models' S(p): every sample starts on a CPU thread; one
+        # that would pass `cut` sites is regrown from its seed on the GPU
+        # (user, 2026-11-12). Same samples bit for bit. Experiment 60.
+        simulate=model_percolation_susceptibility_hybrid.simulate,
+        batched_cost=True,
+        latency_bound=True,
+        device_fill=model_percolation_susceptibility_hybrid.device_fill,
     ),
     "percolation_tau_leath": ModelSpec(
         # Q(s) = P(|C(0)| >= s) ~ s**(2-tau) by Leath growth from the origin,
