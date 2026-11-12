@@ -35,6 +35,7 @@ from models import percolation_susceptibility_gpu as model_percolation_susceptib
 from models import percolation_susceptibility_L_gpu as model_percolation_susceptibility_L_gpu
 from models import percolation_susceptibility_explore as model_percolation_susceptibility_explore
 from models import percolation_susceptibility_layers as model_percolation_susceptibility_layers
+from models import percolation_susceptibility_layers_gpu as model_percolation_susceptibility_layers_gpu
 from models import percolation_c1_gpu as model_percolation_c1_gpu
 from models import percolation_tau_leath as model_percolation_tau_leath
 from models import percolation_tau_zd as model_percolation_tau_zd
@@ -396,6 +397,15 @@ MODELS: dict[str, ModelSpec] = {
         batched_cost=True,
         latency_bound=True,
         device_fill=model_percolation_susceptibility_layers.device_fill,
+    ),
+    "percolation_susceptibility_layers_gpu": ModelSpec(
+        # percolation_susceptibility_layers with each cluster grown on the GPU,
+        # one chemical layer per launch (user, 2026-11-12). Same samples bit
+        # for bit; samples run one after another, so small clusters are slow
+        # here (~25 us a layer). Experiment 59. Timed batched, as the CPU model.
+        simulate=model_percolation_susceptibility_layers_gpu.simulate,
+        batched_cost=True,
+        latency_bound=True,
     ),
     "percolation_tau_leath": ModelSpec(
         # Q(s) = P(|C(0)| >= s) ~ s**(2-tau) by Leath growth from the origin,
