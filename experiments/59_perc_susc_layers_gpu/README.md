@@ -119,3 +119,9 @@ The best single cluster ran 55× faster ($2.8\cdot10^8$ sites: 24.3 s on the CPU
   It is paid even for a single-site cluster. Small clusters stay on the CPU.
 - **Not yet measured:** CPU throughput with all threads busy, which is the real competitor in the hybrid (experiment 58: ~3× slower per thread under load).
   Also not measured: the cost of handing a cluster from the CPU to the GPU mid-growth. Both belong to the hybrid's experiment.
+
+## Later change (experiment 60, 2026-11-12)
+
+A rebuild now grows the table to `_SLACK = 8` times the worst-case need.
+Before, launches at $d=2$ stopped for room every ~3 layers. Validation was rerun afterwards: `ALL IDENTICAL`.
+The step 3 timings above were taken before this change.

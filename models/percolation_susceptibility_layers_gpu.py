@@ -57,8 +57,9 @@ The table on the device
 keys (int64, -1 empty) and the layer of each key, linear probing, as the CPU
 model. While layer l is expanded only layers l-1, l, l+1 are looked up, so a
 rebuild keeping layers >= l-1 is exact. Between launches the host rebuilds when
-occupancy + worst-case growth would pass half the table (dropping old layers,
-then doubling). The table stops growing at the first power of two >= 2
+occupancy + worst-case growth would pass half the table: it drops old layers,
+then grows the table to _SLACK times that need, so the next launch runs many
+layers before it stops for room. The table stops growing at the first power of two >= 2
 max_live slots; if worst-case growth cannot fit in 3/4 of it after dropping old
 layers, the sample fails with MemoryError. Because the room is reserved for
 the worst case, this cap binds earlier than the CPU model's cap does (a table
@@ -89,6 +90,9 @@ _MAX_ITERS = 1 << 14
 #: the kernel stops before a layer whose worst case would pass this load (tests
 #: lower it to make launches end often)
 _HARD_LOAD = 0.75
+
+#: a rebuild that grows the table makes it this many times the worst-case need
+_SLACK = 8
 
 _DONE, _ROOM, _BUF, _ITERS, _EDGE = 0, 1, 2, 3, 4
 
@@ -277,8 +281,11 @@ class _Table:
         if self.occ + grow_by <= self.size // 2:
             return
         self.rebuild(self.size, max(layer - 1, 0))
-        while self.occ + grow_by > self.size // 2 and self.size < table_cap:
-            self.rebuild(2 * self.size, 0)
+        # slack, so the next launch runs many layers before it stops for room
+        # (sized just to fit, d = 2 launches ran ~3 layers each: experiment 60)
+        target = min(1 << (_SLACK * (self.occ + grow_by) - 1).bit_length(), table_cap)
+        if target > self.size:
+            self.rebuild(target, 0)
         if self.occ + grow_by > int(_HARD_LOAD * self.size):
             raise MemoryError(
                 f"layer {layer}: {self.occ:,} live sites plus a worst case of "
