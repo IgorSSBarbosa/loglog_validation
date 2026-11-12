@@ -58,7 +58,7 @@ def validate(args: argparse.Namespace) -> None:
             bad = big = reb = rep = 0  # rep: launches
             for s in seeds:
                 c, prof = _cpu(s, thresh, key0, bits, dim)
-                g = G.grow_cluster(int(s), thresh, key0, bits, dim, max_live=max_live)
+                g = G.grow_cluster(int(s), thresh, dim, max_live=max_live)
                 ok = (c[0] == g["size"] and c[5] == g["depth"]
                       and np.array_equal(prof, g["layers"])
                       and prof.sum() == g["size"])
@@ -102,12 +102,12 @@ def bench(args: argparse.Namespace) -> None:
         pick += list(idx[:args.per_bin])
     # warm up both (numba compile, NVRTC compile)
     _cpu(z["seeds"][pick[0]], thresh, key0, bits, dim)
-    G.grow_cluster(int(z["seeds"][pick[-1]]), thresh, key0, bits, dim)
+    G.grow_cluster(int(z["seeds"][pick[-1]]), thresh, dim)
     rows = []
     for i in pick:
         s = int(z["seeds"][i])
         t = time.perf_counter()
-        g = G.grow_cluster(s, thresh, key0, bits, dim)
+        g = G.grow_cluster(s, thresh, dim)
         t_gpu = time.perf_counter() - t
         t_cpu = np.nan
         if g["size"] <= args.cpu_max:

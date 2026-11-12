@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 5,
+    "eps0": 0.07,
+    "cut": 4194304
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "n": [112500, 175000, 280000, 485000, 785000, 1235000, 2370000, 4200000, 8000000, 11800000, 23000000],
+  "seed": null,
+  "_comment": "User, 2026-11-12: pilot for gamma, d = 5, on the CPU/GPU hybrid with the balanced cut 2**22 (experiment 60's sweep at x = 4096). Ladder and n are experiment 58's recipe (samples_gsusc_d5_layers.json), so the two pilots are comparable. max_live is the GPU side's default (2**26)."
+}

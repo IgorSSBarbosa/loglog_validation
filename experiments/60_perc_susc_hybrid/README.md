@@ -66,6 +66,31 @@ NUMBA_NUM_THREADS=30 .venv/bin/python experiments/60_perc_susc_hybrid/sweep_cut.
   The batches are static `prange` chunks, so each chunk waits on its slowest sample. That is experiment 58's idle-thread effect, now bounded by the cut.
   At cut $2^{25}$ the hybrid is back at the baseline's wall time.
 
+## Step 3 — two-word keys, so $x\ge 65536$ can run (purus, 2026-11-12)
+
+- **Why.** The 10 h plan from the $n=25\cdot10^6$ pilot (`gsusc_d5_hybrid_n25m`, scales 4…512) ended at $x=65536$. There a cluster reached the one-word key's $\pm2^{11}$ edge after $4\cdot10^5$ samples, and the plan drew $3.7\cdot10^6$ per replicate.
+- **Change.** The GPU model's keys are now two words: 21 bits a coordinate at $d=4,5$ ($\pm2^{20}$).
+  - A site inside the old box keeps its old state; outside it a separate hash decides. Details are in the model's docstring.
+  - The hybrid's CPU side keeps the one-word key and hands a cluster that reaches its edge to the GPU.
+- **Validation.**
+  - Experiment 59's `check_gpu.py validate`: identical sizes and layer profiles in $d=2$–5, at both hard loads.
+  - Local tests: 34 pass. They include a Python reference of the far-site rule (box shrunk to $\pm4$) and edge hand-offs in the hybrid.
+  - The $x=65536$ sequence that crashed now completes; its largest cluster was $1.16\cdot10^{10}$ sites, 412,722 layers, 192 MiB of VRAM.
+- **Cost.** On the same 115 clusters ($x=4096$), GPU time is 1.26× the one-word kernel's.
+  - The cut sweep still puts the optimum at $2^{22}$. At $x=4096$, $n=10^6$ the wall is 53.2 s (one-word: 41.4 s); at $x=16384$, $n=2\cdot10^5$ it is 29.5 s.
+  - The cost probe was redone: affine $d=1.087\pm0.094$ (one-word: $0.968\pm0.094$).
+
+### The 10 h run
+
+- **The probe's $d$ mispredicts the plan's scales.** Measured walls per $10^6$ samples (cut $2^{22}$, 29 threads + GPU): 2048: 32 s, 4096: 48 s, 8192: 71 s, 16384: 103 s, 32768: 174 s, 65536: 292 s, 131072: 244 s.
+  - That is about $x^{0.64}$, against the probe's $x^{1.09}$ on 4…4096. With the pilot's throughput, plan.py predicted 200 min for a replicate that takes ~29 min.
+  - The GPU is the bottleneck at all these scales; the CPU side is busy ~40 s per $10^6$.
+- **Plan.** `plan.py --time 10h --throughput 7e8` (throughput set from these timings):
+  - $m_0=11$, scales 4096…131072, $n=11{,}415{,}415$ per scale × 3 replicates.
+  - Predicted se on the answer 0.0030; measured-rate estimate ~9 h.
+  - The plan's se uses the pilot's mean cv (19.5); the per-scale cv grows like $x^{0.41}$, so the realised se will be larger.
+- **Launch.** 2026-11-12 18:51, seed 2026111262. Log: `data/gsusc_d5_hybrid_n25m_run.log`. The code is the working tree on top of `a9d5330`; the two-word key is not committed yet.
+
 ## Not done yet: two independent improvements
 
 1. **Several clusters on the GPU at once.** A layer of a few thousand sites occupies a small fraction of the RTX 5090, and clusters are grown one after another.

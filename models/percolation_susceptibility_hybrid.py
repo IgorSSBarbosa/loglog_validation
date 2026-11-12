@@ -28,6 +28,11 @@ The CPU side needs no layer recycling: it never holds more than `cut` sites
 (a table of 2 cut slots, 8 bytes each, per thread). The GPU side recycles
 layers as percolation_susceptibility_layers_gpu does.
 
+The CPU side keeps the one-word key (+-2**11 at d = 5). A cluster that reaches
+its edge before the cut is handed off too, and the GPU's two-word key takes it
+to +-2**20 (user, 2026-11-12: at x = 65536 a cluster reached +-2**11 within
+4e5 samples, so experiment 60's 10 h plan could not run).
+
 Concurrency
 -----------
 The samples are processed in chunks. A chunk runs on all numba threads; its
@@ -67,6 +72,7 @@ _OK, _EDGE, _HAND = 0, 1, 2
 @njit
 def _small(seed, thresh, key0, bits, dim, cut, keys, slots, fifo):
     """(|C| or -1, status) for one seed, holding at most `cut` sites.
+    _HAND past `cut` sites, _EDGE at the one-word key's edge: both go to the GPU.
 
     keys must be all _EMPTY on entry; it is again on return (only the slots
     used, recorded in `slots`, are cleared)."""
@@ -141,7 +147,8 @@ def explore_hybrid(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
                    ) -> tuple[np.ndarray, dict]:
     """n samples of Y = |C(0)| / p (same rng -> same Y as explore_layers).
 
-    info: size, reads (1 + 2 dim |C|), on_gpu (bool per sample), p, and the
+    info: size, reads (1 + 2 dim |C|), on_gpu (bool per sample),
+    edge_handoffs (how many reached the CPU key's edge before the cut), p, and the
     call's timings: wall, cpu_s (time inside the CPU batches), gpu_s (time
     the GPU thread spent growing), gpu_wait_s (wall after the last CPU chunk,
     i.e. time only the GPU was working)."""
@@ -176,7 +183,7 @@ def explore_hybrid(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
             r, s = item
             t = time.perf_counter()
             try:
-                size[r] = G.grow_cluster(s, thresh, key0, bits, dim, max_live)["size"]
+                size[r] = G.grow_cluster(s, thresh, dim, max_live)["size"]
             except BaseException as err:  # re-raised in the caller's thread
                 gpu["err"] = err
             gpu["s"] += time.perf_counter() - t
@@ -185,6 +192,7 @@ def explore_hybrid(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
     t_wall = time.perf_counter()
     worker.start()
     cpu_s = 0.0
+    edge_handoffs = 0
     try:
         for lo in range(0, n, chunk):
             hi = min(lo + chunk, n)
@@ -192,13 +200,9 @@ def explore_hybrid(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
             sz, st = _cpu_batch(seeds[lo:hi], np.uint64(thresh), np.int64(key0),
                                 bits, dim, int(cut), max(1, min(hi - lo, threads)))
             cpu_s += time.perf_counter() - t
-            if np.any(st == _EDGE):
-                raise RuntimeError(
-                    f"a cluster reached the +-2**{bits - 1} key range at x = {x}, "
-                    f"dim = {dim} (p = {p:.8g}); it is not wrapped or truncated, so "
-                    "the sample cannot be reported")
+            edge_handoffs += int(np.sum(st == _EDGE))
             size[lo:hi] = np.where(st == _OK, sz, 0)
-            for i in np.flatnonzero(st == _HAND):
+            for i in np.flatnonzero(st != _OK):
                 on_gpu[lo + i] = True
                 todo.put((lo + i, int(seeds[lo + i])))
             if gpu["err"] is not None:
@@ -214,7 +218,8 @@ def explore_hybrid(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
         raise gpu["err"]
     wall = time.perf_counter() - t_wall
     reads = np.where(size > 0, 1 + 2 * dim * size, 1)
-    return size / p, {"size": size, "reads": reads, "on_gpu": on_gpu, "p": p,
+    return size / p, {"size": size, "reads": reads, "on_gpu": on_gpu,
+                      "edge_handoffs": edge_handoffs, "p": p,
                       "wall": wall, "cpu_s": cpu_s, "gpu_s": gpu["s"],
                       "gpu_wait_s": time.perf_counter() - t_cpu_done}
 
