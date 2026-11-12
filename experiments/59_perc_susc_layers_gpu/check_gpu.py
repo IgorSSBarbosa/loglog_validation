@@ -2,7 +2,7 @@
 
 validate  same seed -> identical |C|, depth and layer sizes N_l as the CPU
           model's _one_sample, d = 2..5, with a small max_live (rebuilds) and
-          with the hard load limit lowered to 1/2 (refused inserts, repeats)
+          with the hard load limit lowered to 1/2 (launches end and resume often)
 scan      d = 5: |C| of n samples on all CPU threads (the CPU layers model);
           saves the seeds and sizes, to pick clusters of every size from
 bench     per log2 bin of |C|, time the same clusters on one CPU thread and on
@@ -47,7 +47,7 @@ def _cpu(seed, thresh, key0, bits, dim):
 
 def validate(args: argparse.Namespace) -> None:
     cases = ((2, 0.15, 64, 20_000), (3, 0.15, 256, 20_000), (4, 0.07, 128, 1 << 20),
-             (5, 0.07, 512, 1 << 20), (5, 0.07, 512, 1000))
+             (5, 0.07, 512, 1 << 20), (5, 0.07, 512, 5000))
     all_ok = True
     for hard in (G._HARD_LOAD, 0.5 + 1e-9):
         G._HARD_LOAD = hard
@@ -55,7 +55,7 @@ def validate(args: argparse.Namespace) -> None:
             thresh, bits, key0 = _setup(x, dim, eps0)
             seeds = np.random.default_rng(args.seed + 1000 * dim + x).integers(
                 0, 2 ** 63, size=args.n, dtype=np.int64).astype(np.uint64)
-            bad = big = reb = rep = 0
+            bad = big = reb = rep = 0  # rep: launches
             for s in seeds:
                 c, prof = _cpu(s, thresh, key0, bits, dim)
                 g = G.grow_cluster(int(s), thresh, key0, bits, dim, max_live=max_live)
@@ -65,11 +65,11 @@ def validate(args: argparse.Namespace) -> None:
                 bad += not ok
                 big = max(big, g["size"])
                 reb += g["rebuilds"]
-                rep += g["repeats"]
+                rep += g["launches"]
             all_ok &= bad == 0
             print(f"hard load {hard:.2f}  dim={dim} x={x:4d} max_live={max_live:8d}  "
                   f"mismatches {bad}/{args.n}  max|C|={big:9d}  rebuilds={reb:5d}  "
-                  f"repeats={rep:5d}")
+                  f"launches={rep:6d}")
     print("ALL IDENTICAL" if all_ok else "MISMATCH")
 
 

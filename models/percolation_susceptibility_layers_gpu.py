@@ -1,5 +1,5 @@
 """models/percolation_susceptibility_layers.py with each cluster grown on a CUDA
-GPU, one chemical layer per kernel launch -- registered as
+GPU, many chemical layers per kernel launch -- registered as
 MODELS["percolation_susceptibility_layers_gpu"] in tools/models.py.
 
 Why (user, 2026-11-12): at d = 5 the cost is set by a few huge clusters
@@ -7,7 +7,7 @@ Why (user, 2026-11-12): at d = 5 the cost is set by a few huge clusters
 CPU thread). Parallelising WITHIN a cluster, not across clusters, keeps the
 memory of one exploration (three live layers) while spreading its work. This
 module is the first part of a plan: measure where GPU growth beats a CPU thread,
-then send only clusters above a size cut to the GPU (the hybrid, not built yet).
+then send only clusters above a size cut to the GPU (a separate hybrid model).
 
 Same sample as the CPU model, bit for bit
 -----------------------------------------
@@ -29,23 +29,40 @@ need atomics anyway; with atomicCAS on the slot the thread that claims a key
 is the only one to append it to the next frontier, and one pass per layer
 suffices.
 
+One launch, many layers (experiment 59, step 3)
+-----------------------------------------------
+The first version launched one kernel per layer and read N_{l+1} back each
+time: 24.5 us a layer, of which a layer's actual work was a small part (step
+2). Now one cooperative launch runs layer after layer with a grid-wide barrier
+(`grid.sync()`, ~0.9 us on an RTX 5090) between them. What makes it exact:
+
+- the counters (sites appended, edge flag) rotate over three slots: layer l
+  appends to slot l+1, reads slot l+1 after the barrier, and thread 0 clears
+  slot l+2 during layer l, when no thread reads it any more;
+- every thread takes the same stop decision, from values no thread changes
+  until the next barrier: N_{l+1} and the occupancy, which needs no atomic
+  counter because every successful CAS appends exactly one site, so
+  occupancy = occupancy at launch + sum of the N appended since;
+- the kernel stops BEFORE a layer whose worst case could overfill the table
+  or the frontier buffer: a layer l >= 1 adds at most (2d-1) N_l sites (each
+  site's parent is already in the table), layer 0 at most 2d. So inserts are
+  never refused and nothing is ever redone.
+
+The host then makes room and launches again. It does so when the table would
+be more than 3/4 full in the worst case, when the frontier buffer could
+overflow, or after `max_iters` layers (the size of the per-launch N_l record).
+
 The table on the device
 -----------------------
 keys (int64, -1 empty) and the layer of each key, linear probing, as the CPU
 model. While layer l is expanded only layers l-1, l, l+1 are looked up, so a
-rebuild keeping layers >= l-1 is exact. Before each layer the host, which reads
-N_{l+1} after every launch, rebuilds when the table is more than half full
-(dropping old layers, and doubling if that is not enough). Inside a launch an
-insert that would pass 3/4 load is refused and flagged; the host then grows or
-rebuilds and REPEATS the layer. A repeat is idempotent: keys already inserted
-are found and skipped (they are in the frontier already), the refused ones are
-inserted now. The table stops growing at the first power of two >= 2 max_live
-slots (so up to ~1.5 max_live live sites at 3/4 load); if dropping old layers
-frees nothing there, the sample fails with MemoryError, as the CPU model.
-
-Cost of a layer: one launch and one 24-byte device->host read of the counters
-(the synchronisation that tells the host N_{l+1}). That is the price per layer that a CPU thread
-does not pay, and why small clusters belong on the CPU.
+rebuild keeping layers >= l-1 is exact. Between launches the host rebuilds when
+occupancy + worst-case growth would pass half the table (dropping old layers,
+then doubling). The table stops growing at the first power of two >= 2
+max_live slots; if worst-case growth cannot fit in 3/4 of it after dropping old
+layers, the sample fails with MemoryError. Because the room is reserved for
+the worst case, this cap binds earlier than the CPU model's cap does (a table
+~2(2d+2) N_l slots, not ~6 N_l); at the default max_live it is far away.
 """
 
 from __future__ import annotations
@@ -62,14 +79,22 @@ DEFAULT_MAX_LIVE = 1 << 26
 #: first table size (slots); it doubles as needed
 _T0 = 1 << 14
 
+#: threads a block; blocks = one per SM (the cooperative launch's limit for
+#: this kernel on the RTX 5090, see experiment 59)
 _THREADS = 256
 
-#: inserts past this load are refused and the layer repeated (tests lower it
-#: to exercise the repeat path, which a 3/4 limit almost never reaches)
+#: layers one launch may run (it records N_l for each)
+_MAX_ITERS = 1 << 14
+
+#: the kernel stops before a layer whose worst case would pass this load (tests
+#: lower it to make launches end often)
 _HARD_LOAD = 0.75
-_EDGE, _OVER, _BUF = 1, 2, 4
+
+_DONE, _ROOM, _BUF, _ITERS, _EDGE = 0, 1, 2, 3, 4
 
 _KERNEL = r"""
+#include <cooperative_groups.h>
+namespace cg = cooperative_groups;
 typedef unsigned long long u64;
 #define EMPTY 0xFFFFFFFFFFFFFFFFULL
 
@@ -79,68 +104,99 @@ __device__ __forceinline__ u64 mix(u64 z) {
     return z ^ (z >> 31);
 }
 
-// one thread per (frontier site, direction)
-extern "C" __global__ void expand(
-        const long long* cur, const long long n_cur,
-        u64* keys, int* lay, const u64 mask,
-        long long* nxt, const u64 nxt_cap, u64* ctr, const u64 occ_limit,
-        const u64 seed, const u64 thresh,
-        const int bits, const int dim, const int layer) {
-    // ctr[0] = sites appended to nxt, ctr[1] = table occupancy, ctr[2] = flags
-    u64* n_nxt = ctr;
-    u64* occ = ctr + 1;
-    u64* flags = ctr + 2;
-    long long t = (long long)blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= n_cur * 2 * dim) return;
-    const long long k = cur[t / (2 * dim)];
-    const int r = (int)(t % (2 * dim));
-    const int shift = bits * (r >> 1);
+// Grow layers layer0, layer0+1, ... from the n_cur sites in buf0.
+// slots[3][2]: per rotating slot, (sites appended, edge flag); slot 1 zero on entry.
+// out[0..2] = (layers run, n_cur after them, status), out[3 + i] = N of layer layer0+i+1.
+extern "C" __global__ void grow(
+        long long* buf0, long long* buf1, const long long buf_cap,
+        u64* keys, int* lay, const u64 mask, const long long occ_limit, long long occ,
+        long long n_cur, const int layer0, const int max_iters,
+        const u64 seed, const u64 thresh, const int bits, const int dim,
+        u64* slots, long long* out) {
+    cg::grid_group grid = cg::this_grid();
+    const long long tid = grid.thread_rank();
+    const long long nth = grid.size();
     const long long fmask = (1LL << bits) - 1;
-    const long long f = (k >> shift) & fmask;
-    if (f == 0 || f == fmask) { atomicOr(flags, 1ULL); return; }
-    const long long step = 1LL << shift;
-    const long long nk = (r & 1) ? k - step : k + step;
-    if (mix(seed + (u64)nk * 0x9E3779B97F4A7C15ULL) >= thresh) return;
-    u64 h = mix((u64)nk) & mask;
-    bool reserved = false;
+    int it = 0, status;
     while (true) {
-        u64 cur_key = keys[h];
-        if (cur_key == (u64)nk) break;
-        if (cur_key == EMPTY) {
-            if (!reserved) {
-                if (atomicAdd(occ, 1ULL) >= occ_limit) {
-                    atomicAdd(occ, (u64)-1LL);
-                    atomicOr(flags, 2ULL);
-                    return;
+        const int l = layer0 + it;
+        const long long B = (l == 0) ? 2 * dim : 2 * dim - 1;
+        if (n_cur == 0) { status = 0; break; }
+        if (occ + B * n_cur > occ_limit) { status = 1; break; }
+        if (B * n_cur > buf_cap) { status = 2; break; }
+        if (it == max_iters) { status = 3; break; }
+        const long long* cur = (it & 1) ? buf1 : buf0;
+        long long* nxt = (it & 1) ? buf0 : buf1;
+        u64* s = slots + 2 * ((it + 1) % 3);
+        if (tid == 0) { u64* z = slots + 2 * ((it + 2) % 3); z[0] = 0; z[1] = 0; }
+        for (long long t = tid; t < n_cur * 2 * dim; t += nth) {
+            const long long k = __ldcg(cur + t / (2 * dim));
+            const int r = (int)(t % (2 * dim));
+            const int shift = bits * (r >> 1);
+            const long long f = (k >> shift) & fmask;
+            if (f == 0 || f == fmask) { atomicOr(s + 1, 1ULL); continue; }
+            const long long step = 1LL << shift;
+            const long long nk = (r & 1) ? k - step : k + step;
+            if (mix(seed + (u64)nk * 0x9E3779B97F4A7C15ULL) >= thresh) continue;
+            u64 h = mix((u64)nk) & mask;
+            while (true) {
+                // a stale cached read can only be EMPTY (no key is removed
+                // within a launch), and the CAS below returns the true value
+                const u64 c = keys[h];
+                if (c == (u64)nk) break;
+                if (c == EMPTY) {
+                    const u64 old = atomicCAS(keys + h, EMPTY, (u64)nk);
+                    if (old == EMPTY) {
+                        lay[h] = l + 1;
+                        nxt[atomicAdd(s, 1ULL)] = nk;
+                        break;
+                    }
+                    if (old == (u64)nk) break;
                 }
-                reserved = true;
+                h = (h + 1) & mask;
             }
-            u64 old = atomicCAS(keys + h, EMPTY, (u64)nk);
-            if (old == EMPTY) {
-                lay[h] = layer + 1;
-                u64 i = atomicAdd(n_nxt, 1ULL);
-                if (i < nxt_cap) nxt[i] = nk; else atomicOr(flags, 4ULL);
-                return;
-            }
-            if (old == (u64)nk) break;
         }
-        h = (h + 1) & mask;
+        grid.sync();
+        const long long n_new = (long long)__ldcg(s);
+        const u64 edge = __ldcg(s + 1);
+        if (tid == 0) out[3 + it] = n_new;
+        occ += n_new;
+        n_cur = n_new;
+        ++it;
+        if (edge) { status = 4; break; }
     }
-    if (reserved) atomicAdd(occ, (u64)-1LL);
+    if (tid == 0) { out[0] = it; out[1] = n_cur; out[2] = status; }
+}
+
+"""
+
+# Compiled apart from `grow`: in a cooperative module CuPy clamps EVERY
+# kernel's grid to the co-resident limit, and a one-thread-a-slot rebuild then
+# skipped the slots past it (found by experiment 59's bench, 2026-11-12).
+# Grid-stride as well, so no clamp can drop a slot.
+_REBUILD = r"""
+typedef unsigned long long u64;
+#define EMPTY 0xFFFFFFFFFFFFFFFFULL
+
+__device__ __forceinline__ u64 mix(u64 z) {
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
 }
 
 // copy the entries with layer >= keep_from into an empty table
 extern "C" __global__ void rebuild(
         const u64* keys, const int* lay, const long long size,
         u64* nkeys, int* nlay, const u64 nmask, const int keep_from, u64* kept) {
-    long long t = (long long)blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= size) return;
-    const u64 k = keys[t];
-    if (k == EMPTY || lay[t] < keep_from) return;
-    u64 h = mix(k) & nmask;
-    while (atomicCAS(nkeys + h, EMPTY, k) != EMPTY) h = (h + 1) & nmask;
-    nlay[h] = lay[t];
-    atomicAdd(kept, 1ULL);
+    for (long long t = (long long)blockIdx.x * blockDim.x + threadIdx.x; t < size;
+         t += (long long)gridDim.x * blockDim.x) {
+        const u64 k = keys[t];
+        if (k == EMPTY || lay[t] < keep_from) continue;
+        u64 h = mix(k) & nmask;
+        while (atomicCAS(nkeys + h, EMPTY, k) != EMPTY) h = (h + 1) & nmask;
+        nlay[h] = lay[t];
+        atomicAdd(kept, 1ULL);
+    }
 }
 """
 
@@ -169,16 +225,20 @@ _compiled: dict = {}
 
 
 def _kernels(cp):
-    """(expand, rebuild), compiled once per process."""
+    """(grow, rebuild, blocks for grow), compiled once per process."""
     if not _compiled:
-        mod = cp.RawModule(code=_KERNEL)
-        _compiled["expand"] = mod.get_function("expand")
-        _compiled["rebuild"] = mod.get_function("rebuild")
-    return _compiled["expand"], _compiled["rebuild"]
+        mod = cp.RawModule(code=_KERNEL, enable_cooperative_groups=True)
+        _compiled["grow"] = mod.get_function("grow")
+        _compiled["rebuild"] = cp.RawModule(code=_REBUILD).get_function("rebuild")
+        _compiled["blocks"] = cp.cuda.Device().attributes["MultiProcessorCount"]
+    return _compiled["grow"], _compiled["rebuild"], _compiled["blocks"]
 
 
-def _blocks(n: int) -> tuple[int]:
-    return ((n + _THREADS - 1) // _THREADS,)
+def _mix_host(z: np.uint64) -> np.uint64:
+    with np.errstate(over="ignore"):
+        z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+        z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+        return z ^ (z >> np.uint64(31))
 
 
 class _Table:
@@ -189,45 +249,40 @@ class _Table:
         self.keys = cp.full(size, -1, dtype=cp.int64)
         self.lay = cp.zeros(size, dtype=cp.int32)
         self.kept = cp.zeros(1, dtype=cp.uint64)
-        self.n_occ = 1
+        self.occ = 1
         self.rebuilds = 0
-        h = int(_mix_host(np.uint64(key0)) & np.uint64(size - 1))
-        self.keys[h] = key0
+        self.keys[int(_mix_host(np.uint64(key0)) & np.uint64(size - 1))] = key0
 
     @property
     def size(self) -> int:
         return int(self.keys.size)
 
-    def rebuild(self, new_size: int, keep_from: int) -> int:
+    def rebuild(self, new_size: int, keep_from: int) -> None:
         cp = self.cp
-        _, rebuild = _kernels(cp)
+        _, rebuild, _ = _kernels(cp)
         nkeys = cp.full(new_size, -1, dtype=cp.int64)
         nlay = cp.zeros(new_size, dtype=cp.int32)
         self.kept[0] = 0
-        rebuild(_blocks(self.size), (_THREADS,),
+        rebuild((min((self.size + 255) // 256, 1 << 16),), (256,),
                 (self.keys, self.lay, np.int64(self.size), nkeys, nlay,
                  np.uint64(new_size - 1), np.int32(keep_from), self.kept))
         self.keys, self.lay = nkeys, nlay
-        self.n_occ = int(self.kept.get()[0])
+        self.occ = int(self.kept.get()[0])
         self.rebuilds += 1
-        return self.n_occ
 
-    def make_room(self, layer: int, table_cap: int) -> None:
-        """Bring the load to <= 1/2 before expanding `layer` if it can be:
-        drop layers <= layer-2, then double up to the cap. A full table at the
-        cap is left to the kernel's 3/4 limit and the repeat path."""
-        if 2 * self.n_occ <= self.size:
+    def make_room(self, layer: int, grow_by: int, table_cap: int) -> None:
+        """Before expanding `layer`, which adds at most `grow_by` sites: if the
+        worst case passes half the table, drop layers <= layer-2, then double up
+        to the cap. MemoryError if the worst case still passes the hard load."""
+        if self.occ + grow_by <= self.size // 2:
             return
         self.rebuild(self.size, max(layer - 1, 0))
-        while 2 * self.n_occ > self.size and self.size < table_cap:
+        while self.occ + grow_by > self.size // 2 and self.size < table_cap:
             self.rebuild(2 * self.size, 0)
-
-
-def _mix_host(z: np.uint64) -> np.uint64:
-    with np.errstate(over="ignore"):
-        z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
-        return z ^ (z >> np.uint64(31))
+        if self.occ + grow_by > int(_HARD_LOAD * self.size):
+            raise MemoryError(
+                f"layer {layer}: {self.occ:,} live sites plus a worst case of "
+                f"{grow_by:,} new ones do not fit the table cap ({table_cap:,} slots)")
 
 
 def grow_cluster(seed: int, thresh: int, key0: int, bits: int, dim: int,
@@ -235,65 +290,56 @@ def grow_cluster(seed: int, thresh: int, key0: int, bits: int, dim: int,
     """Grow the cluster of the origin for one sample seed on the GPU.
 
     Returns {"size", "depth", "layers" (N_l, int64 array), "rebuilds",
-    "repeats" (layers repeated after a refused insert), "peak_bytes"}.
-    size 0 and depth -1 for a closed origin (checked on the host)."""
+    "launches", "peak_bytes"}. size 0 and depth -1 for a closed origin
+    (checked on the host, no launch)."""
     if not _is_open(np.uint64(seed), np.int64(key0), np.uint64(thresh)):
         return {"size": 0, "depth": -1, "layers": np.zeros(0, np.int64),
-                "rebuilds": 0, "repeats": 0, "peak_bytes": 0}
+                "rebuilds": 0, "launches": 0, "peak_bytes": 0}
     cp = _cupy()
-    expand, _ = _kernels(cp)
+    grow, _, blocks = _kernels(cp)
     table_cap = 1 << max(int(2 * max_live - 1).bit_length(), 1)
     tab = _Table(cp, key0, min(_T0, table_cap))
-    cur = cp.full(1024, key0, dtype=cp.int64)
-    nxt = cp.empty(1024, dtype=cp.int64)
-    ctr = cp.zeros(3, dtype=cp.uint64)
-    n_cur = 1
-    layer = 0
-    layers = []
-    repeats = 0
-    peak_bytes = 0
+    buf_cap = 1 << 12
+    buf0 = cp.full(buf_cap, key0, dtype=cp.int64)
+    buf1 = cp.empty(buf_cap, dtype=cp.int64)
+    slots = cp.zeros(6, dtype=cp.uint64)
+    out = cp.zeros(3 + _MAX_ITERS, dtype=cp.int64)
+    n_cur, layer, launches, peak_bytes = 1, 0, 0, 0
+    layers = [np.array([1], dtype=np.int64)]
     seed_u, thresh_u = np.uint64(seed), np.uint64(thresh)
     while n_cur > 0:
-        layers.append(n_cur)
-        # a layer adds at most (2 dim - 1) n_cur sites (2 dim at layer 0)
-        bound = 2 * dim * n_cur
-        if nxt.size < bound:
-            nxt = cp.empty(1 << (bound - 1).bit_length(), dtype=cp.int64)
-        n_new = 0
-        while True:
-            tab.make_room(layer, table_cap)
-            ctr.set(np.array([n_new, tab.n_occ, 0], dtype=np.uint64))
-            expand(_blocks(bound), (_THREADS,),
-                   (cur, np.int64(n_cur), tab.keys, tab.lay,
-                    np.uint64(tab.size - 1), nxt, np.uint64(nxt.size), ctr,
-                    np.uint64(int(_HARD_LOAD * tab.size)), seed_u, thresh_u,
-                    np.int32(bits), np.int32(dim), np.int32(layer)))
-            n_new, tab.n_occ, fl = (int(v) for v in ctr.get())
-            if fl & _EDGE:
-                raise RuntimeError(
-                    f"a cluster reached the +-2**{bits - 1} key range (dim = {dim}); "
-                    "it is not wrapped or truncated, so the sample cannot be reported")
-            if fl & _BUF:
-                raise AssertionError("frontier buffer overflow: the bound is wrong")
-            if not fl & _OVER:
-                break
-            # refused inserts: force room (half load), then repeat the layer
-            repeats += 1
-            if tab.size >= table_cap:
-                before = tab.n_occ
-                if tab.rebuild(tab.size, max(layer - 1, 0)) >= before:
-                    raise MemoryError(
-                        f"three live layers fill the table cap ({table_cap:,} slots)")
-            else:
-                tab.rebuild(2 * tab.size, 0)
-        b = tab.size * 12 + (cur.size + nxt.size) * 8
-        peak_bytes = max(peak_bytes, b)
-        cur, nxt = nxt, cur
-        n_cur = n_new
-        layer += 1
-    lay = np.asarray(layers, dtype=np.int64)
+        bound = (2 * dim if layer == 0 else 2 * dim - 1) * n_cur
+        tab.make_room(layer, bound, table_cap)
+        if bound > buf_cap:
+            # slack: a launch should run many layers before the next resize
+            buf_cap = 1 << (8 * bound - 1).bit_length()
+            nb = cp.empty(buf_cap, dtype=cp.int64)
+            nb[:n_cur] = buf0[:n_cur]
+            buf0, buf1 = nb, cp.empty(buf_cap, dtype=cp.int64)
+        slots.fill(0)
+        grow((blocks,), (_THREADS,),
+             (buf0, buf1, np.int64(buf_cap), tab.keys, tab.lay,
+              np.uint64(tab.size - 1), np.int64(int(_HARD_LOAD * tab.size)),
+              np.int64(tab.occ), np.int64(n_cur), np.int32(layer),
+              np.int32(_MAX_ITERS), seed_u, thresh_u, np.int32(bits),
+              np.int32(dim), slots, out))
+        launches += 1
+        head = out[:3].get()
+        it, n_cur, status = (int(v) for v in head)
+        if status == _EDGE:
+            raise RuntimeError(
+                f"a cluster reached the +-2**{bits - 1} key range (dim = {dim}); "
+                "it is not wrapped or truncated, so the sample cannot be reported")
+        new = out[3:3 + it].get()
+        tab.occ += int(new.sum())
+        layers.append(new)
+        layer += it
+        if it & 1:
+            buf0, buf1 = buf1, buf0
+        peak_bytes = max(peak_bytes, tab.size * 12 + 2 * buf_cap * 8)
+    lay = np.concatenate(layers)[:-1]   # the last entry is the empty layer
     return {"size": int(lay.sum()), "depth": layer - 1, "layers": lay,
-            "rebuilds": tab.rebuilds, "repeats": repeats, "peak_bytes": peak_bytes}
+            "rebuilds": tab.rebuilds, "launches": launches, "peak_bytes": peak_bytes}
 
 
 def _geometry(dim: int) -> tuple[int, int]:
@@ -309,7 +355,7 @@ def explore_layers_gpu(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
                        ) -> tuple[np.ndarray, dict]:
     """n samples of Y = |C(0)| / p, as explore_layers (same rng -> same Y).
     info: size, depth, reads (1 + 2 dim |C|, the CPU model's count), rebuilds,
-    repeats, peak_bytes, p."""
+    launches, peak_bytes, p."""
     if dim not in DIMS:
         raise ValueError(f"dim must be one of {DIMS}; got {dim}")
     x = int(x)
@@ -321,7 +367,7 @@ def explore_layers_gpu(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
     seeds = rng.integers(0, 2 ** 63, size=n, dtype=np.int64).astype(np.uint64)
     thresh = min(int(p * 2.0 ** 64), 2 ** 64 - 1)
     out = {k: np.zeros(n, dtype=np.int64)
-           for k in ("size", "depth", "rebuilds", "repeats", "peak_bytes")}
+           for k in ("size", "depth", "rebuilds", "launches", "peak_bytes")}
     for r, s in enumerate(seeds):
         g = grow_cluster(int(s), thresh, key0, bits, dim, max_live)
         for k in out:
