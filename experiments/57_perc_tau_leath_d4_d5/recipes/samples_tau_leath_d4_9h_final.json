@@ -1,0 +1,29 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "tau_leath_d4_9h",
+  "kind": "samples",
+  "model": "percolation_tau_leath",
+  "n": 2843688,
+  "params": {
+    "batch_exponent": 0.0,
+    "batch_factor": 1.0,
+    "dim": 4,
+    "p": 0.19688561
+  },
+  "replicates": 5,
+  "scales": [
+    65536,
+    131072,
+    262144,
+    524288,
+    1048576,
+    2097152
+  ],
+  "seed": null
+}
