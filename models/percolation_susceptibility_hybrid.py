@@ -41,6 +41,21 @@ next chunk runs on the CPU (the numba batch is nogil, and cupy releases the
 GIL while it waits on the device). The GPU thread shares a core with the numba
 threads. A call ends when both sides have finished; experiment 60 measures how
 the wall time splits between them as a function of `cut`.
+
+Batching (user, 2026-11-13; derivations/batched_observable.tex)
+---------------------------------------------------------------
+With K = ceil(batch_factor * x**batch_exponent) (percolation_tau_leath's
+n_clusters), one sample is the mean of K independent copies of Y, each on its
+own lattice (its own seed): Z = (1/K) sum_r Y^(r). E Z = E Y, so gamma, a1
+and omega1 are unchanged; Var(Z / E Z) = sigma_x^2 / K, which converges when
+batch_exponent = 2 nu, sigma_x ~ x**nu. batch_exponent must be estimated from
+an independent pilot, never set from the answer (ground rule 4).
+
+Not to be confused with the explore model's axis seeds (axis_factor, nu_axis:
+several starting sites summed on ONE lattice). Those are correlated and change
+the observable; a batch averages independent lattices and changes only its
+variance and its cost (x 1/K and x K). The defaults (1, 0) are one copy a
+sample, bit for bit the unbatched model.
 """
 
 from __future__ import annotations
@@ -54,6 +69,7 @@ import numpy as np
 from numba import njit, prange
 
 from models.percolation_susceptibility import p_at
+from models.percolation_tau_leath import n_clusters
 from models.percolation_susceptibility_explore import (
     DIMS, PROBE_SAMPLES_PER_THREAD, _EMPTY, _is_open, _slot)
 from models import percolation_susceptibility_layers_gpu as G
@@ -65,6 +81,10 @@ DEFAULT_CUT = 1 << 16
 
 #: samples per chunk, per numba thread
 DEFAULT_CHUNK_PER_THREAD = 4096
+
+#: raw copies of Y per explore_hybrid call when batching, so a call's per-sample
+#: arrays (~50 bytes a copy) stay under ~1 GB however large n * K gets
+RAW_PER_CALL = 1 << 24
 
 _OK, _EDGE, _HAND = 0, 1, 2
 
@@ -229,11 +249,24 @@ def simulate(x: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
 
     params: {"dim", "eps0", "p", "p_c": as percolation_susceptibility_layers,
              "cut": sites a CPU thread grows before handing off (default 2**16),
-             "max_live": the GPU side's cap (default 2**26)}."""
-    y, _ = explore_hybrid(
-        x, n=n, dim=int(params.get("dim", 3)),
-        eps0=float(params.get("eps0", 0.15)),
-        p=params.get("p"), p_c=params.get("p_c"),
-        cut=int(params.get("cut", DEFAULT_CUT)),
-        max_live=int(params.get("max_live", G.DEFAULT_MAX_LIVE)), rng=rng)
-    return y
+             "max_live": the GPU side's cap (default 2**26),
+             "batch_factor", "batch_exponent": n samples, each the mean of
+             K = ceil(batch_factor * x**batch_exponent) independent copies
+             (default 1, 0: K = 1, the unbatched model bit for bit)}."""
+    K = n_clusters(x, float(params.get("batch_factor", 1.0)),
+                   float(params.get("batch_exponent", 0.0)))
+    kw = dict(dim=int(params.get("dim", 3)),
+              eps0=float(params.get("eps0", 0.15)),
+              p=params.get("p"), p_c=params.get("p_c"),
+              cut=int(params.get("cut", DEFAULT_CUT)),
+              max_live=int(params.get("max_live", G.DEFAULT_MAX_LIVE)), rng=rng)
+    if K == 1:
+        return explore_hybrid(x, n=n, **kw)[0]
+    z = np.empty(n)
+    step = max(1, RAW_PER_CALL // K)
+    for lo in range(0, n, step):
+        hi = min(lo + step, n)
+        # copies of one sample are consecutive draws, i.e. distinct seeds
+        y, _ = explore_hybrid(x, n=(hi - lo) * K, **kw)
+        z[lo:hi] = y.reshape(hi - lo, K).mean(axis=1)
+    return z

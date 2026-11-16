@@ -1,0 +1,15 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 5,
+    "eps0": 0.07,
+    "cut": 4194304,
+    "batch_factor": 1.0,
+    "batch_exponent": 0.77
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512],
+  "n": [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000],
+  "seed": null,
+  "_comment": "User, 2026-11-13: batched d = 5 pilot, 1e6 batches per scale, same scales and model params as experiment 60's samples_gsusc_d5_hybrid_n25m.json. batch_exponent = 2 nu_hat, nu_hat = 0.385 fitted on that independent pilot's per-scale cv (4..512). K = ceil(x**0.77): 3, 5, 9, 15, 25, 42, 72, 122."
+}
