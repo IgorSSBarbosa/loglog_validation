@@ -275,6 +275,18 @@ read `|bias|` against the precision you need, because a bigger budget then buys
 samples and not depth. The tools do not learn *why* the ceiling is there, and nothing
 model-specific was added to them.
 
+**When the probe cannot resolve `d`, state it: `--d` (user, 2026-11-16).**
+A batched observable (experiment 61) costs $K_x\propto x^{\texttt{batch\_exponent}}$ raw
+samples, so its $d$ is $\hat d_{\rm raw}+\texttt{batch\_exponent}$. Its own probe hit
+its cap after one probe and returned 1.52. `plan.py --d X` plans on X and stamps it
+`user override (--d)` (`<-- NOT MEASURED`), so it never passes for a measurement in
+`plan.json`. Without `--throughput`, the throughput is restated at X. A `batched_cost`
+model's probe is refitted as $a+b\,i^X$ (`estimate_cost_affine_at_d`); a clock-timed
+pilot is rescaled by $\sum n\,i^X/\sum n\,i^{d}$; a `cost_hint` model's is unchanged. A
+`cost_refit.json` throughput was fitted at its own $d$, so with one present `--d`
+refuses unless `--throughput` is given too. `constants.json` is not touched:
+`local_slope.py` still reads the pilot's $d$ from it.
+
 **When the planned window ends above the pilot's scales, the cost is re-fitted there
 (user, 2026-10-31).** The article's Step 2, "Re-fitting the cost": the plan's seconds
 rest on `d` and a throughput measured on the pilot's ladder, and the cost at large

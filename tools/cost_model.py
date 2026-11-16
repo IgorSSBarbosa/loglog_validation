@@ -171,6 +171,43 @@ def estimate_cost_affine(scales: Sequence, elapsed: Sequence) -> dict:
         "converged": bool(fit.success),
     }
 
+
+def estimate_cost_affine_at_d(scales: Sequence, elapsed: Sequence, d: float) -> dict:
+    """`estimate_cost_affine` with d held at a given value: fits only a and b.
+
+    For plan.py --d: a batched model's throughput is the probe's a + b*i**d, and
+    a and b fitted jointly with the probe's own d do not describe the cost at a
+    different d. Same log-space residual as the free fit.
+    """
+    from scipy.optimize import least_squares  # local import: keeps module import cheap
+
+    i = np.asarray(scales, dtype=float)
+    y = np.asarray(elapsed, dtype=float)
+    if i.size != y.size:
+        raise ValueError(f"scales and elapsed differ in length: {i.size} vs {y.size}")
+    if i.size < 3:
+        raise ValueError("affine fit at fixed d needs at least 3 scales (2 free parameters)")
+    if np.any(y <= 0) or np.any(i <= 0):
+        raise ValueError("scales and elapsed must be strictly positive")
+
+    log_y = np.log(y)
+
+    def residual(theta):
+        log_a, log_b = theta
+        return np.log(np.exp(log_a) + np.exp(log_b) * i ** d) - log_y
+
+    a0 = max(y.min() * 0.5, 1e-15)
+    b0 = max((y.max() - a0) / i.max() ** d, 1e-15)
+    fit = least_squares(residual, x0=[np.log(a0), np.log(b0)])
+    log_a, log_b = fit.x
+    return {
+        "a": float(np.exp(log_a)),
+        "b": float(np.exp(log_b)),
+        "d": float(d),
+        "rel_rmse": float(np.sqrt(np.mean(fit.fun ** 2))),
+        "converged": bool(fit.success),
+    }
+
 # --------------------------------------------------------------------------
 # Declared vs measured cost: the cross-check
 # --------------------------------------------------------------------------

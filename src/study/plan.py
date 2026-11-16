@@ -49,8 +49,8 @@ from tools.artifacts import (  # noqa: E402
     recipes_dir,
     write_artifact,
 )
-from tools.constants import format_table, load, require  # noqa: E402
-from tools.cost_model import cost_unit_ratio  # noqa: E402
+from tools.constants import format_table, load, override, require  # noqa: E402
+from tools.cost_model import cost_unit_ratio, estimate_cost_affine_at_d  # noqa: E402
 from tools.loglog_plot import fit_plot  # noqa: E402
 from tools.models import get_model  # noqa: E402
 
@@ -365,6 +365,13 @@ def _main(argv=None) -> None:
     p.add_argument("--throughput", type=float, default=None,
                    help="steps/second; the pilot's measured one when absent (its "
                         "own clock, or for a batched_cost model its cost probe)")
+    p.add_argument("--d", type=float, default=None,
+                   help="cost exponent to plan on instead of the pilot's measured "
+                        "one, e.g. a batched observable's d_raw + batch_exponent "
+                        "when its own probe cannot resolve d (user, 2026-11-16). "
+                        "Stamped as a user override in plan.json. Without "
+                        "--throughput, the pilot's throughput is recomputed at "
+                        "this d: a batched_cost probe is refitted as a + b*i**d")
     p.add_argument("--plot", action="store_true",
                    help="also write plan_fit.png: the pilot's eq. (232) fit, "
                         "f(i) = gamma*i + a0 + a1*rho**(-omega1*i), extended over "
@@ -399,6 +406,9 @@ def _main(argv=None) -> None:
             f"  Run the pilot first:\n"
             f"    python3 src/study/pilot.py -meta <recipe> --study {a.study}")
 
+    d_pilot = require(consts, "d").value
+    if a.d is not None:
+        consts["d"] = override(a.d, "d")
     d = require(consts, "d").value
     omega1 = require(consts, "omega1").value
     a1 = require(consts, "a1").value
@@ -410,10 +420,17 @@ def _main(argv=None) -> None:
     # the pilot's throughput: it was timed at the scales the run will draw.
     rj = artifact_path(sd, "cost_refit")
     refit = json.loads(rj.read_text()) if rj.exists() else None
+    refit_applies = bool(refit and refit.get("scales")
+                         and refit.get("pilot_created") == pilot.get("created"))
     if a.throughput is not None:
         tp, tp_source = a.throughput, "--throughput"
-    elif (refit and refit.get("scales")
-          and refit.get("pilot_created") == pilot.get("created")):
+    elif a.d is not None:
+        if refit_applies:
+            raise SystemExit(
+                f"{artifact_path(sd, 'cost_refit').name}'s throughput was fitted at "
+                f"its own d, not --d {a.d:g}.\n  Pass --throughput as well.")
+        tp, tp_source = _throughput_at_d(pilot, a.d, d_pilot)
+    elif refit_applies:
         tp = refit["throughput"]
         tp_source = (f"the cost re-fit on {refit['scales'][0]}..{refit['scales'][-1]}, "
                      f"{artifact_path(sd, 'cost_refit').name}")
@@ -448,7 +465,8 @@ def _main(argv=None) -> None:
             # No spread is not one situation but two, and they need different
             # actions: a declared constant is EXACT, a single replicate has
             # simply not been measured enough times.
-            why = ("exact -- declared, not fitted" if "declared" in c.source
+            why = ("user override, no se" if c.is_override
+                   else "exact -- declared, not fitted" if "declared" in c.source
                    else "no spread: one short run" if "cost re-fit" in c.source
                    else "no spread: only 1 replicate")
             print(f"  {row['name']:<11}{'--':>12}{why:>32}")
@@ -557,6 +575,38 @@ def _main(argv=None) -> None:
 #: cost_hint, so it is that model's unit -- sites for a lattice, steps for a
 #: walk -- not the allocation's i**d.
 _TP_UNIT = "cost_hint units"
+
+
+def _throughput_at_d(pilot: dict, d: float, d_pilot: float) -> tuple[float, str]:
+    """The pilot's throughput restated for --d: (value, source).
+
+    Without a cost_hint the throughput is i**d units per second, so it moves
+    with d. A batched_cost probe gave it as sum n*i**d / sum n*(a + b*i**d); a
+    and b were fitted together with the probe's d, so they are refitted at the
+    new one. A clock-timed pilot drew sum n*i**d_pilot units in its seconds,
+    so its rate rescales by the ratio of the two sums.
+    """
+    tp = pilot.get("throughput")
+    if tp is None:
+        raise SystemExit("no throughput measured. The pilot records one from its "
+                         "own draw;\n  re-run the pilot, or pass --throughput.")
+    recipe = pilot.get("recipe") or {}
+    spec = get_model(recipe["model"]) if recipe.get("model") else None
+    if spec is not None and spec.cost_hint is not None:
+        return tp, f"{pilot.get('throughput_source')}; in cost_hint units, so --d leaves it"
+    scales = [float(i) for i in pilot["scales"]]
+    n = [float(c) for c in pilot["n"]]
+    work = sum(c * i ** d for i, c in zip(scales, n))
+    cost = pilot.get("cost") or {}
+    if spec is not None and spec.batched_cost and "d" in (cost.get("affine") or {}):
+        fit = estimate_cost_affine_at_d(cost["scales"], cost["elapsed"], d)
+        per_sample = sum(c * (fit["a"] + fit["b"] * i ** d) for i, c in zip(scales, n))
+        return work / per_sample, (
+            f"the batched cost probe refitted at --d {d:g}: a + b*i**d, "
+            f"rel rmse {fit['rel_rmse']:.2f}, over this pilot's allocation")
+    work_pilot = sum(c * i ** d_pilot for i, c in zip(scales, n))
+    return tp * work / work_pilot, (f"{pilot.get('throughput_source')}, "
+                                    f"restated from d = {d_pilot:.4g} to --d {d:g}")
 
 
 def _cost_ratio(pilot: dict, d: float):

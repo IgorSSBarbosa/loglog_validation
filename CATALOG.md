@@ -234,6 +234,7 @@ Split into four layers on 2026-08-25 (see §5.3); the two self-checks moved out 
 | `neyman_allocation` | allocation | $n_i\propto i^{-d/2}$ — kept as the documented *wrong* answer |
 | `estimate_cost_exponent` | cost_model | pure power-law $d$ |
 | `estimate_cost_affine` | cost_model | $a+b\,i^d$ — the fit that rescued small scales |
+| `estimate_cost_affine_at_d` | cost_model | $a+b\,i^d$ at a given $d$, fitting only $a$, $b$ (`plan.py --d`) |
 | `aggregate` | cost_model | min/median/mean/q95/iqmean |
 | `median_ci` | cost_model | order-statistic CI |
 | `sigma_se` | wilson | eq. (720) 4th term |
