@@ -7,9 +7,9 @@ chemical distance l: layer l+1 is the set of unseen open neighbours of layer l.
 Neighbouring open sites differ in l by at most 1, so while layer l is expanded only
 layers l-1, l, l+1 can be looked up, and every layer <= l-2 is dropped from memory.
 
-The first three panels show the state after layer l has been expanded: the dropped
+The three panels show the state after layer l has been expanded: the dropped
 layers, the live layers l-1 and l, the new layer l+1, and the closed sites read so
-far. The last panel colours the whole cluster by l.
+far.
 
 An illustration, not a measurement: site states are drawn lazily from a numpy
 Generator instead of the model's hash, and the seed is the first one, counting up
@@ -122,20 +122,10 @@ def main() -> None:
     depth = len(layers) - 1
 
     stages = (depth // 4, depth // 2, 3 * depth // 4)
-    fig, axes = plt.subplots(1, 4, figsize=(11, 3.2))
-    for ax, l in zip(axes[:3], stages):
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3.4))
+    for ax, l in zip(axes, stages):
         live = draw_stage(ax, layers, closed_by_layer, l, box)
         ax.set_title(f"layer $\\ell = {l}$ expanded: {live} stored", fontsize=9, loc="left")
-    cmap = plt.get_cmap("viridis")
-    for k, layer in enumerate(layers):
-        for site in layer:
-            square(axes[3], site, facecolor=cmap(k / depth), edgecolor="none")
-    frame(axes[3], box)
-    axes[3].set_title(f"done: $|C(0)| = {size}$, depth {depth}", fontsize=9, loc="left")
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(0, depth))
-    cb = fig.colorbar(sm, ax=axes[3], fraction=0.046, pad=0.03)
-    cb.set_label("chemical distance $\\ell$", fontsize=8)
-    cb.ax.tick_params(labelsize=7)
 
     handles = [Rectangle((0, 0), 1, 1, facecolor=DROPPED, label="layers $\\leq \\ell-2$, dropped"),
                Rectangle((0, 0), 1, 1, facecolor=LIVE, label="layers $\\ell-1, \\ell$, stored"),
@@ -144,7 +134,7 @@ def main() -> None:
                plt.Line2D([], [], marker="+", ls="", ms=8, color="black", mew=1.2,
                           label="origin")]
     fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8, frameon=False)
-    fig.tight_layout(rect=(0, 0.07, 1, 1), w_pad=0.6)
+    fig.tight_layout(rect=(0, 0.07, 1, 0.97), w_pad=0.6)
     for ext in ("pdf", "png"):
         fig.savefig(args.out / f"perc_exploration.{ext}", dpi=200)
     n_closed = sum(len(c) for c in closed_by_layer)
