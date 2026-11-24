@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers",
+  "params": {"dim": 2, "eps0": 0.5},
+  "scales": [4, 8, 16, 32, 64, 128, 256],
+  "n": 200000,
+  "seed": 2026111761,
+  "_comment": "User, 2026-11-17: raw pilot for gamma_susc in d = 2 on the CPU layers model (|C(0)|, the observable of d = 3, 4, 5), replacing the torus-labelling row. eps0 = 0.5 as that row. cv grows 2.0 -> 2.8 on 4..512, so n = 2e5 (0.6 % per scale per replicate) and the top at 2^8. Its per-scale cv gives nu for the batched pilot."
+}

@@ -39,7 +39,7 @@ def _cpu(seed, thresh, key0, bits, dim):
     """CPU _one_sample and its layer sizes. The profile rows are reused (zeroing
     2 x 2 MiB per call would be timed as the sample's cost)."""
     r = L._one_sample(np.uint64(seed), np.uint64(thresh), np.int64(key0), bits, dim,
-                      L.DEFAULT_MAX_LIVE, _PROF[0], _PROF[1])
+                      L.DEFAULT_MAX_LIVE, False, _PROF[0], _PROF[1])
     prof = _PROF[0, :r[5] + 1].copy()
     _PROF[:, :r[5] + 1] = 0.0
     return r, prof

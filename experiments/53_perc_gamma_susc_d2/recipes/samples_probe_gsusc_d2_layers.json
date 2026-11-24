@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers",
+  "params": {"dim": 2, "eps0": 0.5},
+  "scales": [4, 8, 16, 32, 64, 128, 256],
+  "n": 100000,
+  "seed": 2026111760,
+  "_comment": "User, 2026-11-17: cost probe first. A 1-replicate, n = 1e5 pilot (draw time sets the probe cap: 0.5 x draw; n = 100 gave the 10 s floor and the probe stopped at scale 32) on the raw pilot's ladder, run only so pilot.py times the model and caches d on missouri; the raw pilot then takes it with --reuse-cost, so a failing probe cannot discard its draws (experiment 58, and the GPU layers pilot of 2026-11-17)."
+}

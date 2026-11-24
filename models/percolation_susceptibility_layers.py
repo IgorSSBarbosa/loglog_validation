@@ -32,6 +32,19 @@ the cap and the sample stops with MemoryError (user's rule, 2026-11-11).
 Within one layer a second rebuild can free nothing, so rebuilds are at most one
 per layer.
 
+Adaptive recycling (user, 2026-11-12): `recycle="adaptive"` drops the fixed
+cap as the rebuild trigger. Whenever the table passes load 1/2 it is rebuilt
+keeping only layers >= l-1, into the smallest power of two >= max(2**12,
+3 x live) slots, so it grows, stays or shrinks with the three live layers, and
+it stays in cache whenever they fit. Each rebuild costs O(old size) and comes
+after at least a sixth of that many insertions, so it is O(1) per site; a
+cluster below 2**11 sites never rebuilds. `max_live` is then only the stopping
+rule: the sample stops with MemoryError when the live layers alone exceed it.
+Why: with the fixed cap the table held the whole cluster until it reached
+2**20 sites (24 MiB a thread). At d = 4, x <= 512 (experiment 60, 2026-11-12)
+that never happened, and caps of 2**14..2**16 ran 1.7-2.2x faster.
+`recycle="cap"` is the original rule and stays the default until benchmarked.
+
 Live memory is then ~ three layers instead of |C| (measured at d = 5: at most
 0.5 % of |C| for clusters above 1e6 sites, experiment 58). With d_f ~ 3.5 and
 d_min ~ 1.8 at d = 5 (values quoted from memory, not used anywhere), a layer
@@ -46,8 +59,22 @@ Counting the sites of each layer, N_l, is free. `explore_layers` returns, per
 call, the sums over samples of N_l and N_l**2 for l = 0..max_layers-1 and the
 depth (last layer) of each sample. Storing N_l per sample is not cheap (a
 variable-length row per sample, 7e8 samples a scale), so only the per-call sums
-are kept. `simulate` returns Y only; the generic drivers never see the
-profile.
+are kept. `simulate` returns Y only, so it tallies one bin. Zeroing the full
+profile (2 x 2**17 floats a thread) cost ~9 ms a call, noisily, and at x = 4
+that hid the marginal cost of a sample from the batched cost probe: experiment
+58's first pilot (2026-11-11) drew all 5 replicates (4.5 h) and then died in
+that probe ("a call of 245760 samples was timed no slower than one of 61440"),
+before pilot.py had written anything.
+
+Batching (user, 2026-11-17; as percolation_susceptibility_hybrid)
+------------------------------------------------------------------
+With K = ceil(batch_factor * x**batch_exponent) (percolation_tau_leath's
+n_clusters), one sample is the mean of K independent copies of Y, each on its
+own lattice (its own seed): E Z = E Y, Var(Z / E Z) = sigma_x^2 / K. Added for
+d = 2 (experiment 53), where this model is the fastest and sigma_x^2 grows
+slowly. batch_exponent is estimated from an independent pilot, never set from
+the answer (ground rule 4). The defaults (1, 0) are one copy a sample, bit for
+bit the unbatched model.
 
 Bit-for-bit check: the site states are the explore model's (same splitmix64
 hash of (sample seed, key), same one-integer-per-sample seed draw), so for the
@@ -62,6 +89,7 @@ import numpy as np
 from numba import njit, prange
 
 from models.percolation_susceptibility import p_at
+from models.percolation_tau_leath import n_clusters
 from models.percolation_susceptibility_explore import (
     DIMS, PROBE_SAMPLES_PER_THREAD, _EMPTY, _is_open, _slot)
 
@@ -77,7 +105,16 @@ DEFAULT_MAX_LIVE = 1 << 20
 #: x = 512: a cluster of 8e6 sites was 16,434 layers deep.)
 DEFAULT_MAX_LAYERS = 1 << 17
 
+#: raw copies of Y per explore_layers call when batching, so a call's
+#: per-sample arrays stay bounded however large n * K gets
+RAW_PER_CALL = 1 << 24
+
 _OK, _EDGE, _CAP = 0, 1, 2
+
+RECYCLE = ("cap", "adaptive")
+
+#: smallest table, and the adaptive rule's floor: below 2**11 sites no rebuild
+_MIN_SLOTS = 1 << 12
 
 
 @njit
@@ -96,18 +133,19 @@ def _rebuild(keys, lay, size, keep_from):
 
 
 @njit
-def _one_sample(seed, thresh, key0, bits, dim, max_live, prof, prof2):
+def _one_sample(seed, thresh, key0, bits, dim, max_live, adaptive, prof, prof2):
     """(|C| or 0, reads, peak live, need3, peak bytes, depth, rebuilds, status).
 
     need3 = max_l (N_{l-1} + N_l + N_{l+1}), the fewest live sites any cap
     could get away with. Adds N_l, N_l**2 into prof, prof2 (one chunk's row),
-    layers past the last bin summed into it."""
+    layers past the last bin summed into it. adaptive: see the module
+    docstring ("Adaptive recycling"); else the fixed-cap rule."""
     fmask = np.int64((1 << bits) - 1)
     reads = 1
     if not _is_open(seed, key0, thresh):
         return 0, reads, 0, 0, 0, -1, 0, _OK
-    keys = np.full(1 << 12, _EMPTY, dtype=np.int64)
-    lay = np.empty(1 << 12, dtype=np.int32)
+    keys = np.full(_MIN_SLOTS, _EMPTY, dtype=np.int64)
+    lay = np.empty(_MIN_SLOTS, dtype=np.int32)
     g = _slot(keys, key0)
     keys[g] = key0
     lay[g] = 0
@@ -149,7 +187,19 @@ def _one_sample(seed, thresh, key0, bits, dim, max_live, prof, prof2):
                     keys[h] = nk
                     lay[h] = layer + 1
                     live += 1
-                    if live > max_live:
+                    if adaptive:
+                        # layers l-1, l and l+1 (this site included)
+                        alive = n_prev + n_cur + n_nxt + 1
+                        if alive > max_live:
+                            return (0, reads, peak_live, need3, peak_bytes,
+                                    layer, rebuilds, _CAP)
+                        if 2 * live > keys.size:
+                            t = _MIN_SLOTS
+                            while t < 3 * alive:
+                                t *= 2
+                            keys, lay, live = _rebuild(keys, lay, t, layer - 1)
+                            rebuilds += 1
+                    elif live > max_live:
                         # layers <= layer-2 can no longer be looked up
                         keys, lay, kept = _rebuild(keys, lay, keys.size, layer - 1)
                         rebuilds += 1
@@ -178,7 +228,8 @@ def _one_sample(seed, thresh, key0, bits, dim, max_live, prof, prof2):
 
 
 @njit(parallel=True)
-def _samples(seeds, thresh, key0, bits, dim, max_live, max_layers, n_chunks):
+def _samples(seeds, thresh, key0, bits, dim, max_live, adaptive, max_layers,
+             n_chunks):
     n = seeds.size
     size = np.empty(n, dtype=np.int64)
     reads = np.empty(n, dtype=np.int64)
@@ -195,7 +246,8 @@ def _samples(seeds, thresh, key0, bits, dim, max_live, max_layers, n_chunks):
         for r in range(c * n // n_chunks, (c + 1) * n // n_chunks):
             (size[r], reads[r], peak_live[r], need3[r], peak_bytes[r],
              depth[r], rebuilds[r], status[r]) = _one_sample(
-                seeds[r], thresh, key0, bits, dim, max_live, prof[c], prof2[c])
+                seeds[r], thresh, key0, bits, dim, max_live, adaptive, prof[c],
+                prof2[c])
     return (size, reads, peak_live, need3, peak_bytes, depth, rebuilds,
             status, prof.sum(axis=0), prof2.sum(axis=0))
 
@@ -209,6 +261,7 @@ def explore_layers(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
                    p: float | None = None, p_c: float | None = None,
                    max_live: int = DEFAULT_MAX_LIVE,
                    max_layers: int = DEFAULT_MAX_LAYERS,
+                   recycle: str = "cap",
                    rng: np.random.Generator | None = None,
                    ) -> tuple[np.ndarray, dict]:
     """n i.i.d. samples of Y, plus per-sample work, memory and depth, and the
@@ -219,6 +272,8 @@ def explore_layers(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
         raise ValueError(f"dim must be one of {DIMS}; got {dim}")
     if int(max_live) < 1 or int(max_layers) < 1:
         raise ValueError(f"need max_live, max_layers >= 1; got {max_live}, {max_layers}")
+    if recycle not in RECYCLE:
+        raise ValueError(f"recycle must be one of {RECYCLE}; got {recycle!r}")
     x = int(x)
     p = p_at(x, dim, eps0, p_c) if p is None else float(p)
     if not 0.0 < p < 1.0:
@@ -234,7 +289,7 @@ def explore_layers(x: int, n: int = 1, dim: int = 3, eps0: float = 0.15,
     n_chunks = max(1, min(int(n), numba.get_num_threads()))
     (size, reads, peak_live, need3, peak_bytes, depth, rebuilds, status,
      prof, prof2) = _samples(seeds, thresh, key0, bits, dim, int(max_live),
-                             int(max_layers), n_chunks)
+                             recycle == "adaptive", int(max_layers), n_chunks)
     if np.any(status == _CAP):
         raise MemoryError(
             f"a sample's three live layers exceeded max_live = {int(max_live):,} "
@@ -257,12 +312,26 @@ def simulate(x: int, n: int, params: dict, rng: np.random.Generator) -> np.ndarr
 
     params: {"dim": 2..5 (default 3), "eps0": float (default 0.15), "p", "p_c":
              as percolation_susceptibility, "max_live": int (default 2**20),
-             "max_layers": int (default 2**17)}.
+             "recycle": "cap" (default) | "adaptive" (module docstring),
+             "batch_factor", "batch_exponent": n samples, each the mean of
+             K = ceil(batch_factor * x**batch_exponent) independent copies
+             (default 1, 0: K = 1, the unbatched model bit for bit)}.
+             No layer profile (see the module docstring).
     """
-    y, _ = explore_layers(
-        x, n=n, dim=int(params.get("dim", 3)),
-        eps0=float(params.get("eps0", 0.15)),
-        p=params.get("p"), p_c=params.get("p_c"),
-        max_live=int(params.get("max_live", DEFAULT_MAX_LIVE)),
-        max_layers=int(params.get("max_layers", DEFAULT_MAX_LAYERS)), rng=rng)
-    return y
+    K = n_clusters(x, float(params.get("batch_factor", 1.0)),
+                   float(params.get("batch_exponent", 0.0)))
+    kw = dict(dim=int(params.get("dim", 3)),
+              eps0=float(params.get("eps0", 0.15)),
+              p=params.get("p"), p_c=params.get("p_c"),
+              max_live=int(params.get("max_live", DEFAULT_MAX_LIVE)),
+              max_layers=1, recycle=str(params.get("recycle", "cap")), rng=rng)
+    if K == 1:
+        return explore_layers(x, n=n, **kw)[0]
+    z = np.empty(n)
+    step = max(1, RAW_PER_CALL // K)
+    for lo in range(0, n, step):
+        hi = min(lo + step, n)
+        # copies of one sample are consecutive draws, i.e. distinct seeds
+        y, _ = explore_layers(x, n=(hi - lo) * K, **kw)
+        z[lo:hi] = y.reshape(hi - lo, K).mean(axis=1)
+    return z

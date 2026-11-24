@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 2,
+    "eps0": 0.5,
+    "cut": 4194304
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512],
+  "n": 1000000,
+  "seed": null,
+  "_comment": "User, 2026-11-12: d = 2 hybrid pilot, n = 1e6 at every scale, scales 2**2..2**9, cut 2**22 as the d = 5 runs. eps0 = 0.5 is experiments/53's choice for d = 2."
+}
