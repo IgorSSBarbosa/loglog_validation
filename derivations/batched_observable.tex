@@ -1,0 +1,464 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{a4paper, margin=25mm}
+\usepackage{hyperref}
+\emergencystretch=3em
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{hypothesis}{Hypothesis}
+\renewcommand{\thehypothesis}{H\arabic{hypothesis}}
+\newtheorem{remark}{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\cost}{\mathrm{cost}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\lbl}[1]{\texttt{#1}}
+
+\title{A batched observable for growing variance\\
+\large bringing $\sigma_i^2\to\infty$ back under the article's CLT}
+\author{\texttt{loglog\_validation} project notes}
+\date{2026-11-13}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+When the normalised variance of an observable grows like
+$\sigma_i^2\sim\sigma_*^2 i^{2\nu}$, two hypotheses of the article's
+Theorem~\lbl{thm:CLT} fail: Assumption~\lbl{sigma\_converges}, and the
+uniform $2+\delta$ moment bound of Assumption~\lbl{2\_plus\_delta\_moments},
+which already bounds $\sigma_i^2$. This note replaces $Y_i$ by the mean
+$Z_i$ of $K_i=\lceil c\,i^{2\nu}\rceil$ independent copies. $Z_i$ has the same
+mean, hence the same $\gamma$, $a_1$ and $\omega_1$, and its normalised
+variance converges. Under one condition on the growth of the
+$(2+\delta)$-th moment it also satisfies the uniform moment bound, so every
+assumption of Theorem~\lbl{thm:CLT} holds and the article's CLT, Wilson bound
+and planner apply to $Z_i$ unchanged. The condition holds at equality for an
+indicator of a rare event (Leath's $2-\tau$), follows from the standard
+cluster-size scaling ansatz for the susceptibility, and is what the
+measurements show for $\gamma_{\rm susc}$ in $d=3,4,5$. The cost per sample
+becomes $\propto i^{d+2\nu}$, so the allocation is \lbl{def:opt} with
+$d\to d+2\nu$, the same rate as the direct heteroscedastic analysis of
+\texttt{heteroscedastic\_allocation.tex}. At a fixed budget, batching costs
+$12$--$14\%$ in standard deviation in the $d=5$ example. That is the price of
+staying inside the theorem.
+Nothing here is in the article; it is an extension for the user to review.
+\end{abstract}
+
+\tableofcontents
+
+% =================================================================
+\section{What the CLT uses, and what breaks}
+
+Labels refer to \texttt{../article\_writting/main.tex}. For an observable
+$Y_i$ with $\E Y_i>0$ write $\xi_i=Y_i/\E Y_i$ and $\sigma_i^2=\Var\xi_i$.
+Theorem~\lbl{thm:CLT} assumes:
+
+\begin{enumerate}
+  \item[(A1)] the $J$-order expansion
+  $\E Y_i=a_0i^\gamma\exp\bigl(a_1i^{-\omega_1}+\dots+\phi_J(i)i^{-\omega_J}\bigr)$
+  (Assumption~\lbl{firstAssumption-}\allowbreak\lbl{J-order-expansion}), with $\phi_J$
+  bounded (Assumption~\lbl{phi\_is\_unif\_bounded});
+  \item[(A2)] $\E Y_i>0$ (Assumption~\lbl{Y\_positive});
+  \item[(A3)] $\E|\xi_i|^{2+\delta}\le M$ for all $i$, some $\delta>0$
+  (Assumption~\lbl{2\_plus\_delta\_moments});
+  \item[(A4)] $\sigma_i^2\to\sigma_\infty^2\in(0,\infty)$
+  (Assumption~\lbl{sigma\_converges}).
+\end{enumerate}
+
+\noindent In the proof (Appendix, \lbl{subsec:moments}--\lbl{subsec:lyapunov}):
+\begin{itemize}
+  \item (A3) gives the Lyapunov bound of Lemma~\lbl{lem:lyapunov},
+  $\sum\E|X_{k,\ell}|^{2+\delta}/s_{n,m}^{2+\delta}\le
+  C\,M'/(\sigma_{\min}^{2+\delta}(nm)^{\delta/2})$, with
+  $M'=(M^{1/(2+\delta)}+1)^{2+\delta}$ (Lemma~\lbl{lem:moments}\,(c)).
+  \item (A4) gives $\sigma_{\min}$ bounded away from $0$ and the
+  deterministic normalisation of Lemma~\lbl{lem:S-clt}.
+  \item $\sigma_{\max}^2<\infty$, which (A3) implies, enters
+  Lemma~\lbl{lem:Q-prob}: $\Prob(\mathcal G^c)\le4m\sigma_{\max}^2/n$ and the
+  remainder $Q_{n,m}$ is $O(\sigma_{\max}^2/n)$.
+\end{itemize}
+
+\noindent Since $\Var\xi_i\le\E\xi_i^2\le(\E|\xi_i|^{2+\delta})^{2/(2+\delta)}$,
+(A3) bounds $\sigma_i^2$ by $M^{2/(2+\delta)}$. A growing $\sigma_i$ therefore
+violates (A3) as well as (A4). The last item is where it hurts in practice:
+$4m\sigma_{\max}^2/n$ small is the condition that $\sigma/\sqrt n$ be small
+at the top scale, the guard of \texttt{heteroscedastic\_allocation.tex}, which
+the $d=5$ run of experiment~60 broke.
+
+% =================================================================
+\section{Hypotheses on the raw observable}
+
+\begin{hypothesis}[Regular variance growth]\label{H:var}
+There are $\sigma_*>0$ and $\nu\ge0$ such that
+$\sigma_i^2=\sigma_*^2\,i^{2\nu}\,(1+\varepsilon_i)$ with $\varepsilon_i\to0$.
+\end{hypothesis}
+
+\begin{hypothesis}[Moment growth]\label{H:mom}
+For the same $\delta>0$ as in (A3), the normalised absolute moment
+\[
+  \mu_i:=\frac{\E|\xi_i-1|^{2+\delta}}{\sigma_i^{2+\delta}}
+\]
+satisfies $\mu_i\le C_\mu\,i^{\nu\delta}$ for all $i$.
+\end{hypothesis}
+
+\noindent \ref{H:var} with $\nu=0$ is (A4). \ref{H:mom} allows the shape of the
+tail to get heavier with $i$, at a rate tied to $\nu$; for $\nu=0$ it says
+$\E|\xi_i-1|^{2+\delta}$ is bounded, i.e.\ (A3). Section~\ref{sec:H2} explains
+why $\mu_i\asymp i^{\nu\delta}$, the boundary case, is the natural one for
+rare-event observables. (A1) and (A2) are kept as they are.
+
+% =================================================================
+\section{The batched observable}
+
+\begin{definition}\label{def:batch}
+Fix $c>0$ and let $K_i=\lceil c\,i^{2\nu}\rceil$. One sample of the batched
+observable at scale $i$ is
+\[
+  Z_i=\frac1{K_i}\sum_{r=1}^{K_i}Y_i^{(r)},
+\]
+with $Y_i^{(1)},\dots,Y_i^{(K_i)}$ independent copies of $Y_i$, fresh for
+each sample. Write $\zeta_i=Z_i/\E Z_i=\frac1{K_i}\sum_r\xi_i^{(r)}$.
+\end{definition}
+
+\noindent A long run then draws $n$ samples of $Z_i$ at each scale of the
+window, exactly as the article prescribes ($n_k\equiv n$); in raw samples
+that is $nK_i$ at scale $i$.
+
+\begin{proposition}[Mean: nothing changes]\label{prop:mean}
+$\E Z_i=\E Y_i$. Hence $Z_i$ satisfies (A1) and (A2) with the same
+$a_0,\gamma,a_1,\omega_1,\dots,\phi_J$.
+\end{proposition}
+
+\begin{proof}
+Linearity of expectation.
+\end{proof}
+
+\noindent In particular, the correction to scaling is still $\omega_1$, not
+$\omega_1+\nu$: no rescaling of $Y_i$ by a deterministic factor can change its
+coefficient of variation, so the only way to tame $\sigma_i$ is to spend more
+randomness per observation, and that shows up in the cost
+(Section~\ref{sec:alloc}), not in the expansion of the mean.
+
+\begin{proposition}[Variance converges]\label{prop:var}
+Under \ref{H:var}, $\Var\zeta_i=\sigma_i^2/K_i\to\sigma_*^2/c=:\sigma_{Z,\infty}^2\in(0,\infty)$.
+So $Z_i$ satisfies (A4).
+\end{proposition}
+
+\begin{proof}
+The copies are independent, so $\Var\zeta_i=\sigma_i^2/K_i$. Since
+$c\,i^{2\nu}\le K_i<c\,i^{2\nu}+1$, $K_i/(c\,i^{2\nu})\to1$ when $\nu>0$
+(and $K_i=\lceil c\rceil$ is constant when $\nu=0$, where the claim is (A4)).
+Then $\sigma_i^2/K_i=\sigma_*^2(1+\varepsilon_i)\,c\,i^{2\nu}/(c\,K_i)\to\sigma_*^2/c$.
+\end{proof}
+
+% -----------------------------------------------------------------
+\subsection{The \texorpdfstring{$2+\delta$}{2+delta} moments}
+
+The tool is Rosenthal's inequality: for $p\ge2$ there is $C_p<\infty$ such that,
+for i.i.d.\ centred $X_1,\dots,X_K$ with $\E|X_1|^p<\infty$,
+\begin{equation}
+  \E\Bigl|\sum_{r=1}^KX_r\Bigr|^p\le C_p\Bigl[\bigl(K\,\E X_1^2\bigr)^{p/2}+K\,\E|X_1|^p\Bigr].
+  \label{eq:rosenthal}
+\end{equation}
+The first term is what a Gaussian sum would give; the second is the
+contribution of a single large summand.
+
+\begin{proposition}[Uniform $2+\delta$ moment]\label{prop:mom}
+Under \ref{H:var} and \ref{H:mom}, with $p=2+\delta$,
+\[
+  \E|\zeta_i-1|^{2+\delta}\le C_p\Bigl[\Bigl(\frac{\sigma_i^2}{K_i}\Bigr)^{1+\delta/2}
+  +\frac{\mu_i\,\sigma_i^{2+\delta}}{K_i^{1+\delta}}\Bigr]
+  \le C_p\Bigl[\bigl(\sigma_{Z,\infty}^2\bigr)^{1+\delta/2}
+  +C_\mu\,\frac{\sigma_*^{2+\delta}}{c^{1+\delta}}\Bigr](1+o(1)),
+\]
+which is bounded in $i$. Consequently $\E|\zeta_i|^{2+\delta}\le M_Z$ for all
+$i$, with $M_Z^{1/(2+\delta)}=1+\sup_i\|\zeta_i-1\|_{2+\delta}$, and $Z_i$
+satisfies (A3).
+\end{proposition}
+
+\begin{proof}
+Apply \eqref{eq:rosenthal} to $X_r=\xi_i^{(r)}-1$ and divide by $K_i^{p}$:
+\[
+  \E|\zeta_i-1|^p\le C_p\Bigl[\frac{(K_i\sigma_i^2)^{p/2}}{K_i^p}
+  +\frac{K_i\,\E|\xi_i-1|^p}{K_i^p}\Bigr]
+  =C_p\Bigl[\Bigl(\frac{\sigma_i^2}{K_i}\Bigr)^{p/2}+\frac{\mu_i\sigma_i^{p}}{K_i^{p-1}}\Bigr].
+\]
+The first term converges to $(\sigma_*^2/c)^{1+\delta/2}$ by
+Proposition~\ref{prop:var}. In the second, with $K_i\ge c\,i^{2\nu}$ and
+\ref{H:var}, \ref{H:mom},
+\[
+  \frac{\mu_i\sigma_i^{2+\delta}}{K_i^{1+\delta}}
+  \le C_\mu i^{\nu\delta}\,
+  \frac{\sigma_*^{2+\delta}(1+\varepsilon_i)^{1+\delta/2}\,i^{\nu(2+\delta)}}{c^{1+\delta}\,i^{2\nu(1+\delta)}}
+  =C_\mu\frac{\sigma_*^{2+\delta}}{c^{1+\delta}}(1+\varepsilon_i)^{1+\delta/2}\,
+   i^{\nu\delta+2\nu+\nu\delta-2\nu-2\nu\delta},
+\]
+and the exponent is $0$. Minkowski's inequality in $\mathcal L^{2+\delta}$,
+$\|\zeta_i\|_{2+\delta}\le1+\|\zeta_i-1\|_{2+\delta}$, gives the last claim,
+exactly as in Lemma~\lbl{lem:moments}\,(c) read backwards.
+\end{proof}
+
+\begin{remark}[\ref{H:mom} is the sharp condition for this argument]
+The exponent bookkeeping shows the second Rosenthal term behaves like
+$\mu_i\,i^{-\nu\delta}$. If $\mu_i$ grew faster than $i^{\nu\delta}$, the
+term would diverge, and it cannot be dropped: for a sum dominated by one
+large summand, \eqref{eq:rosenthal} is attained up to $C_p$. Batching tames
+the \emph{variance} by $K_i$ but a single extreme copy only by $K_i^{-(1+\delta)}$
+relative to its own $(2+\delta)$-th moment, and \ref{H:mom} is exactly what
+makes these two match.
+\end{remark}
+
+\begin{remark}[$\delta\le1$ from $\delta=1$]
+$\mathcal L^p$ norms are non-decreasing in $p$ on a probability space, so a
+uniform bound on $\E|\zeta_i|^{3}$ gives one on $\E|\zeta_i|^{2+\delta}$ for
+every $\delta\in(0,1]$. The repo measures $\delta=1$
+(\texttt{tools/summary.py}, \texttt{abs\_moment} $=\E|\xi|^{3}$), which is
+therefore enough for the CLT.
+\end{remark}
+
+\begin{remark}[What Lyapunov needs is weaker]
+The Lyapunov ratio of Lemma~\lbl{lem:lyapunov} only has to tend to $0$, not to
+be bounded by a constant over $(nm)^{\delta/2}$. Redoing its first display
+with the per-scale moments instead of their supremum,
+\[
+  \frac{1}{s_{n,m}^{2+\delta}}\sum_{k,\ell}\E|X_{k,\ell}|^{2+\delta}
+  \le\frac{6^\delta}{12^{\delta/2}\,\sigma_{\min}^{2+\delta}}
+  \cdot\frac{\max_{k}\E|\zeta_{\rho^k}-1|^{2+\delta}}{(nm)^{\delta/2}},
+\]
+so a moment that grows slowly with the window is allowed as long as
+$n$ outgrows it. (A3) is a sufficient condition, which is why
+Proposition~\ref{prop:mom} aims for it.
+\end{remark}
+
+% -----------------------------------------------------------------
+\subsection{The CLT for the batched observable}
+
+\begin{theorem}[Theorem~\lbl{thm:CLT} for $Z_i$]\label{thm:batch}
+Let $Y_i$ satisfy (A1), (A2), \ref{H:var} and \ref{H:mom}, and let $\hat\gamma$
+be the log-log estimator \lbl{eq:hatbeta} computed from $n$ samples of the
+batched observable $Z_{\rho^k}$ of Definition~\ref{def:batch} at each scale
+$k=m_0+1,\dots,m_0+m$. If $m/n\to0$ and $m_0\to\infty$,
+\[
+  \sqrt{n\,m(m^2-1)}\Bigl(\hat\gamma-\gamma-\frac{R(m,m_0)}{\log\rho}\Bigr)
+  \dto\mathcal N\Bigl(0,\frac{12\,\sigma_*^2}{c\,\log^2\rho}\Bigr),
+\]
+with $R(m,m_0)$ the finite-size bias \lbl{eq:bias} of $Y_i$ itself. The Wilson
+bound (Theorem~\lbl{cor:wilson}) holds with $\sigma_\infty^2=\sigma_*^2/c$ and
+$\sigma_{\max}^2=\sup_{k\ge m_0+1}\sigma_{\rho^k}^2/K_{\rho^k}$.
+\end{theorem}
+
+\begin{proof}
+By Propositions~\ref{prop:mean}, \ref{prop:var} and~\ref{prop:mom}, $Z_i$
+satisfies (A1)--(A4) with the same expansion and with
+$\sigma_\infty^2=\sigma_*^2/c$. Theorem~\lbl{thm:CLT} applied to $Z_i$ is the
+claim.
+\end{proof}
+
+\paragraph{Two consequences inside the proof.}
+\begin{itemize}
+  \item \emph{The remainder.} Lemma~\lbl{lem:Q-prob} now reads
+  $\Prob(\mathcal G^c)\le4m\,\sigma_{Z,\max}^2/n$ with $\sigma_{Z,\max}$ bounded:
+  the article's $m/n\to0$ suffices, and the guard on $\sigma/\sqrt n$ at the top
+  of the window is no longer an extra condition. For the raw observable the same
+  bound reads $4m\sigma_*^2\rho^{2\nu(m_0+m)}/n$, which needs $n$ to outgrow the
+  top scale's variance.
+  \item \emph{The log bias.} To second order
+  $\E\hat\beta-\beta-R(m,m_0)\approx-\frac1{2n}\sum_kw_{k,m}\sigma_{\rho^k}^2/K_{\rho^k}$.
+  With $\sigma^2/K$ equal at every scale up to $o(1)$ and $\sum_kw_{k,m}=0$, the
+  sum is $o(1/n)$: the term $b_{\rm LOG}$ of the heteroscedastic note cancels
+  as it does in the article.
+\end{itemize}
+
+% =================================================================
+\section{Why \texorpdfstring{\ref{H:mom}}{H2} holds at equality for rare-event observables}\label{sec:H2}
+
+\paragraph{An indicator: Leath's $2-\tau$.}
+The model \texttt{percolation\_tau\_leath} has
+$Y_s=\mathbf 1\{|C(0)|\ge s\}$, mean $Q(s)\sim q_0s^{2-\tau}$. Then
+$\sigma_s^2=(1-Q)/Q\sim s^{\tau-2}$, so $\nu=(\tau-2)/2$, and
+\[
+  \E|\xi_s-1|^{2+\delta}=Q\Bigl(\frac{1-Q}{Q}\Bigr)^{2+\delta}+(1-Q)
+  \sim Q^{-(1+\delta)},
+  \qquad
+  \mu_s\sim\frac{Q^{-(1+\delta)}}{Q^{-(1+\delta/2)}}=Q^{-\delta/2}\sim s^{\nu\delta}.
+\]
+\ref{H:mom} holds with equality. The batched observable is
+$\zeta_s=\mathrm{Bin}(K_s,Q)/(K_sQ)$; with $K_sQ\to\lambda:=c\,q_0$ it converges
+in distribution, with all moments, to $\mathrm{Poisson}(\lambda)/\lambda$, and
+$\sigma_{Z,\infty}^2=1/\lambda$. This is the model's existing
+\texttt{batch\_factor}$\cdot s^{\texttt{batch\_exponent}}$ with the exponent
+$2\nu$. Two practical notes: $\Prob(\zeta_s=0)\to e^{-\lambda}$, so $\lambda$
+of a few units keeps $\overline Z>0$ with overwhelming probability for any
+reasonable $n$; and $\nu=(\tau-2)/2$ is a function of the answer, so it must be
+estimated (Section~\ref{sec:nu}), never set from a known $\tau$ (ground rule 4;
+the model's docstring already says so).
+
+\paragraph{The susceptibility, under the scaling ansatz.}
+For the size of the origin's cluster below $p_c$, the standard ansatz
+$n_s\simeq s^{-\tau}f(s/s_\xi)$, $s_\xi\sim\varepsilon^{-1/\sigma}$, with
+$\Prob(|C|=s\mid0\text{ open})\propto s\,n_s$, gives
+$\E|C|^k\asymp s_\xi^{\,k+2-\tau}$ for every $k\ge1$ (the sum
+$\sum_s s^{k+1}n_s$ is dominated by $s\approx s_\xi$ since $k+2>\tau$; $k=1$ is
+$S\asymp s_\xi^{3-\tau}$, i.e.\ $\gamma=(3-\tau)/\sigma$). For
+$\xi=|C|/\E|C|$,
+\begin{gather*}
+  \sigma^2\asymp\frac{\E|C|^2}{(\E|C|)^2}\asymp s_\xi^{\,(4-\tau)-2(3-\tau)}=s_\xi^{\,\tau-2},
+  \\
+  \E|\xi|^{2+\delta}\asymp\frac{\E|C|^{2+\delta}}{(\E|C|)^{2+\delta}}
+  \asymp s_\xi^{\,(4+\delta-\tau)-(2+\delta)(3-\tau)}=s_\xi^{\,(1+\delta)(\tau-2)}.
+\end{gather*}
+Hence $\E|\xi|^{2+\delta}\asymp\sigma^{2+2\delta}$ and
+$\mu\asymp\sigma^{\delta}\asymp i^{\nu\delta}$: \ref{H:mom} at equality, for
+every $\delta$, as for the indicator. The shared structure is that both
+observables are carried by rare samples of size comparable to the cutoff,
+which is what makes $\E|\xi|^{2+\delta}$ grow like $\sigma^{2+2\delta}$
+rather than like $\sigma^{2+\delta}$. The repo's explore model sums over seeds on
+an axis rather than taking one cluster, which changes $\nu$ (it is $0.21$--$0.39$,
+not the single-cluster value), so this is a guide, not a proof for that
+observable.
+
+\paragraph{The measurements.}
+From the pilots and long runs (\texttt{abs\_moment} and \texttt{cv} per scale),
+fitting the growth exponent of $\mu_i=\E|\xi_i|^3/\sigma_i^3$ against $\nu$
+($\delta=1$):
+
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+study & scales & $\mu_i$, first $\to$ last & growth of $\mu_i$ & $\nu\delta$\\
+\midrule
+$\gamma_{\rm susc}$, $d=3$ (exp.~51) & $4\ldots2048$ & $8.0\to25.8$ & $0.191$ & $0.210$\\
+$\gamma_{\rm susc}$, $d=4$ (exp.~54) & $2\ldots512$ & $9.9\to56.1$ & $0.316$ & $0.308$\\
+$\gamma_{\rm susc}$, $d=5$ (exp.~60) & $4\ldots131072$ & $15.3\to660$ & $0.395$ & $0.394$\\
+$2-\tau$, $d=3$ (exp.~56) & $16\ldots262144$ & $6.3\to3.6$ & $-0.041$ & $0.138$\\
+$2-\tau$, $d=5$ (exp.~57) & $16\ldots16777216$ & $3.4\to25.5$ & $0.163$ & $0.215$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The susceptibility sits on the boundary $\mu_i\asymp i^{\nu}$ in all
+three dimensions, as the ansatz says. The Leath rows are below it because
+$Q$ is not yet small on the lower scales (in $d=3$ the local $\nu$ is itself
+still falling). Two cautions: these are sample moments of heavy-tailed
+variables, which are biased low and more so at the top scales; and only
+$\delta=1$ is measured. \ref{H:mom} at equality is the marginal case of
+Proposition~\ref{prop:mom}: the bound holds, with no room to spare.
+
+% =================================================================
+\section{Cost and allocation}\label{sec:alloc}
+
+\paragraph{Cost.} A sample of $Z_i$ costs $K_i$ samples of $Y_i$:
+\[
+  \cost_Z(i)=K_i\,\cost(i)\approx c\,i^{2\nu}\,(\kappa_0+\kappa_1i^{d}).
+\]
+With the article's power cost (Assumption~\lbl{cost\_is\_power\_law}),
+$\cost_Z(i)\propto i^{d+2\nu}$, and Lemma~\lbl{lem:budget} and
+Definition~\lbl{def:opt} apply to $Z_i$ with $d':=d+2\nu$:
+\[
+  n=C_\rho'B^{\theta_1},\quad m_0=\theta_2\log_\rho B,\qquad
+  \theta_1=\frac{2\omega_1}{d+2\nu+2\omega_1},\quad
+  \theta_2=\frac{1}{d+2\nu+2\omega_1},
+\]
+and the error decays as $B^{-\omega_1/(d+2\nu+2\omega_1)}$. In raw samples
+of $Y$ the scale $\rho^k$ gets $nK_{\rho^k}\propto B^{\theta_1+2\nu\theta_2}$ at
+the bottom of the window, i.e.\ $B^{(2\omega_1+2\nu)/(d+2\nu+2\omega_1)}$: the
+same exponents as the direct heteroscedastic analysis. The two routes agree on
+the rate; they differ in how samples are spread inside the window (below).
+
+\paragraph{The planner needs no change.} Step~2 of the article
+(\lbl{eq:n-of-m0}, \lbl{eq:bSE}, \lbl{eq:bFS}, \lbl{eq:m0-star}) is used as is,
+with $\widehat\cost_Z$ in place of $\widehat\cost$ and
+$\hat\sigma^2_{Z,\infty}=\hat\sigma_*^2/c$ in place of $\hat\sigma^2_\infty$.
+The constant $c$ drops out: $n$ scales as $1/c$ and $\sigma_{Z,\infty}^2$ as
+$1/c$, so \lbl{eq:bSE} is unchanged. $c$ only sets granularity; since
+$K_i=\lceil c\,i^{2\nu}\rceil$ is a rounded quantity, choose it so that $K$ is
+at least $\sim10$ at the bottom of the window (relative rounding error
+$\le1/K$), e.g.\ $K_i=\lceil K_0\,(i/i_0)^{2\nu}\rceil$ with $i_0$ the window's
+smallest scale.
+
+\paragraph{What staying inside the theorem costs.} At a fixed budget $B$ and
+fixed window, with per-scale raw allocation $n_k$, $B\Var\hat\beta$ is, for
+the three choices of $n_k$:
+\begin{align*}
+  \text{equal raw $n$ (the article on $Y$)}&:\ \Bigl(\sum_kw_k^2\sigma_k^2\Bigr)\Bigl(\sum_k\cost_k\Bigr),\\
+  \text{batched, $n_k\propto\sigma_k^2$}&:\ \Bigl(\sum_kw_k^2\Bigr)\Bigl(\sum_k\sigma_k^2\cost_k\Bigr),\\
+  \text{Neyman, $n_k\propto|w_k|\sigma_k/\sqrt{\cost_k}$}&:\ \Bigl(\sum_k|w_k|\sigma_k\sqrt{\cost_k}\Bigr)^2,
+\end{align*}
+and Cauchy--Schwarz makes the Neyman split the smallest of the three. On the
+$d=5$ study of experiment~60 ($m=6$, measured $\sigma_k$ and cost per
+sample), relative to equal raw $n$:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+window & batched / equal (sd) & Neyman / equal (sd) & $K_{\rm top}/K_{\rm bottom}$\\
+\midrule
+$512\ldots16384$ & $1.123$ & $0.875$ & 17\\
+$4096\ldots131072$ & $1.136$ & $0.870$ & 10\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Batching moves samples to the expensive top of the window, where
+$w_k^2$ is no larger than at the bottom, so it loses $12$--$14\%$ in standard
+deviation against equal $n$. What it buys: the article's theorems apply
+(Theorem~\ref{thm:batch}); the OLS weights \lbl{eq:hatbeta} are optimal again,
+since the scales are homoscedastic; $b_{\rm LOG}$ cancels; and $\sigma/\sqrt n$
+is the same at every scale instead of largest at the top, which is where the
+$d=5$ run's Gaussian approximation failed. Equal raw $n$ is cheaper only while
+its top scale stays inside that approximation.
+
+% =================================================================
+\section{\texorpdfstring{$\nu$}{nu} must be estimated}\label{sec:nu}
+
+$K_i$ needs $\nu$, and for Leath $\nu=(\tau-2)/2$ is a function of the
+exponent being measured. Ground rule~4 rules out setting it from a known value.
+The pilot supplies $\hat\nu$ by least squares of $\log\hat\sigma_i$ on $\log i$
+(for Leath, of $\hat\sigma_i^2+1=1/\hat Q$, which is a pure power). Two facts
+make this legitimate:
+
+\begin{itemize}
+  \item The pilot's samples are independent of the long run's (ground rule~2),
+  so, conditionally on the pilot, $K_i=\lceil c\,i^{2\hat\nu}\rceil$ is a
+  deterministic sequence and Theorem~\ref{thm:batch}'s proof goes through
+  verbatim for the long run.
+  \item With $\hat\nu\ne\nu$, $\Var\zeta_i\propto i^{2(\nu-\hat\nu)}$, i.e.\ the
+  batched observable has a small residual growth $\nu-\hat\nu$. Strictly (A4)
+  fails again, but over the window the variance changes by
+  $\rho^{2m|\nu-\hat\nu|}$: with the $d=5$ pilot's $\pm0.006$ and $m=6$ that
+  is $5\%$, which the planner can carry by the heteroscedastic formula of the
+  companion note or simply ignore.
+\end{itemize}
+
+% =================================================================
+\section{Open points}
+
+\begin{enumerate}
+  \item \ref{H:mom} is measured only at $\delta=1$, with sample moments that
+  are biased low for heavy tails. For the susceptibility it follows from the
+  scaling ansatz, which is itself a hypothesis; for the explore model's axis
+  sum it is only measured.
+  \item \ref{H:mom} holds at equality, so Proposition~\ref{prop:mom} gives a
+  bound with no slack: a logarithmic correction to the moment growth would break
+  uniform boundedness, though the weaker Lyapunov condition (Remark~3) would
+  still hold for $n$ large enough.
+  \item Raw samples per batched sample grow like $i^{2\nu}$; models that
+  already average internally (the explore model's axis seeds, the torus
+  sum of $d=2$) are a partial batching with a fixed exponent. Making that
+  exponent equal to $2\hat\nu$ is the cleanest implementation.
+\end{enumerate}
+
+\end{document}

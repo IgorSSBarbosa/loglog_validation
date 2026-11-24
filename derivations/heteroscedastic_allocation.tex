@@ -1,0 +1,437 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{a4paper, margin=25mm}
+\usepackage{hyperref}
+\emergencystretch=3em
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\cost}{\mathrm{cost}}
+\newcommand{\bSE}{b_{\mathrm{SE}}}
+\newcommand{\bFS}{b_{\mathrm{FS}}}
+\newcommand{\bLOG}{b_{\mathrm{LOG}}}
+
+\title{Budget allocation when the variance grows with the scale\\
+\large an adaptation of the $m_0^\star$ heuristic (eq.~\texttt{m0-star})
+for $\sigma_i^2$ that does not converge}
+\author{\texttt{loglog\_validation} project notes}
+\date{2026-11-13}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The article's long-run planner (Step~2, eqs.~\texttt{n-of-m0}, \texttt{bSE},
+\texttt{bFS}, \texttt{m0-star}) uses a single variance $\sigma_\infty^2$, as
+Assumption~\texttt{assumption:}\allowbreak\texttt{sigma\_converges} allows. For the $d=5$
+percolation susceptibility of experiment~60 the normalised variance grows like
+$\sigma_i\propto i^{\nu}$ with $\nu\approx0.38$ over every scale simulated
+($4\le i\le131072$), and a plan built on one $\sigma$ put the long-run window
+where the standard error was $12\times$ the planned one. This note derives the
+standard error of $\hat\beta$ for scale-dependent $\sigma_i$, the second-order
+bias of $\log\overline Y$ that stops cancelling when $\sigma_i$ varies, the
+adapted heuristic, and its rate: the allocation of Definition~\texttt{def:opt}
+holds with $d$ replaced by $d+2\nu$. Nothing here is in the article. It is an
+extension, and per ground rule~3 it needs the user's sign-off before it enters
+\texttt{src/study/plan.py}.
+\end{abstract}
+
+\tableofcontents
+
+% ------------------------------------------------------------
+\section{The setting, from the article}
+
+Equation and label names refer to \texttt{../article\_writting/main.tex}.
+
+\paragraph{Estimator.} Samples $Y^{(1)}_{\rho^k},\dots,Y^{(n)}_{\rho^k}$ are
+drawn independently at the scales $k=m_0+1,\dots,m_0+m$, the same $n$ at each
+scale. The slope is (eq.~\texttt{hatbeta})
+\begin{equation}
+  \hat\beta=\sum_{k=m_0+1}^{m_0+m} w_{k,m}\log\overline Y_{\rho^k},
+  \qquad
+  w_{k,m}=\frac{12\bigl(k-m_0-\frac{m+1}{2}\bigr)}{m(m^2-1)},
+  \qquad
+  \hat\gamma=\frac{\hat\beta}{\log\rho}.
+  \label{eq:hatbeta}
+\end{equation}
+Write $w_j:=w_{m_0+j,m}$, $j=1,\dots,m$; the weights do not depend on $m_0$ and
+satisfy
+\begin{equation}
+  \sum_{j=1}^m w_j=0,\qquad \sum_{j=1}^m w_j\,j=1,\qquad
+  \sum_{j=1}^m w_j^2=\frac{12}{m(m^2-1)}.
+  \label{eq:wsums}
+\end{equation}
+
+\paragraph{Normalised observable.} $\xi_i:=Y_i/\E Y_i$, so $\E\xi_i=1$, and
+$\sigma_i^2:=\Var\xi_i$ (the coefficient of variation squared).
+Assumption~\texttt{assumption:}\allowbreak\texttt{sigma\_converges} requires
+$\sigma_i^2\to\sigma_\infty^2\in(0,\infty)$.
+
+\paragraph{The planner (Step~2).} For a budget $B$ per replicate and a fitted
+cost (eq.~\texttt{cost}) $\widehat\cost(i)=\kappa_0+\kappa_1 i^{d}$,
+\begin{align}
+  n(m_0)&=\Bigl\lfloor B\Big/\textstyle\sum_{k=m_0+1}^{m_0+m}\widehat\cost(\rho^k)\Bigr\rfloor,
+  \tag{\texttt{n-of-m0}}\\
+  \bSE(m_0)&=\sqrt{\frac{12\,\sigma_\infty^2}{n(m_0)\,m(m^2-1)}},
+  \tag{\texttt{bSE}}\\
+  \bFS(m_0)&=\frac{6}{m(m+1)}\,\frac{|a_1|\,\rho^{-\omega_1m_0}}{\rho^{\omega_1}-1},
+  \tag{\texttt{bFS}}\\
+  m_0^\star&\in\operatorname*{arg\,min}_{m_0}\max\{\bSE(m_0),\bFS(m_0)\},
+  \tag{\texttt{m0-star}}
+\end{align}
+with $\sigma_\infty^2$ estimated by $\hat\sigma^2_{\max}$, the largest empirical
+variance over the pilot scales (eq.~\texttt{pilot-sigma}). The repo's
+\texttt{plan.py} used the \emph{mean} of the pilot's $\hat\sigma_i$ instead.
+Both are $m_0$-independent constants, and that is what this note changes.
+
+% ------------------------------------------------------------
+\section{What goes wrong}
+
+Experiment~60's $d=5$ study measured, per scale (pilot $4\ldots512$ at
+$n=2.5\cdot10^7$, gap draws at $1024, 2048$, long run at
+$n=1.14\cdot10^7$):
+
+\begin{center}
+\begin{tabular}{@{}lrrrrrrrr@{}}
+\toprule
+$i$ & 4 & 16 & 64 & 256 & 1024 & 4096 & 16384 & 131072\\
+$\hat\sigma_i$ & 6.7 & 10.6 & 18.2 & 32.0 & 56.1 & 100.9 & 175.0 & 318.3\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent A straight line in $\log\hat\sigma_i$ against $\log i$, with no sign of
+the plateau that Assumption~\texttt{assumption:}\allowbreak\texttt{sigma\_converges} needs. The
+plan used $\hat\sigma=19.5$ (the pilot mean), placed the window at
+$4096\ldots131072$, and promised $\mathrm{sd}(\hat\gamma)=0.0020$ per replicate.
+The realised closed-form sd was $0.0325$ and $\hat\gamma=1.0385$ against the
+known $1.1792$. The planner's error is not in the formula~\texttt{bSE}, which
+is right for its assumption, but in feeding it one number for a quantity that
+changes by a factor~$47$ over the ladder.
+
+% ------------------------------------------------------------
+\section{The standard error for scale-dependent \texorpdfstring{$\sigma_i$}{sigma\_i}}
+
+\begin{lemma}[Moments of $\log\overline Y$]\label{lem:logmoments}
+Let $\overline\xi_k$ be the mean of $n$ i.i.d.\ copies of $\xi_{\rho^k}$, with
+$\E\xi_{\rho^k}^{4}<\infty$. Then
+\[
+  \log\overline Y_{\rho^k}=\log\E Y_{\rho^k}+\log\overline\xi_k,
+  \qquad
+  \E\log\overline\xi_k=-\frac{\sigma_{\rho^k}^2}{2n}+O(n^{-2}),
+  \qquad
+  \Var\log\overline\xi_k=\frac{\sigma_{\rho^k}^2}{n}+O(n^{-2}),
+\]
+where the $O(\cdot)$ constants depend on $k$ through the moments of
+$\xi_{\rho^k}$.
+\end{lemma}
+
+\begin{proof}[Sketch]
+$\overline Y_{\rho^k}=\E Y_{\rho^k}\,\overline\xi_k$ gives the first identity.
+Expand $\log(1+u)=u-u^2/2+u^3/3-\dots$ at $u=\overline\xi_k-1$, which has
+mean~$0$, variance $\sigma_{\rho^k}^2/n$, third central moment of order
+$n^{-2}$ and fourth of order $n^{-2}$. Taking expectations term by term gives
+the mean, and squaring the expansion gives the variance; the remainder is
+controlled on the event
+$|\overline\xi_k-1|<1/2$, whose complement has probability $O(n^{-1})$ by
+Chebyshev, exactly as in the article's treatment of the Taylor remainder
+(lem:Q-prob). This is the article's Step~5 argument at a single, fixed scale.
+\end{proof}
+
+\begin{lemma}[Mean and variance of $\hat\beta$]\label{lem:betamoments}
+With independent sampling across scales (ground rule~2),
+\begin{align}
+  \E\hat\beta&=\beta+R(m,m_0)-\frac{1}{2n}\sum_{j=1}^m w_j\,\sigma_{\rho^{m_0+j}}^2+O(n^{-2}),
+  \label{eq:Ebeta}\\
+  \Var\hat\beta&=\frac{1}{n}\sum_{j=1}^m w_j^2\,\sigma_{\rho^{m_0+j}}^2+O(n^{-2}),
+  \label{eq:Varbeta}
+\end{align}
+with $R(m,m_0)$ the finite-size bias of eq.~\texttt{bias}.
+\end{lemma}
+
+\begin{proof}
+By \eqref{eq:hatbeta}, $\hat\beta=\sum_jw_j\log\E Y_{\rho^{m_0+j}}+\sum_jw_j\log\overline\xi_{m_0+j}$.
+The first sum is $\beta+R(m,m_0)$ by Assumption~\texttt{firstAssumption-J-order-expansion}
+and \eqref{eq:wsums} (the constant $\alpha$ is killed by $\sum w_j=0$, the slope
+is picked out by $\sum w_jj=1$). The second sum has independent terms, so its
+mean and variance are the weighted sums of Lemma~\ref{lem:logmoments}.
+\end{proof}
+
+\noindent Two consequences.
+
+\paragraph{The standard error.} Replacing~\texttt{bSE},
+\begin{equation}
+  \boxed{\;
+  \bSE^{\mathrm{het}}(m_0)=\sqrt{\frac{1}{n(m_0)}\sum_{j=1}^m w_j^2\,\sigma_{\rho^{m_0+j}}^2}\;}
+  \label{eq:bSEhet}
+\end{equation}
+For constant $\sigma_i\equiv\sigma_\infty$, \eqref{eq:wsums} turns this into
+\texttt{bSE} exactly. For growing $\sigma_i$ it depends on $m_0$ through the
+variances as well as through $n(m_0)$, and the top and bottom scales dominate,
+since $w_j^2$ is largest at $j=1$ and $j=m$.
+
+\paragraph{The log bias.} The third term of \eqref{eq:Ebeta},
+\begin{equation}
+  \bLOG(m_0)=\frac{1}{2n(m_0)}\Bigl|\sum_{j=1}^m w_j\,\sigma_{\rho^{m_0+j}}^2\Bigr|,
+  \label{eq:bLOG}
+\end{equation}
+is the order-$n^{-1}$ Taylor term the article neglects. For constant $\sigma$
+it vanishes identically, because $\sum_jw_j=0$; that is a second reason the
+article can drop it. For growing $\sigma_i$ it does not vanish and has a
+definite sign: $\sigma^2$ is larger at the top of the window, where $w_j>0$, so
+$\bLOG$ \emph{lowers} $\E\hat\beta$. It is the same effect that made the repo
+require equal $n$ on both scales of a pair in \texttt{local\_slope.py}
+(2026-09-28). In the plans below it is $10^{-4}$--$10^{-3}$, an order below
+$\bSE^{\mathrm{het}}$, so it does not move $m_0^\star$, but it belongs in the
+error bound.
+
+% ------------------------------------------------------------
+\section{The adapted heuristic}
+
+\begin{definition}[Heteroscedastic $m_0^\star$]\label{def:het}
+Keep \texttt{n-of-m0} (affine cost) and \texttt{bFS} unchanged, and replace
+\texttt{bSE} by \eqref{eq:bSEhet}:
+\begin{equation}
+  m_0^\star\in\operatorname*{arg\,min}_{m_0}
+  \max\bigl\{\bSE^{\mathrm{het}}(m_0),\ \bFS(m_0)\bigr\},
+  \label{eq:m0het}
+\end{equation}
+with $\sigma_i$ taken from the pilot: the measured $\hat\sigma_i$ at the pilot
+scales, and beyond them the power law
+\begin{equation}
+  \sigma_i=\sigma_*\,i^{\nu}
+  \label{eq:sigmalaw}
+\end{equation}
+fitted by least squares of $\log\hat\sigma_i$ on $\log i$ (Section~\ref{sec:nu}).
+\end{definition}
+
+\noindent The search over integer $m_0$ is the same as before; only one curve
+changes. With $\nu=0$ and $\sigma_*=\sigma_\infty$, Definition~\ref{def:het} is
+\texttt{m0-star}.
+
+% ------------------------------------------------------------
+\section{Rate: \texorpdfstring{$d$}{d} becomes \texorpdfstring{$d+2\nu$}{d+2nu}}
+
+Take the article's idealisations of Definition~\texttt{def:alloc}: pure power
+cost $\cost(i)=i^d$ (Assumption~\texttt{assumption:}\allowbreak\texttt{cost\_is\_power\_law}) and,
+here, the power law \eqref{eq:sigmalaw} at every scale. Then
+\[
+  \sum_jw_j^2\sigma_{\rho^{m_0+j}}^2=\sigma_*^2\,\rho^{2\nu m_0}\,S_m(\nu),
+  \qquad
+  S_m(\nu):=\sum_{j=1}^mw_j^2\rho^{2\nu j},
+\]
+so that
+\begin{equation}
+  \bSE^{\mathrm{het}}=\sigma_*\sqrt{S_m(\nu)}\;\rho^{\nu m_0}\,n^{-1/2}.
+  \label{eq:bSEpower}
+\end{equation}
+
+\begin{proposition}[Optimal balanced allocation, growing variance]\label{prop:het}
+Under Definition~\texttt{def:alloc}'s parametrisation $n=C_\rho B^{\theta_1}$,
+$\rho^{m_0}=B^{\theta_2}$, with $\nu>-d/2$, the exponents that maximise the
+decay rate of $\bFS+\bSE^{\mathrm{het}}$ subject to the budget are
+\begin{equation}
+  \theta_2=\frac{1}{d+2\nu+2\omega_1},\qquad
+  \theta_1=\frac{2\omega_1+2\nu}{d+2\nu+2\omega_1},
+  \label{eq:thetahet}
+\end{equation}
+and the error decays as $B^{-\omega_1/(d+2\nu+2\omega_1)}$. That is,
+Definition~\texttt{def:opt} with $d$ replaced by $d+2\nu$ in $\theta_2$ and in
+the rate.
+\end{proposition}
+
+\begin{proof}
+The cost of the allocation does not involve $\sigma$, so Lemma~\texttt{lem:budget}
+applies unchanged: feasibility is $\theta_1+d\theta_2\le1$. The two error
+terms are $\bFS\propto B^{-\omega_1\theta_2}$ and, by \eqref{eq:bSEpower},
+$\bSE^{\mathrm{het}}\propto B^{\nu\theta_2-\theta_1/2}$, so the rate is
+$r=\min(\omega_1\theta_2,\ \theta_1/2-\nu\theta_2)$. Each argument increases
+in its own variable, so the constraint is active, $\theta_1=1-d\theta_2$, and
+the two arguments trade off monotonically. The rate is maximised where they
+meet, $\omega_1\theta_2=\tfrac12-(\tfrac d2+\nu)\theta_2$, which is
+\eqref{eq:thetahet}; the common value is $\omega_1\theta_2$. The condition
+$\nu>-d/2$ keeps $\theta_2>0$. The log bias is $\bLOG\propto
+B^{2\nu\theta_2-\theta_1}=(\bSE^{\mathrm{het}})^2$ up to constants, so it is of
+higher order and does not enter the rate.
+\end{proof}
+
+\paragraph{Why $2\nu$.} One rung up the ladder costs $\rho^d$ times more per
+sample, and the sample mean there needs $\rho^{2\nu}$ times more samples for the
+same relative error. Both are paid from the same budget, so growing variance is
+indistinguishable from a larger cost exponent. Note $\theta_1+d\theta_2=1$
+still holds, but $\theta_1\ne2\omega_1\theta_2$: $n$ grows faster with $B$
+than in Definition~\texttt{def:opt}, and $m_0$ more slowly.
+
+\paragraph{The crossing in closed form.} With
+$n(m_0)=B/(\kappa_1G\rho^{dm_0})$, $G=\sum_{j=1}^m\rho^{dj}$, and
+$A=6|a_1|/(m(m+1)(\rho^{\omega_1}-1))$, setting $\bFS=\bSE^{\mathrm{het}}$
+gives
+\begin{equation}
+  m_0^\star=\frac{\log_\rho B+2\log_\rho A-\log_\rho\bigl(\sigma_*^2\kappa_1G\,S_m(\nu)\bigr)}
+                 {2\omega_1+d+2\nu},
+  \label{eq:m0closed}
+\end{equation}
+and the common value there is
+\[
+  \bFS(m_0^\star)=A^{\frac{d+2\nu}{2\omega_1+d+2\nu}}
+  \Bigl(\frac{\sigma_*^2\kappa_1G\,S_m(\nu)}{B}\Bigr)^{\frac{\omega_1}{2\omega_1+d+2\nu}}.
+\]
+For $\nu=0$, $S_m(0)=12/(m(m^2-1))$ and \eqref{eq:m0closed} is the crossing
+written after \texttt{m0-star}.
+
+\paragraph{Max versus RMSE.} \texttt{m0-star} balances the two terms. Minimising
+$\bFS^2+(\bSE^{\mathrm{het}})^2$ instead moves the continuous optimum by a
+constant,
+\[
+  m_0^{\mathrm{rmse}}-m_0^\star=\frac{\log_\rho\bigl(\omega_1/(\nu+d/2)\bigr)}{2\omega_1+d+2\nu},
+\]
+which is $-0.42$ rungs for the $d=5$ constants below. Rounding to an integer
+absorbs most of it.
+
+\paragraph{Sensitivity to $\nu$.} Ignoring the slow dependence of $S_m$,
+$\partial m_0^\star/\partial\nu\approx-2m_0^\star/(2\omega_1+d+2\nu)$. With
+$m_0^\star\approx10$ and the denominator $2.7$, an error of $0.1$ in $\nu$ moves
+$m_0^\star$ by $0.7$ rungs. The $d=5$ pilot determines $\nu$ to $\pm0.006$.
+
+% ------------------------------------------------------------
+\section{Estimating \texorpdfstring{$\nu$}{nu} from the pilot}\label{sec:nu}
+
+The pilot already measures $\hat\sigma_i$ at each of its scales. Fit
+$\log\hat\sigma_i=\log\sigma_*+\nu\log i$ by ordinary least squares and keep
+the standard error of $\hat\nu$ (a constant in the
+\texttt{constants.json} sense, with its provenance). On the $d=5$ pilot
+($i=4\ldots512$, eight scales, five replicates):
+\[
+  \hat\nu=0.3839\pm0.0061,\qquad\hat\sigma_*=3.76,\qquad
+  \hat\sigma_*\,131072^{\hat\nu}=346\quad(\text{measured: }318).
+\]
+Extrapolated over a factor $256$ in scale, the pilot's line is within about
+$10\%$ of the long run's measurements: $9$--$11\%$ low at $4096\ldots65536$
+($91.6$ vs $100.9$, $155.9$ vs $175.0$, $265.5$ vs $294.6$) and $9\%$ high at
+$131072$. The fit over all sixteen scales gives $\nu=0.394$.
+
+Two cautions.
+\begin{enumerate}
+  \item \emph{Heavy tails bias $\hat\sigma_i$ low.} When the variance comes from
+  rare large samples, the sample variance usually underestimates it, at the
+  pilot scales as well as in the long run. Then $\hat\nu$ is uncertain beyond its
+  regression standard error. The only point below the pilot's line, $131072$,
+  is also the scale with the largest $\sigma_i/\sqrt n$.
+  \item \emph{A plateau is the assumption, a power law is a model.} If the
+  pilot shows $\hat\sigma_i$ flattening, $\nu\approx0$ and
+  Definition~\ref{def:het} reduces to the article's rule. If it shows growth,
+  extrapolating a power law beyond the pilot is still an assumption; the
+  $se(\log\overline Y)$ guard of Section~\ref{sec:validity} bounds the damage
+  if it is wrong.
+\end{enumerate}
+
+% ------------------------------------------------------------
+\section{What the theory no longer covers}\label{sec:validity}
+
+Theorem~\texttt{thm:CLT} and the Wilson bound (eq.~\texttt{wilson}) assume
+Assumption~\texttt{assumption:}\allowbreak\texttt{sigma\_converges} and a uniform $2+\delta$ moment
+bound. Growing $\sigma_i$ violates the first; experiment~60's third moments,
+which grow with $i$ (\texttt{pipeline\_checks.png}, panel A4), violate the
+second. Neither theorem applies as stated, and the $m_0\to\infty$ limit in
+Theorem~\texttt{thm:CLT} would need a different normalisation.
+
+What survives is finite: the window has $m$ fixed scales, each sample mean is an
+average of $n$ i.i.d.\ variables with finite variance, and
+Lemmas~\ref{lem:logmoments}--\ref{lem:betamoments} hold as $n\to\infty$ at fixed
+$m_0$. How large $n$ must be is set at each scale by the Berry--Esseen ratio
+$\E|\xi_i-1|^3/(\sigma_i^3\sqrt n)$, which grows with $i$ when the tails do. Hence
+a guard the planner should apply alongside \eqref{eq:m0het}:
+\begin{equation}
+  \frac{\sigma_{\rho^{m_0+m}}}{\sqrt{n(m_0)}}\le\tau
+  \qquad\text{(the standard error of $\log\overline Y$ at the top scale)},
+  \label{eq:guard}
+\end{equation}
+reported as a warning when violated, never as a silent cap. The value of $\tau$
+is empirical: in experiment~60's long run the local slopes were sound up to
+$i=4096$, where this ratio was $0.030$, and fell below the known $\gamma$ from
+$8192$ ($0.040$) up to $131072$ ($0.094$), with $\hat\gamma$ off by $0.14$
+against a Gaussian prediction of $0.0145$. A Gaussian error model is not
+trustworthy there, so $\tau\approx0.03$ is the current working value, to be
+revised with evidence from other observables.
+
+% ------------------------------------------------------------
+\section{Worked example: experiment 60, \texorpdfstring{$d=5$}{d=5}}
+
+Budget $B=12{,}000$\,s per replicate (10\,h over 3 replicates), $m=6$,
+$\rho=2$, pilot constants $\hat\omega_1=0.4231$, $\hat a_1=-0.4263$. The cost
+per sample is the pilot's probe up to $i=2048$ and the long run's measured
+walls above, so \texttt{n-of-m0} is evaluated on measured costs rather than
+the fitted law (the hybrid's $\approx1.4\,\mu$s floor makes the power law wrong
+below $i\approx10^3$). Each row chooses $m_0^\star$ by \eqref{eq:m0het} using
+the stated $\sigma$ input; the ``realised'' columns re-evaluate that choice with
+the measured $\hat\sigma_i$. Errors are on $\hat\gamma$ (divided by $\log\rho$).
+Here $\bFS$ is the article's bound \texttt{bFS}, which exceeds the exact
+$|R(m,m_0)|$.
+
+\begin{center}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lclrcccc@{}}
+\toprule
+$\sigma$ input & $m_0^\star$ & window & $n$ & planned $\bSE$ & realised $\bSE$ & $\bFS$ & \eqref{eq:guard}\\
+\midrule
+pilot mean, $19.5$ (\texttt{plan.py}) & 11 & $4096\ldots131072$ & $1.07\cdot10^7$ & 0.0021 & 0.0246 & 0.0102 & 0.097\\
+pilot max, $42.5$ (eq.~\texttt{pilot-sigma}) & 11 & $4096\ldots131072$ & $1.07\cdot10^7$ & 0.0045 & 0.0246 & 0.0102 & 0.097\\
+long-run max, $318.6$ & 9 & $1024\ldots32768$ & $2.24\cdot10^7$ & 0.0232 & 0.0122 & 0.0184 & 0.052\\
+power law from the pilot, \eqref{eq:sigmalaw} & 10 & $2048\ldots65536$ & $1.39\cdot10^7$ & 0.0170 & 0.0192 & 0.0137 & 0.079\\
+measured $\hat\sigma_i$ & 9 & $1024\ldots32768$ & $2.24\cdot10^7$ & 0.0122 & 0.0122 & 0.0184 & 0.052\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Readings.
+\begin{itemize}
+  \item Both scale-free inputs the pipeline could have used before the long run
+  (the pilot mean, and the article's $\hat\sigma^2_{\max}$) pick the window that
+  failed, with a standard error underestimated $5$--$12\times$.
+  \item The power law fitted on the pilot alone moves $m_0^\star$ down by one
+  rung and predicts its own standard error to within $12\%$ ($0.0170$ planned,
+  $0.0192$ realised).
+  \item Every row violates \eqref{eq:guard} at $\tau=0.03$. Under the guard the
+  window must come down further: $m_0=8$ ($512\ldots16384$, ratio $0.029$ at
+  $n=3.5\cdot10^7$) is the largest that satisfies it, at the price of a larger
+  $\bFS$. With $\hat\omega_1$ this uncertain (the AIC refit gives $0.55$, which
+  shrinks $\bFS$), that is the plan this note would recommend.
+  \item Rates: $\theta_2=0.516$ for $\nu=0$ against $0.369$ for $\hat\nu=0.384$;
+  the error rate drops from $B^{-0.218}$ to $B^{-0.156}$. Doubling the budget
+  buys $10\%$ less error, not $14\%$.
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{Left out on purpose}
+
+\begin{itemize}
+  \item \emph{Unequal $n_k$.} With heteroscedastic scales, a Neyman-type split
+  $n_k\propto|w_k|\sigma_{\rho^k}/\sqrt{\cost(\rho^k)}$ lowers $\Var\hat\beta$ at
+  fixed budget (\texttt{tools/allocation.py} has \texttt{neyman\_allocation}).
+  The article fixes $n_k\equiv n$, and unequal $n$ reintroduces a
+  scale-dependent $\bLOG$; not pursued.
+  \item \emph{Weighted least squares.} The weights \eqref{eq:hatbeta} are optimal
+  only for equal variances; weighted least squares, with weights
+  $\propto\sigma_{\rho^k}^{-2}$, would beat them. Changing
+  the estimator is a change to the article, not to the planner.
+  \item \emph{Several replicates.} \texttt{m0-star} is per replicate. Averaging
+  $R$ replicates divides $\bSE$ by $\sqrt R$ but not $\bFS$; in
+  \eqref{eq:m0closed} that is $B\to RB$, which moves the optimum for the mean
+  \emph{up} by $\log_\rho R/(2\omega_1+d+2\nu)$ rungs ($0.59$ for $R=3$ here),
+  subject to the guard \eqref{eq:guard}, which does not improve with $R$.
+  The repo's planner has always used the per-replicate rule.
+\end{itemize}
+
+\end{document}
