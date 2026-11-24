@@ -348,7 +348,11 @@ def pilot_until_determined(recipe, sd, *, seconds_budget, total_seconds,
         spent = time.perf_counter() - t_start
 
         lc = ladder_check(reps, [int(x) for x in recipe["scales"]])
-        tp = out.get("throughput") or throughput_guess
+        # A batched model's rate depends on the window (plan.window_throughput);
+        # the pilot's own throughput is its rate over the pilot scales.
+        tp = (plan_mod.window_throughput({"recipe": this, "cost": cost},
+                                         consts["d"].value if consts.get("d") else 1.0)[0]
+              or out.get("throughput") or throughput_guess)
         # The gate must be judged at the m0 the ANSWER will be computed at, so
         # this is the whole remaining budget -- not the pilot's slice of it.
         # From the RECIPE in hand, not from `out`: pilot() does not return the
@@ -570,7 +574,9 @@ def autopilot(recipe: dict, sd: Path, *, seconds: float | None = None,
         # throughput it measured, so the wall-clock predictions here are that
         # machine's -- which is this one, or the reuse should not have been
         # asked for.
-        tp = reused["pilot"].get("throughput") or 1e8
+        tp = (plan_mod.window_throughput(reused["pilot"],
+                                         d_const.value if d_const else 1.0)[0]
+              or reused["pilot"].get("throughput") or 1e8)
         consts, rounds, ok = _reused_round(
             reused["pilot"], reused["constants"], scales, rho=rho, m=m,
             replicates=replicates, seconds=(seconds or 0.0), target_se=target_se,

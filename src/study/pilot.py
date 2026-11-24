@@ -319,6 +319,17 @@ def measure_cost_exponent(model, params, scales, repeats=PROBE_REPEATS,
     # last alone then shows a curve the mean d was not built from.
     out["probes"] = [{"scales": f.get("scales"), "elapsed": f.get("elapsed"),
                       "affine": f.get("affine")} for f in fits]
+    # The cost-hat the study reports and plans on is eq. (cost) fitted to the
+    # per-scale median over probes, as the article's Step 1 says. `out` was the
+    # last probe, so its affine was that one probe's: on experiment 46 the worst
+    # of five, d = 0.958 against 1.00-1.02 (user, 2026-11-16).
+    same = [f["elapsed"] for f in fits if f.get("scales") == out.get("scales")]
+    if len(same) >= 2:
+        med = np.median(same, axis=0).tolist()
+        refit = fit_cost_probe({"scales": out["scales"], "elapsed": med},
+                               spec.cost_hint, params)
+        out.update(elapsed=med, elapsed_source=f"median over {len(same)} probes",
+                   **{k: refit[k] for k in ("d_hat", "affine", "overhead_share")})
     if len(ds) >= 2:
         sd_ = float(np.std(ds, ddof=1))
         out["d_across_probes"] = {"d": float(np.mean(ds)), "sd": sd_,
