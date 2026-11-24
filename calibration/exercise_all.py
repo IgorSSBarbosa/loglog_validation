@@ -2972,7 +2972,7 @@ def sec_study(a: Audit, sc: Scratch) -> None:
         if p:
             plan = json.loads((sd / "plan.json").read_text())
             a.check("...the recipe being an ordinary samples recipe, runnable alone",
-                    lambda: Path(plan["recipe_path"]).exists())
+                    lambda: (ROOT / plan["recipe_path"]).exists())
             a.check("...carrying the constants it was accepted on",
                     lambda: sorted(plan["constants_at_plan_time"]),
                     expect=["a1", "cv", "d", "omega1"])

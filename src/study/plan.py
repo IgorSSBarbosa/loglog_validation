@@ -49,6 +49,7 @@ from tools.artifacts import (  # noqa: E402
     artifact_path,
     recipe_name,
     recipes_dir,
+    repo_relative,
     write_artifact,
 )
 from tools.constants import format_table, load, override, require  # noqa: E402
@@ -573,7 +574,7 @@ def _main(argv=None) -> None:
             pl["cost_fit"] = tp.fit
         pl["max_scale"] = a.max_scale
         rp = write_final_recipe(a.data_root, a.study, pilot["recipe"], pl)
-        pl["recipe_path"] = str(rp)
+        pl["recipe_path"] = repo_relative(rp)
         write_artifact(sd, "plan", pl, produced_by="src/study/plan.py")
         print(f"\naccepted -> {artifact_path(sd, 'plan')}")
         print(f"recipe   -> {rp}")

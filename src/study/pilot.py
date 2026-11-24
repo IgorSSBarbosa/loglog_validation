@@ -45,7 +45,8 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
 from tools.artifacts import (  # noqa: E402
-    artifact_path, default_out_dir, load_recipe, read_artifact, write_artifact)
+    artifact_path, default_out_dir, load_recipe, read_artifact, repo_relative,
+    write_artifact)
 from tools.constants import (  # noqa: E402
     Constant, format_table, load as load_constants, measured, override, save)
 from tools import cost_cache  # noqa: E402
@@ -770,7 +771,7 @@ def write_reused(sd: Path, data: dict, log=print) -> dict:
     sd.mkdir(parents=True, exist_ok=True)
     save(sd, data["constants"])
     write_artifact(sd, "pilot", {**data["pilot"],
-                                 "reused_from": str(data["source_dir"]),
+                                 "reused_from": repo_relative(data["source_dir"]),
                                  "reused_at": _now()},
                    produced_by="src/study/pilot.py (reuse)")
     src = data["pilot"]

@@ -60,7 +60,8 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.artifacts import artifact_path, load_recipe, read_artifact, write_artifact  # noqa: E402
+from tools.artifacts import (  # noqa: E402
+    artifact_path, load_recipe, read_artifact, resolve_repo_path, write_artifact)
 from tools import progress as P  # noqa: E402
 from tools.rng import seed_record, spawn  # noqa: E402
 from tools.summary import replicate_summary, summarize_scale  # noqa: E402
@@ -165,8 +166,8 @@ def _load_plan_recipe(plan: dict, sd: Path, study: str, data_root) -> dict:
     are taken from it, exactly as this script used to do.
     """
     path = plan.get("recipe_path")
-    if path and Path(path).exists():
-        return load_recipe(path, "samples")
+    if path and resolve_repo_path(path).exists():
+        return load_recipe(resolve_repo_path(path), "samples")
 
     pilot_path = artifact_path(sd, "pilot")
     if not pilot_path.exists():

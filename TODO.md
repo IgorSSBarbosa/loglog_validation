@@ -924,10 +924,14 @@ reports, one adapting the pipeline to their own model. Decided with the user
       `report.md` and `local_slope.json`: with the first three, `run.py --seed`
       redraws the long run at the article's allocation, and without them it cannot.
       Data (`.npz`) stays out. Needs a narrow `.gitignore` exception or a `results/` folder
-- [ ] `plan.py:576` stores `recipe_path` as an absolute path (`/impa/home/...`), and
-      `run.py:167` and `autopilot.py:785` read it back. So the study files leak the home
-      directory and break on a clone. Store the path relative to the repo root, and
-      rewrite the field in the files published above
+- [x] ~~`plan.py` stored `recipe_path` as an absolute path (`/impa/home/...`), which
+      leaked the home directory and pointed nowhere in a clone. There `run.py` silently fell
+      back to the pilot's recipe. Fixed (2026-11-24): `tools/artifacts.py`'s
+      `repo_relative`/`resolve_repo_path`, used by plan.py, run.py, autopilot.py and pilot.py
+      (`reused_from`). Absolute paths in older studies still resolve~~
+- [ ] When publishing the study files above, rewrite their absolute `recipe_path` (in
+      `plan.json`, and in the copy of the plan inside `final.json`/`final_partial.json`)
+      with `repo_relative`, and grep the published files for `/impa/home` before committing
 - [ ] Commit the exact command chain of every article study. They are now only in the
       gitignored `data/<study>_chain.sh` / `data/<study>.sh` (e.g. 47, 53, 61) or nowhere.
       Most experiment READMEs give no command for their article run, and two don't name it:

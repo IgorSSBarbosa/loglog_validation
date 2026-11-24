@@ -101,7 +101,7 @@ if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
 
 from tools.allocation import max_m0_for_scale  # noqa: E402
 from tools.artifacts import (  # noqa: E402
-    default_out_dir, load_recipe, read_artifact, write_artifact)
+    default_out_dir, load_recipe, read_artifact, resolve_repo_path, write_artifact)
 from tools.constants import format_table  # noqa: E402
 from tools.models import get_model  # noqa: E402
 from tools import progress as P  # noqa: E402
@@ -783,7 +783,7 @@ def _plan_run_report(recipe, sd, consts, rounds, lc, *, seconds, replicates,
                 "constants": {k: vars(v) for k, v in consts.items()}}
     plan = read_artifact(sd, "plan")
     rp = plan.get("recipe_path")
-    final_recipe = load_recipe(Path(rp), "samples") if rp else recipe
+    final_recipe = load_recipe(resolve_repo_path(rp), "samples") if rp else recipe
 
     # The bar counts the model's own cost unit, cost(i) = n_i * i**d, with the
     # d the pilot MEASURED -- so on a model whose cost is not linear in i the

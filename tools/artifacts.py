@@ -396,6 +396,31 @@ def recipes_dir(data_root) -> Path:
     return root.parent / RECIPE_DIR
 
 
+#: the repository root (this file is tools/artifacts.py)
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def repo_relative(path) -> str:
+    """`path` relative to the repository root when it lies inside it, else absolute.
+
+    How study files record a path. An absolute one carried the local home
+    directory into every published plan.json, and pointed nowhere in another
+    clone, where run.py then fell back to the pilot's recipe without saying why.
+    """
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+def resolve_repo_path(path) -> Path:
+    """The inverse of `repo_relative`: a relative path is read from the repository
+    root, not from the working directory. An absolute one (studies written before
+    2026-11-24) is returned as it is."""
+    return REPO_ROOT / Path(path)
+
+
 def recipe_name(kind: str, name: str) -> str:
     """Canonical recipe filename: <prefix>_<name>.json, e.g. samples_omega1.json."""
     if kind not in RECIPES:
