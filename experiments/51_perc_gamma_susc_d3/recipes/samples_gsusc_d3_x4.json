@@ -1,0 +1,23 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_gpu",
+  "params": {
+    "dim": 3,
+    "eps0": 0.15,
+    "box_factor": 4.0,
+    "nu_box": 0.88,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "n": 10000,
+  "seed": null,
+  "_comment": "User, 2026-11-02: experiment 37's pilot design (x-ladder, c = 4) at x = 4..128 with 10^4 samples per rung, so each replicate alone can identify omega1 (37's se(omega1) = 2.3 came from per-replicate fits at n = 284 on the top rung). Replaces samples_gsusc_d3.json (x = 2..64), whose x = 2 rung is pre-asymptotic and drove the one-correction fit to omega1 -> 0. Experiment 51, run by run_study.sh with autopilot --time 4h."
+}

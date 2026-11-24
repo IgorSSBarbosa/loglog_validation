@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 3,
+    "eps0": 0.15,
+    "cut": 4194304
+  },
+  "scales": [4, 8, 16, 32, 64, 128],
+  "n": 20000000,
+  "seed": null,
+  "_comment": "User, 2026-11-13: samples_gsusc_d3_hybrid_x2 with x = 2 dropped and n raised 10x to 2e7. At n = 2e6 the eq. (232) fit drove omega1 -> 0: x = 2 lies outside the one-term correction, and on x = 4..128 the correction was within noise (profile 95% omega1 in [0, 0.54]). Bootstrap around experiment 51's fit predicts omega1 5..95% = 0.29..0.58 at this n."
+}

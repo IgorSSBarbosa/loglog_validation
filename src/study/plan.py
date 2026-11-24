@@ -32,6 +32,8 @@ import sys
 from math import sqrt
 from pathlib import Path
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
@@ -49,8 +51,8 @@ from tools.artifacts import (  # noqa: E402
     recipes_dir,
     write_artifact,
 )
-from tools.constants import format_table, load, require  # noqa: E402
-from tools.cost_model import cost_unit_ratio  # noqa: E402
+from tools.constants import format_table, load, override, require  # noqa: E402
+from tools.cost_model import cost_unit_ratio, estimate_cost_affine_at_d  # noqa: E402
 from tools.loglog_plot import fit_plot  # noqa: E402
 from tools.models import get_model  # noqa: E402
 
@@ -95,6 +97,9 @@ def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
     percolation2d, and 256 for percolation_tau: see
     tools/cost_model.cost_unit_ratio for what leaving it out cost.
 
+    `throughput` is a float, or a callable(scales) when the rate depends on the
+    window (`window_throughput`: a batched model's kappa0 + kappa1 i^d).
+
     `max_scale` is the largest scale the ladder may end at, stated by the user:
     the allocation slides the ladder up with the budget and a model can refuse
     the scales it would reach. The plan is then the deepest ladder under the
@@ -108,10 +113,11 @@ def plan_for_budget(B: float, *, d, omega1, rho, m, a1, cv, throughput,
     err = predict_error(t["n"], t["m0"], d=d, omega1=omega1, rho=rho, m=m, a1=a1, cv=cv)
     scales = ladder(t["m0"], m, rho)
     ratio = float(cost_ratio(scales) if callable(cost_ratio) else cost_ratio)
+    tp = float(throughput(scales) if callable(throughput) else throughput)
     out = {"feasible": True, "budget": B, "n": t["n"], "m0": t["m0"],
            "scales": scales, "cost": t["cost"], "cost_ratio": ratio,
-           "work": t["cost"] * ratio,
-           "seconds": t["cost"] * ratio / throughput, **err}
+           "work": t["cost"] * ratio, "throughput": tp,
+           "seconds": t["cost"] * ratio / tp, **err}
     if max_scale is not None:
         out.update({"max_scale": max_scale, "capped": t["capped"],
                     "m0_uncapped": t["m0_uncapped"]})
@@ -221,7 +227,9 @@ def budget_for_seconds(target_seconds: float, *, d, omega1, rho, m, a1, cv,
     if not out.get("feasible"):
         return {"feasible": False, "budget": lo,
                 "why": f"budget too small for even one sample per scale "
-                       f"({target_seconds:g} s at {throughput:.3g} units/s)"}
+                       f"({target_seconds:g} s at "
+                       + ("the window's" if callable(throughput) else f"{throughput:.3g}")
+                       + " units/s)"}
     return out
 
 
@@ -365,6 +373,13 @@ def _main(argv=None) -> None:
     p.add_argument("--throughput", type=float, default=None,
                    help="steps/second; the pilot's measured one when absent (its "
                         "own clock, or for a batched_cost model its cost probe)")
+    p.add_argument("--d", type=float, default=None,
+                   help="cost exponent to plan on instead of the pilot's measured "
+                        "one, e.g. a batched observable's d_raw + batch_exponent "
+                        "when its own probe cannot resolve d (user, 2026-11-16). "
+                        "Stamped as a user override in plan.json. Without "
+                        "--throughput, the pilot's throughput is recomputed at "
+                        "this d: a batched_cost probe is refitted as a + b*i**d")
     p.add_argument("--plot", action="store_true",
                    help="also write plan_fit.png: the pilot's eq. (232) fit, "
                         "f(i) = gamma*i + a0 + a1*rho**(-omega1*i), extended over "
@@ -399,6 +414,9 @@ def _main(argv=None) -> None:
             f"  Run the pilot first:\n"
             f"    python3 src/study/pilot.py -meta <recipe> --study {a.study}")
 
+    d_pilot = require(consts, "d").value
+    if a.d is not None:
+        consts["d"] = override(a.d, "d")
     d = require(consts, "d").value
     omega1 = require(consts, "omega1").value
     a1 = require(consts, "a1").value
@@ -410,13 +428,23 @@ def _main(argv=None) -> None:
     # the pilot's throughput: it was timed at the scales the run will draw.
     rj = artifact_path(sd, "cost_refit")
     refit = json.loads(rj.read_text()) if rj.exists() else None
+    refit_applies = bool(refit and refit.get("scales")
+                         and refit.get("pilot_created") == pilot.get("created"))
+    window_tp, window_source = window_throughput(pilot, d)
     if a.throughput is not None:
         tp, tp_source = a.throughput, "--throughput"
-    elif (refit and refit.get("scales")
-          and refit.get("pilot_created") == pilot.get("created")):
+    elif a.d is not None and refit_applies:
+        raise SystemExit(
+            f"{artifact_path(sd, 'cost_refit').name}'s throughput was fitted at "
+            f"its own d, not --d {a.d:g}.\n  Pass --throughput as well.")
+    elif refit_applies:
         tp = refit["throughput"]
         tp_source = (f"the cost re-fit on {refit['scales'][0]}..{refit['scales'][-1]}, "
                      f"{artifact_path(sd, 'cost_refit').name}")
+    elif window_tp is not None:
+        tp, tp_source = window_tp, window_source
+    elif a.d is not None:
+        tp, tp_source = _throughput_at_d(pilot, a.d, d_pilot)
     else:
         tp, tp_source = pilot.get("throughput"), pilot.get("throughput_source")
     if tp is None:
@@ -436,7 +464,9 @@ def _main(argv=None) -> None:
               f"the ladder may not end above this)")
     if ratio_note:
         print(ratio_note)
-    print(f"  {'throughput':<11}{tp:>10.3g}              {_TP_UNIT}/s"
+    print(f"  {'throughput':<11}"
+          + (f"{'per window':>10}" if callable(tp) else f"{tp:>10.3g}")
+          + f"              {_TP_UNIT}/s"
           + (f"  (from {tp_source})" if tp_source else ""))
 
     print("\nerror budget -- how far each constant's own uncertainty moves the plan")
@@ -448,7 +478,8 @@ def _main(argv=None) -> None:
             # No spread is not one situation but two, and they need different
             # actions: a declared constant is EXACT, a single replicate has
             # simply not been measured enough times.
-            why = ("exact -- declared, not fitted" if "declared" in c.source
+            why = ("user override, no se" if c.is_override
+                   else "exact -- declared, not fitted" if "declared" in c.source
                    else "no spread: one short run" if "cost re-fit" in c.source
                    else "no spread: only 1 replicate")
             print(f"  {row['name']:<11}{'--':>12}{why:>32}")
@@ -502,6 +533,8 @@ def _main(argv=None) -> None:
               f"buys samples, not depth: read |bias| below against the precision "
               f"you need.")
     print(f"  n      = {pl['n']:,} per scale, x{R} replicate(s)")
+    if callable(tp):
+        print(f"  rate   = {pl['throughput']:.4g} {_TP_UNIT}/s over this window")
     print(f"  cost   = {pl['total_cost']:.4g} steps total  "
           f"({human_time(pl['total_seconds'])}; {human_time(pl['seconds'])} per replicate)")
     print(f"  gives  se(gamma) ~ {pl['rmse']:.4g} per replicate   "
@@ -533,8 +566,11 @@ def _main(argv=None) -> None:
                 f"{pj} has no 'recipe', so the plan cannot say WHAT to draw.\n"
                 f"  Re-run the pilot with -meta <recipe> to record it.")
         pl["constants_at_plan_time"] = {k: vars(v) for k, v in consts.items()}
-        pl["rho"], pl["m"], pl["throughput"] = a.rho, a.m, tp
+        # pl["throughput"] is the rate plan_for_budget used, at the chosen window.
+        pl["rho"], pl["m"] = a.rho, a.m
         pl["throughput_source"] = tp_source
+        if callable(tp):
+            pl["cost_fit"] = tp.fit
         pl["max_scale"] = a.max_scale
         rp = write_final_recipe(a.data_root, a.study, pilot["recipe"], pl)
         pl["recipe_path"] = str(rp)
@@ -557,6 +593,66 @@ def _main(argv=None) -> None:
 #: cost_hint, so it is that model's unit -- sites for a lattice, steps for a
 #: walk -- not the allocation's i**d.
 _TP_UNIT = "cost_hint units"
+
+
+def _throughput_at_d(pilot: dict, d: float, d_pilot: float) -> tuple[float, str]:
+    """The pilot's throughput restated for --d: (value, source).
+
+    Without a cost_hint the throughput is i**d units per second, so it moves
+    with d. A clock-timed pilot drew sum n*i**d_pilot units in its seconds,
+    so its rate rescales by the ratio of the two sums. A batched_cost model
+    never gets here: `window_throughput` refits its probe at the plan's d.
+    """
+    tp = pilot.get("throughput")
+    if tp is None:
+        raise SystemExit("no throughput measured. The pilot records one from its "
+                         "own draw;\n  re-run the pilot, or pass --throughput.")
+    recipe = pilot.get("recipe") or {}
+    spec = get_model(recipe["model"]) if recipe.get("model") else None
+    if spec is not None and spec.cost_hint is not None:
+        return tp, f"{pilot.get('throughput_source')}; in cost_hint units, so --d leaves it"
+    scales = [float(i) for i in pilot["scales"]]
+    n = [float(c) for c in pilot["n"]]
+    work = sum(c * i ** d for i, c in zip(scales, n))
+    work_pilot = sum(c * i ** d_pilot for i, c in zip(scales, n))
+    return tp * work / work_pilot, (f"{pilot.get('throughput_source')}, "
+                                    f"restated from d = {d_pilot:.4g} to --d {d:g}")
+
+
+def window_throughput(pilot: dict, d: float):
+    """(callable(scales) -> rate, source) for a batched_cost model, else (None, None).
+
+    The rate over the window being planned: sum_i work(i) / sum_i cost-hat(i),
+    with cost-hat = kappa0 + kappa1 i^d (eq. cost) fitted at the plan's d to the
+    per-scale median over the pilot's probes. pilot.py's own throughput is the
+    same ratio over the PILOT scales, where kappa0 dominates; charged at the
+    long-run scales, where kappa1 i^d does, it overstated their cost. Measured
+    on experiment 46 (user, 2026-11-16): 1198 s per replicate predicted against
+    525 s drawn; cost-hat over the window gives 485 s.
+
+    A clock-timed model is left alone: its probe times single calls, whose
+    dispatch overhead a vectorized run does not pay per sample.
+    """
+    recipe = pilot.get("recipe") or {}
+    spec = get_model(recipe["model"]) if recipe.get("model") else None
+    probes = (pilot.get("cost") or {}).get("probes") or []
+    if spec is None or not spec.batched_cost or not probes:
+        return None, None
+    scales = probes[0]["scales"]
+    probes = [pr for pr in probes if pr["scales"] == scales]
+    med = np.median([pr["elapsed"] for pr in probes], axis=0)
+    fit = estimate_cost_affine_at_d(scales, med, d)
+    params = recipe.get("params", {})
+
+    def rate(window) -> float:
+        work = sum(spec.cost_hint(int(i), params) if spec.cost_hint else float(i) ** d
+                   for i in window)
+        return work / sum(fit["a"] + fit["b"] * float(i) ** d for i in window)
+
+    rate.fit = fit
+    return rate, (f"cost-hat over the planned window: kappa0 = {fit['a']:.3g} s, "
+                  f"kappa1 = {fit['b']:.3g} s, d = {d:.4g}, fitted to the median "
+                  f"of {len(probes)} probe(s), rel rmse {fit['rel_rmse']:.2g}")
 
 
 def _cost_ratio(pilot: dict, d: float):

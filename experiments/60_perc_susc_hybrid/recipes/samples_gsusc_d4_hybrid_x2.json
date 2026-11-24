@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 4,
+    "eps0": 0.09,
+    "cut": 4194304
+  },
+  "scales": [2, 4, 8, 16, 32, 64],
+  "n": 150000000,
+  "seed": null,
+  "_comment": "User, 2026-11-12: experiment 54's pilot (recipes/samples_pilot.json: dim 4, eps0 0.09, x = 2..64, n = 1.5e8 per rung per replicate) on the hybrid model, cut 2**22 as the d = 5 runs. The explore model's axis_*, moment and max_sites have no hybrid counterpart (it draws the single-seed cluster, moment 1, with no site cap)."
+}

@@ -109,8 +109,7 @@ def local_slopes(scales, log_y, se_log, rho: float) -> dict:
 def clt_se(cv, n, R, rho: float) -> np.ndarray:
     """se(s_k) the CLT predicts, eq. (583) at m = 2 with the exact weights of eq. (526).
 
-    eq. (583)'s 12/m^3 is the large-m form of sum_k w_k^2 = 12/(m(m^2 - 1)), which is 2
-    at m = 2; per scale the variance of log Ybar is cv^2/n (delta method, sigma_inf^2
+    thm:CLT's 12/(m(m^2 - 1)) = sum_k w_k^2 is 2 at m = 2; per scale the variance of log Ybar is cv^2/n (delta method, sigma_inf^2
     read as cv^2), and mean log Ybar over R replicates divides it by R.
     """
     v = np.asarray(cv, float) ** 2 / (np.asarray(n, float) * np.asarray(R, float))
@@ -206,3 +205,339 @@ def analyse(scales, y_bars_by_scale, rho: float, *, cv=None, n=None) -> dict:
         out["se_s_clt"] = clt_se(cv, n, R, rho).tolist()
         out["n_mismatch"] = n_mismatch(cv, n, rho).tolist()
     return out
+
+
+# --- Any increasing ladder (user, 2026-11-05) -------------------------------------
+# Published allocations (Zhang et al. 2020's 4, 6, 8, 10, ..., 60) are not rho^k
+# ladders, and the functions above refuse them. The pair slope is still defined,
+#
+#     s_k = (log Ybar_{i_{k+1}} - log Ybar_{i_k}) / log(i_{k+1} / i_k),
+#
+# and under eq. (232) at J = 1 its expectation is EXACTLY (to the delta method)
+#
+#     s_k = gamma + a1 (i_{k+1}^-omega - i_k^-omega) / log(i_{k+1} / i_k),
+#
+# so the fits below use that pair basis instead of placing s_k at one scale. On a
+# rho^k ladder the basis is a constant times i_k^-omega and `fit_power_pairs`
+# returns `fit_power`'s gamma and omega. Delta s_k and w_k need equal spacing in
+# log i and are not computed here.
+
+def _pair_basis(i: np.ndarray, f) -> np.ndarray:
+    return (f(i[1:]) - f(i[:-1])) / np.log(i[1:] / i[:-1])
+
+
+def _check_increasing(scales) -> np.ndarray:
+    i = np.asarray(scales, dtype=float)
+    if i.size < 2 or np.any(np.diff(i) <= 0) or np.any(i <= 1):
+        raise ValueError(f"scales must be increasing and > 1; got {list(scales)}")
+    return i
+
+
+def local_slopes_pairs(scales, log_y, se_log) -> dict:
+    """s_k between consecutive scales of any increasing ladder, with its se."""
+    i = _check_increasing(scales)
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    K = L.size
+    D1 = (np.eye(K, k=1) - np.eye(K))[:-1] / np.log(i[1:] / i[:-1])[:, None]
+    return {"scales": i.astype(int).tolist(), "s": (D1 @ L).tolist(),
+            "se_s": _propagate(D1, se).tolist()}
+
+
+def fit_power_pairs(scales, s, se, omega_bounds=(1e-3, 10.0)) -> dict:
+    """(P) s_k = gamma + a1 (i_{k+1}^-omega - i_k^-omega) / log(i_{k+1}/i_k), weighted LS.
+
+    `scales` are the ladder's (one more than s). Profiled in omega as `fit_power`;
+    the covariance from curve_fit started at the profile minimum.
+    """
+    i = _check_increasing(scales)
+    s, se = np.asarray(s, float), np.asarray(se, float)
+    basis = lambda om: _pair_basis(i, lambda x: x ** -om)  # noqa: E731
+
+    def profile(om: float) -> tuple[float, np.ndarray]:
+        A = np.vstack([np.ones_like(s), basis(om)]).T / se[:, None]
+        coef, *_ = np.linalg.lstsq(A, s / se, rcond=None)
+        r = A @ coef - s / se
+        return float(r @ r), coef
+
+    grid = np.geomspace(*omega_bounds, 400)
+    j = int(np.argmin([profile(om)[0] for om in grid]))
+    lo, hi = grid[max(j - 1, 0)], grid[min(j + 1, grid.size - 1)]
+    om = float(optimize.minimize_scalar(lambda o: profile(o)[0], bounds=(lo, hi),
+                                        method="bounded", options={"xatol": 1e-10}).x)
+    _, (g, a1) = profile(om)
+    out = {"model": "gamma + a1 (i'^-omega - i^-omega)/log(i'/i)", "gamma": float(g),
+           "a1": float(a1), "omega": om,
+           "omega_on_bound": bool(np.isclose(om, omega_bounds[0], rtol=1e-3)
+                                  or np.isclose(om, omega_bounds[1], rtol=1e-3))}
+    if s.size > 3:
+        k = np.arange(s.size, dtype=float)
+        f = lambda kk, g_, a_, o_: g_ + a_ * basis(o_)[kk.astype(int)]  # noqa: E731
+        popt, pcov = optimize.curve_fit(f, k, s, p0=[g, a1, om], sigma=se,
+                                        absolute_sigma=True, maxfev=20000)
+        err = np.sqrt(np.diag(pcov))
+        out.update(gamma=float(popt[0]), a1=float(popt[1]), omega=float(popt[2]),
+                   se_gamma=float(err[0]), se_a1=float(err[1]), se_omega=float(err[2]))
+    r = (out["gamma"] + out["a1"] * basis(out["omega"]) - s) / se
+    return {**out, **_chi2_summary(r, 3)}
+
+
+def fit_log_pairs(scales, s, se) -> dict:
+    """(L) log E Y = log a0 + gamma log i + c log log i, i.e. s - gamma ~ c / ln i, in the
+    exact pair form s_k = gamma + c (log log i_{k+1} - log log i_k) / log(i_{k+1}/i_k)."""
+    i = _check_increasing(scales)
+    s, se = np.asarray(s, float), np.asarray(se, float)
+    A = np.vstack([np.ones_like(s), _pair_basis(i, lambda x: np.log(np.log(x)))]).T / se[:, None]
+    coef, *_ = np.linalg.lstsq(A, s / se, rcond=None)
+    cov = np.linalg.inv(A.T @ A)
+    return {"model": "gamma + c / ln i (pair form)", "gamma": float(coef[0]),
+            "c": float(coef[1]), "se_gamma": float(np.sqrt(cov[0, 0])),
+            "se_c": float(np.sqrt(cov[1, 1])), **_chi2_summary(A @ coef - s / se, 2)}
+
+
+def clt_se_pairs(scales, cv, n, R) -> np.ndarray:
+    """`clt_se` on any ladder: per-scale variance cv^2/(n R) of mean log Ybar."""
+    i = _check_increasing(scales)
+    v = np.asarray(cv, float) ** 2 / (np.asarray(n, float) * np.asarray(R, float))
+    return np.sqrt(v[:-1] + v[1:]) / np.log(i[1:] / i[:-1])
+
+
+def n_mismatch_pairs(scales, cv, n) -> np.ndarray:
+    """`n_mismatch` on any ladder: cv^2/2 (1/n_k - 1/n_{k+1}) / log(i_{k+1}/i_k)."""
+    i = _check_increasing(scales)
+    cv, n = np.asarray(cv, float), np.asarray(n, float)
+    c2 = ((cv[:-1] + cv[1:]) / 2) ** 2
+    return c2 / 2 * (1 / n[:-1] - 1 / n[1:]) / np.log(i[1:] / i[:-1])
+
+
+def analyse_pairs(scales, y_bars_by_scale, *, cv=None, n=None) -> dict:
+    """`analyse` for any increasing ladder: s_k, the (P) and (L) pair fits, and, given
+    per-scale cv and n, the CLT se and the n-mismatch term (n may differ by scale)."""
+    mom = [scale_moments(y) for y in y_bars_by_scale]
+    L = np.array([m[0] for m in mom])
+    se = np.array([m[1] for m in mom])
+    R = np.array([m[2] for m in mom])
+    out = {"log_y": L.tolist(), "se_log_y": se.tolist(), "R": R.tolist(),
+           **local_slopes_pairs(scales, L, se)}
+    s, se_s = np.array(out["s"]), np.array(out["se_s"])
+    out["fits"] = {"power": fit_power_pairs(scales, s, se_s) if s.size >= 3 else None,
+                   "log": fit_log_pairs(scales, s, se_s) if s.size >= 2 else None}
+    if cv is not None and n is not None:
+        out["se_s_clt"] = clt_se_pairs(scales, cv, n, R).tolist()
+        out["n_mismatch"] = n_mismatch_pairs(scales, cv, n).tolist()
+    return out
+
+
+def _linear_at(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float, om: float,
+               pin: tuple[float, float] | None = None) -> tuple[float, np.ndarray]:
+    """chi2 and (a, b, c) of weighted LS of L = a + b x + c rho^(-om x) at fixed omega.
+
+    `pin` = (b0, se_b0) adds the residual (b - b0) / se_b0 (see `_window_fit`)."""
+    A = np.vstack([np.ones_like(x), x, rho ** (-om * x)]).T / se[:, None]
+    y = L / se
+    if pin is not None:
+        A = np.vstack([A, [0.0, 1.0 / pin[1], 0.0]])
+        y = np.concatenate([y, [pin[0] / pin[1]]])
+    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+    r = A @ coef - y
+    return float(r @ r), coef
+
+
+def _window_fit(x: np.ndarray, L: np.ndarray, se: np.ndarray, rho: float,
+                omega_bounds: tuple[float, float],
+                pin: tuple[float, float] | None = None) -> dict:
+    """Weighted LS of L = a + b x + c rho^(-omega x) on one window (x = 0, 1, ...).
+
+    (a, b, c) are linear given omega, so omega is profiled over a log grid, refined
+    in the best cell, and its 68% interval read off the profile at chi2_min + 1. The
+    profile, not curve_fit's linearized se, is the error bar: on 5 points the chi2 in
+    omega is far from quadratic.
+
+    `pin` = (b0, se_b0) ties b to an independent estimate by one extra residual
+    (b - b0) / se_b0, as `correction.fit_correction_pinned` does, so the chi2 carries
+    b0's own error and has x.size - 3 dof.
+    """
+    n_free = 3 if pin is not None else 4
+
+    def profile(om: float) -> tuple[float, np.ndarray]:
+        return _linear_at(x, L, se, rho, om, pin)
+
+    grid = np.geomspace(*omega_bounds, 600)
+    chi = np.array([profile(om)[0] for om in grid])
+    j = int(np.argmin(chi))
+    lo, hi = grid[max(j - 1, 0)], grid[min(j + 1, grid.size - 1)]
+    om = float(optimize.minimize_scalar(lambda o: profile(o)[0], bounds=(lo, hi),
+                                        method="bounded", options={"xatol": 1e-12}).x)
+    chi2, (a, b, c) = profile(om)
+    excess = lambda o: profile(o)[0] - chi2 - 1.0   # noqa: E731
+
+    def edge(side: np.ndarray, bound: float) -> tuple[float, bool]:
+        # the nearest grid point outside the interval brackets the crossing; none means
+        # the profile never rises by 1 on that side, so the interval is open there
+        out = side[chi[np.isin(grid, side)] > chi2 + 1.0]
+        if out.size == 0:
+            return bound, True
+        far = out.max() if bound < om else out.min()
+        return float(optimize.brentq(excess, *sorted((far, om)), xtol=1e-12)), False
+
+    # se of b from the full (a, b, c, omega) covariance at the optimum, so omega's
+    # uncertainty reaches b; linearized, which b (a linear parameter) tolerates
+    e = rho ** (-om * x)
+    J = np.vstack([np.ones_like(x), x, e, -c * x * np.log(rho) * e]).T / se[:, None]
+    if pin is not None:
+        J = np.vstack([J, [0.0, 1.0 / pin[1], 0.0, 0.0]])
+    se_b = float(np.sqrt(np.linalg.pinv(J.T @ J)[1, 1]))
+
+    lo_e, lo_open = edge(grid[grid < om], omega_bounds[0])
+    hi_e, hi_open = edge(grid[grid > om], omega_bounds[1])
+    on_bound = bool(np.isclose(om, omega_bounds[0], rtol=1e-3)
+                    or np.isclose(om, omega_bounds[1], rtol=1e-3))
+    return {"omega": om, "a": float(a), "b": float(b), "c": float(c), "se_b": se_b,
+            "omega_lo": lo_e, "omega_hi": hi_e, "interval_open": lo_open or hi_open,
+            "omega_on_bound": on_bound, "chi2": chi2, "dof": int(x.size - n_free),
+            "p_value": (float(stats.chi2.sf(chi2, x.size - n_free))
+                        if x.size > n_free else None)}
+
+
+def omega_windows(scales, log_y, se_log, rho: float, width: int = 5,
+                  omega_bounds=(1e-2, 10.0)) -> list[dict]:
+    """omega from a + b k + c rho^(-omega k) fitted on each run of `width` consecutive
+    points of the log-log plot (user, 2026-11-04): m - width + 1 estimates.
+
+    By eq. (232), log E Y_i = log a0 + gamma log i + a1 i^-omega1 + ..., which on the
+    grid i = rho^k is exactly this model at J = 1, so omega reads omega1, b / log rho
+    reads gamma and c rho^(omega k0) reads a1 (k0 = log_rho of the window's first
+    scale). At width = 4 the fit is an interpolation and omega equals w_k of
+    `local_slopes` identically; width = 5 leaves one dof, hence a chi2.
+    """
+    i = _check_grid(scales, rho)
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    if width < 4:
+        raise ValueError(f"the model has 4 parameters; width must be >= 4, got {width}")
+    out = []
+    x = np.arange(width, dtype=float)
+    for k in range(L.size - width + 1):
+        f = _window_fit(x, L[k:k + width], se[k:k + width], rho, omega_bounds)
+        f.update(scales=i[k:k + width].astype(int).tolist(),
+                 gamma=f["b"] / np.log(rho), se_gamma=f["se_b"] / np.log(rho),
+                 a1=f["c"] * float(i[k]) ** f["omega"])
+        out.append(f)
+    return out
+
+
+def clt_se_log(cv_by_scale, n_by_scale) -> np.ndarray:
+    """se of mean log Ybar per scale from each replicate's own cv and n (user, 2026-11-05).
+
+    Delta method per replicate, var log Ybar_r = cv_r^2 / n_r; the mean over R replicates
+    has variance sum_r cv_r^2 / n_r / R^2. Unlike `scale_moments`' sd_r / sqrt(R), which
+    rests on R - 1 = 2 dof when R = 3, this uses every sample, so a chi2 weighted by it
+    is chi2-distributed when the model holds.
+    """
+    out = []
+    for cv, n in zip(cv_by_scale, n_by_scale):
+        cv, n = np.asarray(cv, float), np.asarray(n, float)
+        out.append(np.sqrt(np.sum(cv ** 2 / n)) / cv.size)
+    return np.array(out)
+
+
+def omega_ranges(scales, log_y, se_log, rho: float, min_points: int = 6,
+                 omega_bounds=(1e-2, 10.0),
+                 gamma_pin: tuple[float, float] | None = None) -> dict:
+    """The triple (i_min, i_max, omega): a + b k + c rho^(-omega k) fitted by weighted
+    LS on every run of >= `min_points` consecutive log-log points (user, 2026-11-05).
+
+    The left cut drops scales where omega_2, ... still act; the right cut, scales whose
+    variance or bias the model does not describe. chi2 alone cannot choose the range:
+    dropping points always lowers it. Each range is scored by Jay & Neil's AIC with data
+    cuts (Phys. Rev. D 103, 114502 (2021)), AIC = chi2 + 2 k + 2 N_cut with
+    k = 4 parameters, so a dropped point costs as much as a parameter; weights are
+    proportional to exp(-AIC / 2). Fits whose interval is open or whose omega sits on a
+    bound are left out (user, 2026-11-05): omega on a bound degenerates rho^(-omega k)
+    into a constant or a line, so b no longer reads gamma (rwre p = 0.2 gave
+    omega = 0.010, gamma = -0.09). min_points = 6 keeps dof >= 2.
+
+    omega and gamma are the AIC-weighted means over the kept ranges, Jay & Neil's
+    model average, eq. (15) (user, 2026-11-09). It replaced the single highest-weight
+    range: the highest-weight range carried a median 0.31 of the kept weight over 102
+    studies, so selection is not the dominant-weight limit in which the two agree; on
+    planted data the average has half the rms error. The error is eq. (18): `stat` =
+    sqrt(sum P sigma_r^2), sigma_r the 68% profile half-width of range r, and
+    `systematic` = the weighted sd of omega over the ranges; `total` is their quadratic
+    sum. gamma gets the same two parts from each fit's linearized se. a1 is NOT
+    averaged: a1 and omega trade off against each other, so a weighted a1 pairs with
+    no fit (on pipeline_p0.6_1h one range of weight 0.02, 256..4096 with omega 1.6
+    and a1 = -43, moved it from -0.3 to -1.16). Instead a1 and log_a0 come from
+    refitting the highest-weight range (`best`) with omega fixed at the averaged
+    omega (user, 2026-11-09: the article's interval takes one omega1, so B_fs is
+    built from one coherent (a1, omega1)); `chi2_at_omega` is that refit's chi2.
+    `best_weight` is best's share of the kept weight. With no kept fit, omega and gamma are
+    None and `reason` says why; nothing is substituted.
+
+    `gamma_pin` = (gamma_hat, se) pins gamma to the long run's estimate (user,
+    2026-11-07): this is the omega1 of the Step 5 refit that feeds B_fs, where gamma
+    must stay the log-log estimator's own. The pin is one extra residual, so dof =
+    points - 3 and min_points = 5 already keeps dof >= 2; k stays 4 in the AIC (gamma
+    is still fitted, under the penalty), a constant that moves no weight. With the
+    pin, `gamma` is returned as fitted, for checking it stayed at gamma_hat.
+
+    Scales need only increase (2026-11-07, for pilots off a rho^k ladder): x =
+    log_rho(i / i_min), so rho^(-omega x) = (i / i_min)^-omega and omega, a1, gamma
+    do not depend on rho; on a ladder x is 0, 1, 2, ... as before.
+    """
+    i = _check_increasing(scales)
+    pin = None if gamma_pin is None else (gamma_pin[0] * np.log(rho),
+                                          gamma_pin[1] * np.log(rho))
+    L, se = np.asarray(log_y, float), np.asarray(se_log, float)
+    m = L.size
+    if min_points < 5:
+        raise ValueError(f"4 parameters need >= 5 points for a chi2; got {min_points}")
+    if m < min_points:
+        raise ValueError(f"{m} log-log points; the range fit needs >= {min_points}")
+    fits = []
+    for k1 in range(m - min_points + 1):
+        for k2 in range(k1 + min_points, m + 1):
+            x = np.log(i[k1:k2] / i[k1]) / np.log(rho)
+            f = _window_fit(x, L[k1:k2], se[k1:k2], rho, omega_bounds, pin)
+            f.update(i_min=int(i[k1]), i_max=int(i[k2 - 1]), points=k2 - k1, k1=k1, k2=k2,
+                     gamma=f["b"] / np.log(rho), se_gamma=f["se_b"] / np.log(rho),
+                     a1=f["c"] * float(i[k1]) ** f["omega"],
+                     aic=f["chi2"] + 2 * 4 + 2 * (m - (k2 - k1)))
+            fits.append(f)
+    aic = np.array([f["aic"] for f in fits])
+    w = np.exp(-(aic - aic.min()) / 2)
+    w /= w.sum()
+    for f, wf in zip(fits, w):
+        f["weight"] = float(wf)
+    good = np.array([not (f["interval_open"] or f["omega_on_bound"]) for f in fits])
+    head = {"criterion": "AIC = chi2 + 2*4 + 2*N_cut (Jay & Neil 2021), weight ~ exp(-AIC/2)",
+            "min_points": min_points, "weight_left_out": float(w[~good].sum()),
+            "gamma_pin": None if gamma_pin is None else list(map(float, gamma_pin))}
+    if not good.any():
+        return {**head, "best": None, "omega": None, "gamma": None,
+                "reason": "every range's omega interval is open or omega sits on a bound",
+                "fits": fits}
+    kept = [f for f, g in zip(fits, good) if g]
+    best = max(kept, key=lambda f: f["weight"])
+    wg = w[good] / w[good].sum()
+    om = np.array([f["omega"] for f in kept])
+    sig = np.array([(f["omega_hi"] - f["omega_lo"]) / 2 for f in kept])
+    ga = np.array([f["gamma"] for f in kept])
+    se_g = np.array([f["se_gamma"] for f in kept])
+    omega, gamma = float(wg @ om), float(wg @ ga)
+    stat, syst = float(np.sqrt(wg @ sig ** 2)), float(np.sqrt(wg @ (om - omega) ** 2))
+    g_stat, g_syst = float(np.sqrt(wg @ se_g ** 2)), float(np.sqrt(wg @ (ga - gamma) ** 2))
+    # a1 at the averaged omega: refit (a, b, c) on best's range with omega fixed there,
+    # so (log a0, b, a1, omega) is one fit (user, 2026-11-09)
+    k1, k2 = best["k1"], best["k2"]
+    x = np.log(i[k1:k2] / i[k1]) / np.log(rho)
+    chi2_at, (a_at, b_at, c_at) = _linear_at(x, L[k1:k2], se[k1:k2], rho, omega, pin)
+    a1_at = float(c_at * float(i[k1]) ** omega)
+    # a is the fit at x = 0, i.e. i = i_min, so log a0 = a - (b / log rho) log i_min
+    log_a0_at = float(a_at - b_at / np.log(rho) * np.log(i[k1]))
+    return {**head, "best": best, "best_weight": float(wg.max()),
+            "omega": omega, "a1": a1_at, "log_a0": log_a0_at, "chi2_at_omega": chi2_at,
+            "gamma_at_omega": float(b_at / np.log(rho)),
+            "stat": stat, "systematic": syst,
+            "total": float(np.hypot(stat, syst)),
+            "gamma": gamma, "gamma_stat": g_stat, "gamma_systematic": g_syst,
+            "gamma_total": float(np.hypot(g_stat, g_syst)),
+            "fits": fits}

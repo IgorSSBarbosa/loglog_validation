@@ -11,13 +11,17 @@
    `pipeline_extrapolation`: the pilot correction extended over the planned window.
 3. `pipeline_longrun`: the long run's log-log plot with the fitted slope gamma-hat.
 4. `pipeline_checks`: the Step 4 checks on the long-run data, one panel each for
-   the local slopes, (A4), (A5), (A6), (A8) and (A1)+(A3). The local slopes come from
+   the local slopes, (A4), (A5), (A6) and (A1)+(A2), labelled as in the article's
+   Step 4 list. The 2026-11-04 article revision dropped the log-moment assumption, so
+   its panel is gone and sigma^2 is (A5), the cost (A6) (user). The local slopes come from
    `src/study/local_slope.py` (local_slope.json), which brings every scale from the
-   pilot's smallest to the window's top to the final's n. (A4)-(A6) are drawn as
-   points, not lines: they are estimates at separate scales. (A8) compares the long run's time
-   with the planner's cost model; (A1)+(A3) is the log-log plot of pilot and long
+   pilot's smallest to the window's top to the final's n. (A4)-(A5) are drawn as
+   points, not lines: they are estimates at separate scales. (A6) compares the long run's time
+   with the planner's cost model; (A1)+(A2) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window and the pilot
-   refitted with gamma pinned to gamma-hat (the omega1, a1 of B_fs), with its chi2.
+   and long run refitted together (report.joint_refit: the omega1, a1 of B_fs), with its chi2.
+   `pipeline_check_<A1|A1A2|A4|A5|A6>`: each of those panels alone, for the article's
+   side-by-side layout of Step 4.
 
 Reads a finished study directory only (pilot.json, plan.json, final.json, answer.json).
 Truths appear nowhere (ground rule 4).
@@ -47,6 +51,7 @@ import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 from tools.allocation import allocation_constants, max_m0_for_scale  # noqa: E402
 from tools.cost_model import fit_cost_probe  # noqa: E402
@@ -108,7 +113,7 @@ def fig_pilot(d: dict, rho: float):
 
     ax.errorbar(k, y, yerr=se, fmt="o", color=DATA, label=r"$\log\overline{Y}_{\rho^k}$")
     ax.plot(kk, full(kk), color=FIT, label=r"fit $f(k)$")
-    ax.plot(kk, asym(kk), "--", color=REF, lw=1.1, label=r"asymptote $\hat\alpha k+\hat\beta$")
+    ax.plot(kk, asym(kk), "--", color=REF, lw=1.1, label=r"asymptote $\hat\beta k+\hat\alpha$")
     ax.set_ylabel(r"$\log\overline{Y}$")
     ax.legend(loc="upper left")
     ax.tick_params(labelbottom=False)
@@ -163,7 +168,7 @@ def tradeoff(d: dict) -> dict:
     assert math.isclose(c["Cb"] * rho ** (-j * w), plan["bias"], rel_tol=1e-9)
     assert math.isclose(c["Cs"] / math.sqrt(n[j]), plan["sd"], rel_tol=1e-9)
     fs = 6 / (m * (m + 1)) * abs(a1) * rho ** (-w * m0) / (rho ** w - 1)
-    se = np.sqrt(12 * cst["cv"] ** 2 / (n * m ** 3))
+    se = np.sqrt(12 * cst["cv"] ** 2 / (n * m * (m ** 2 - 1)))
     assert int(m0[np.argmin(np.maximum(fs, se))]) == j, "eq. (m0-star) disagrees with the plan"
     return {"m0": m0, "n": n, "fs": fs, "se": se, "chosen": j, "cst": cst, "m": m}
 
@@ -176,7 +181,7 @@ def fig_allocation(d: dict, rho: float):
                 label=r"$\hat b_{\rm FS}(m_0)=\dfrac{6}{m(m+1)}\,"
                       r"\dfrac{|\hat a_1|\,\rho^{-\hat\omega_1 m_0}}{\rho^{\hat\omega_1}-1}$")
     ax.semilogy(t["m0"], t["se"], "s-", color=DATA,
-                label=r"$\hat b_{\rm SE}(m_0)=\sqrt{\dfrac{12\,\hat\sigma^2_\infty}{n(m_0)\,m^3}}$")
+                label=r"$\hat b_{\rm SE}(m_0)=\sqrt{\dfrac{12\,\hat\sigma^2_\infty}{n(m_0)\,m(m^2-1)}}$")
     # Stops at the crossing, so it never runs behind the formulas in the legend.
     lo = min(t["fs"].min(), t["se"].min()) / 2
     ax.set_ylim(bottom=lo)
@@ -207,7 +212,7 @@ def fig_extrapolation(d: dict, rho: float):
     ax.plot(kk, full(kk) - asym(kk), color=FIT, label=r"$\hat a_1\rho^{-\hat\omega_1 k}$")
     ax.axhline(0, color=REF, lw=0.8, ls="--")
     ax.set_xlabel(r"$k=\log_\rho i$")
-    ax.set_ylabel(r"$\log\overline{Y}-(\hat\alpha k+\hat\beta)$")
+    ax.set_ylabel(r"$\log\overline{Y}-(\hat\beta k+\hat\alpha)$")
     ax.legend(loc="lower right")
     ax.set_title("pilot correction, extrapolated", fontsize=9, loc="left")
     return fig
@@ -237,104 +242,136 @@ def fig_longrun(d: dict, rho: float):
     return fig
 
 
-def fig_checks(d: dict, rho: float):
-    pilot, plan, final = d["pilot"], d["plan"], d["final"]
-    reps = final["per_replicate"]
-    i = np.asarray(final["scales"], float)
-    k = np.log(i) / math.log(rho)
-    R, n = len(reps), final["n"]
-    fig, axs = plt.subplots(2, 3, figsize=(7.2, 4.4), constrained_layout=True)
+def _per_rep(ax, k, values, label):
+    """Each replicate a light point, their mean a full one; scales are not joined."""
+    for v in values:
+        ax.plot(k, v, "o", color=DATA, alpha=0.35, ms=3.5)
+    mean = np.mean(values, axis=0)
+    ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
+    return mean
 
-    def per_rep(ax, values, label):
-        """Each replicate a light point, their mean a full one; scales are not joined."""
-        for v in values:
-            ax.plot(k, v, "o", color=DATA, alpha=0.35, ms=3.5)
-        mean = np.mean(values, axis=0)
-        ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
-        return mean
 
-    ax = axs[0, 0]
+def _window_k(d: dict, rho: float) -> np.ndarray:
+    return np.log(np.asarray(d["final"]["scales"], float)) / math.log(rho)
+
+
+def check_A1(ax, d: dict, rho: float) -> None:
+    k = _window_k(d, rho)
     ls = d["local_slope"]["analysis"]
     # s_k is the slope between rho^k and rho^(k+1), so it sits between them.
     ks = np.log(ls["scales"][:-1]) / math.log(rho) + 0.5
     ax.axvspan(k[0], k[-1], color=WINDOW, label="long-run window")
     ax.errorbar(ks, ls["s"], yerr=ls["se_s"], fmt="o", color=DATA, ms=3.5,
-                label=r"$s_k \pm$ se")
+                label=r"$s_k$, $\pm 1$ standard error")
     ax.axhline(d["answer"]["gamma"], color=REF, ls="--", lw=1,
                label=rf"$\hat\gamma={d['answer']['gamma']:.5f}$")
     ax.set_ylabel(r"$s_k$")
     ax.set_title(r"(A1) local slopes $s_k$", fontsize=9, loc="left")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True, steps=[1, 2, 5, 10]))   # k is an integer (user, 2026-11-03)
+    ax.set_xlabel(r"$k=\log_\rho i$")
     ax.legend(loc="upper right", fontsize=7)
 
-    per_rep(axs[0, 1], [r["abs_moment"] for r in reps], r"$\overline{|\xi_i|^{3}}$")
-    axs[0, 1].set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
-    axs[0, 1].ticklabel_format(axis="y", useOffset=False)
 
-    # report.py's Lambda: the largest over scales of the replicate mean.
-    L = per_rep(axs[0, 2], [r["log_moment"] for r in reps],
-                r"$\overline{|\log\xi_i|^{3}}$").max()
-    assert math.isclose(L, d["answer"]["Lambda"], rel_tol=1e-12), (L, d["answer"]["Lambda"])
-    axs[0, 2].axhline(L, color=REF, ls="--", lw=1, label=rf"$\hat L={L:.2f}$")
-    axs[0, 2].set_title(r"(A5) $\mathbb{E}|\log\xi_i|^{2+\delta}$", fontsize=9, loc="left")
+def check_A4(ax, d: dict, rho: float) -> None:
+    _per_rep(ax, _window_k(d, rho), [r["abs_moment"] for r in d["final"]["per_replicate"]],
+             r"$\overline{|\xi_i|^{3}}$")
+    ax.set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
+    ax.ticklabel_format(axis="y", useOffset=False)
+    ax.set_xlabel(r"$k=\log_\rho i$")
+    ax.legend(loc="upper right", fontsize=7)
 
-    ax = axs[1, 0]
-    s2 = per_rep(ax, [np.square(r["cv"]) for r in reps], r"$\hat\sigma_i^2$")
+
+def check_A5(ax, d: dict, rho: float) -> None:
+    s2 = _per_rep(ax, _window_k(d, rho), [np.square(r["cv"]) for r in d["final"]["per_replicate"]],
+                  r"$\hat\sigma_i^2$")
     ax.axhline(s2.max(), color=REF, ls="--", lw=1, label=rf"$\hat\sigma^2_{{\max}}={s2.max():.4f}$")
-    ax.set_title(r"(A6) $\hat\sigma_i^2=\widehat{\mathbb{V}}\,\xi_i$", fontsize=9, loc="left")
+    ax.set_title(r"(A5) $\hat\sigma_i^2=\widehat{\mathrm{var}}\,\xi_i$", fontsize=9, loc="left")
+    ax.set_xlabel(r"$k=\log_\rho i$")
+    ax.legend(loc="upper right", fontsize=7)
 
-    ax = axs[1, 1]
+
+def check_A6(ax, d: dict, rho: float) -> None:
+    pilot, final = d["pilot"], d["final"]
+    i = np.asarray(final["scales"], float)
+    R, n = len(final["per_replicate"]), final["n"]
     c = pilot["cost"]
     ps = np.asarray(c["probes"][0]["scales"], float)
     med = np.median([pr["elapsed"] for pr in c["probes"]], axis=0)
-    # The planner's own cost model (plan.py's plan_for_budget): i^d, converted to
-    # the model's work unit by cost_ratio, at the pilot's throughput.
-    dd, tp = plan["constants_at_plan_time"]["d"]["value"], plan["throughput"]
-    plan_cost = lambda s: np.asarray(s, float) ** dd * plan["cost_ratio"] / tp
-    assert math.isclose(n * float(np.sum(plan_cost(i))), plan["seconds"], rel_tol=1e-3)
     ii = np.geomspace(ps[0], i[-1], 200)
     ax.loglog(ps, med, "o", color=DATA, ms=3.5, label="pilot probe (median)")
     for r in [r for r in ((d["cost_refit"] or {}).get("rounds") or []) if not r["skipped"]]:
         ax.loglog(r["scales"], r["per_sample"], "^", color=REF, ms=4.5, zorder=3,
                   label=f"cost re-fit, {r['n_short']:,} per scale")
-    ax.loglog(ii, plan_cost(ii), color=FIT, label="planner's model")
+    # The article's cost-hat, fitted as in fig_pilot (b). The planner's own model
+    # (i^d at one throughput) is not drawn: the check is against cost-hat (user,
+    # 2026-11-17).
+    aff = fit_cost_probe({"scales": list(ps), "elapsed": list(med)})["affine"]
+    cost_hat = lambda s: aff["a"] + aff["b"] * np.asarray(s, float) ** aff["d"]
+    ax.loglog(ii, cost_hat(ii), color=FIT,
+              label=r"$\widehat{\rm cost}=\hat\kappa_0+\hat\kappa_1 i^{\hat d}$")
     # The long run times whole replicates, not single scales: its measured total is
-    # shared across the window in the proportions the plan predicts.
-    ratio = final["elapsed_seconds"] / (R * plan["seconds"])
-    ax.loglog(i, plan_cost(i) * ratio, "s", color=DATA, mfc="white", ms=4,
-              label=rf"long run ($\times{ratio:.2f}$)")
+    # shared across the window in the proportions cost-hat predicts, and the ratio
+    # is measured over cost-hat's prediction.
+    ratio = final["elapsed_seconds"] / (R * n * float(np.sum(cost_hat(i))))
+    ax.loglog(i, cost_hat(i) * ratio, "s", color=DATA, mfc="white", ms=4,
+              label=rf"long run ($\times{ratio:.2f}$ of $\widehat{{\rm cost}}$)")
     ax.set_xlabel("scale $i$")
     ax.set_ylabel("s per sample")
-    ax.set_title("(A8) cost", fontsize=9, loc="left")
+    ax.set_title("(A6) cost", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    ax = axs[1, 2]
+
+def check_A1A2(ax, d: dict, rho: float) -> None:
+    pilot = d["pilot"]
+    k = _window_k(d, rho)
     full, _ = pilot_curve(pilot["direct_fit"], rho)
     kp = np.log(pilot["scales"]) / math.log(rho)
     kin = np.linspace(kp[0] - 0.3, kp[-1], 100)
     kout = np.linspace(kp[-1], k[-1] + 0.3, 100)
     ax.plot(kp, np.log(pilot["y_bar"]), "o", color=DATA, ms=3.5, label="pilot")
-    ax.plot(k, np.log(pooled(reps, "y_bar")), "s", color=DATA, mfc="white", ms=4, label="long run")
+    ax.plot(k, np.log(pooled(d["final"]["per_replicate"], "y_bar")), "s", color=DATA, mfc="white",
+            ms=4, label="long run")
     ax.plot(kin, full(kin), color=FIT, label="pilot fit $f(k)$")
     ax.plot(kout, full(kout), "--", color=FIT, label="...extrapolated")
-    # The refit with gamma pinned to gamma-hat is what B_fs is built from (report.py,
-    # user 2026-11-02); its chi2 p-value is the warning that one correction is not enough.
-    rf = d["answer"]["pilot_refit"]
+    # The joint refit of pilot and long run is what B_fs is built from (report.py,
+    # user 2026-11-11); its chi2 p-value is the warning that one correction is not enough.
+    rf = d["answer"]["joint_refit"]
     pinned, _ = pilot_curve(rf, rho)
     ax.plot(np.concatenate([kin, kout]), pinned(np.concatenate([kin, kout])), ":", color=REF,
-            label=r"pilot refit, $\gamma=\hat\gamma$")
-    ax.text(0.97, 0.04, rf"refit: $\chi^2/\mathrm{{dof}}={rf['chi2']:.1f}/{rf['dof']}$" "\n"
+            label="joint refit")
+    ax.text(0.97, 0.04, rf"refit: AIC-weighted $\hat\omega_1={rf['omega1']:.2f}$" "\n"
+            rf"highest weight $[{rf['i_min']}, {rf['i_max']}]$" "\n"
+            rf"$\chi^2/\mathrm{{dof}}={rf['chi2']:.1f}/{rf['dof']}$, "
             rf"$p={rf['p_value']:.1g}$" + (", warning" if rf["warn"] else ""),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
     ax.set_ylabel(r"$\log\overline{Y}$")
-    ax.set_title("(A1)+(A3) extrapolation", fontsize=9, loc="left")
+    ax.set_xlabel(r"$k=\log_\rho i$")
+    ax.set_title("(A1)+(A2) extrapolation", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    for ax in (axs[0, 0], axs[0, 1], axs[0, 2], axs[1, 0], axs[1, 2]):
-        ax.set_xlabel(r"$k=\log_\rho i$")
-    for ax, loc in ((axs[0, 1], "upper right"), (axs[0, 2], "lower right"),
-                    (axs[1, 0], "upper right")):
-        ax.legend(loc=loc, fontsize=7)
+
+# Article file suffix -> panel. The article places each panel beside its check in
+# Step 4 (user, 2026-11-16); the combined figure stays for the README.
+CHECKS = {"A1": check_A1, "A1A2": check_A1A2, "A4": check_A4, "A5": check_A5, "A6": check_A6}
+
+
+def fig_checks(d: dict, rho: float):
+    # Five panels: three on top, the two wider ones (cost, extrapolation) below.
+    fig = plt.figure(figsize=(7.2, 4.4), constrained_layout=True)
+    ax_ = fig.subplot_mosaic([["A1", "A1", "A4", "A4", "A5", "A5"],
+                              ["A6", "A6", "A6", "A1A2", "A1A2", "A1A2"]])
+    for name, draw in CHECKS.items():
+        draw(ax_[name], d, rho)
     return fig
+
+
+def fig_check(name: str):
+    """One Step 4 panel alone, sized for a minipage of about half the text width."""
+    def make(d: dict, rho: float):
+        fig, ax = plt.subplots(figsize=(3.4, 2.6), constrained_layout=True)
+        CHECKS[name](ax, d, rho)
+        return fig
+    return make
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -348,7 +385,8 @@ def main(argv: list[str] | None = None) -> None:
     rho = float(d["plan"]["rho"])
     for name, make in (("pipeline_pilot", fig_pilot), ("pipeline_allocation", fig_allocation),
                        ("pipeline_extrapolation", fig_extrapolation),
-                       ("pipeline_longrun", fig_longrun), ("pipeline_checks", fig_checks)):
+                       ("pipeline_longrun", fig_longrun), ("pipeline_checks", fig_checks),
+                       *((f"pipeline_check_{c}", fig_check(c)) for c in CHECKS)):
         fig = make(d, rho)
         for ext in ("pdf", "png"):
             fig.savefig(out / f"{name}.{ext}", dpi=200)

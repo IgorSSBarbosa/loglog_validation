@@ -44,3 +44,19 @@ prop:opt m₀ = None crashed. Fixed in `src/budget/allocation_experiment.py` the
 
 **Reading.** At d = 2 the article's CLT holds as stated, asymptotic σ∞² included (cv is nearly flat
 on the cylinder). The bound covers and is 5× conservative.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+`calibration/score_theorems.py` re-scored with the same seed and n_boot. The CLT row's
+prediction now uses the exact $m(m^2-1)$, which is the same as the old "exact finite-m form" at
+uniform n and cv.
+
+| quantity | three-term | before |
+|---|---|---|
+| Var ratio, thm:CLT | **1.007 [0.92, 1.10]**: pass | 1.036 [0.946, 1.128] |
+| eq:wilson half-width | **0.0093** ($B_{fs}$ 0.0061, $1.96\sigma_{se}$ 0.0032) | 0.0122 |
+| coverage | **1000/1000 [0.996, 1]**, bound/RMSE 4.0 | 1000/1000, 5.3 |

@@ -116,6 +116,12 @@ def loglog_plot(
 
     ax.set_xscale("log")
     ax.set_yscale("log")
+    # Tick the scales actually run, not powers of ten: a ladder like 16..512
+    # spans barely one decade and would otherwise show a single "10^2" label.
+    from matplotlib.ticker import NullFormatter
+    ax.set_xticks(scales)
+    ax.set_xticklabels([f"{s:.6g}" for s in scales])
+    ax.xaxis.set_minor_formatter(NullFormatter())
     ax.set_xlabel("$i$")
     ax.set_ylabel(r"$\overline{Y}_i$")
     ax.grid(True, which="both", ls="-", lw=0.6, color=_GRIDLINE, alpha=0.8)

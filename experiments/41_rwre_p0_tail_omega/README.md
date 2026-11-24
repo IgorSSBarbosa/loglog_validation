@@ -61,7 +61,7 @@ it stops at 2²⁴, so 393,216 and the collective buffer were never needed. The 
 - Student t(4) over 5 replicates: $\pm0.0028$, giving [0.4983, 0.5140]. This interval
   covers scatter only. The plan predicted a bias of 0.0153 and a per-replicate sd of 0.0071.
   The closed-form sd is 0.00706, and the replicate spread is 0.00635.
-- eq. (720) bound: $\pm0.311$. Nearly all of it is $B_{fs}=0.266$, because at
+- eq. (720) bound (superseded, see the three-term section at the end): $\pm0.311$. Nearly all of it is $B_{fs}=0.266$, because at
   $\omega=0.153$, $\rho^{\omega}-1=0.11$ inflates the bound. The bound is flagged
   incomplete, since its $\omega_2$ piece is missing.
 - The all-points OLS gives 0.50615. The eq. (232) fit gives 0.278, which is not meaningful
@@ -70,3 +70,60 @@ it stops at 2²⁴, so 393,216 and the collective buffer were never needed. The 
 Against 19's `autopilot_p0_fix` ($\omega_1=0.45$, 2¹⁵..2²⁰, $\hat\gamma=0.5180\pm0.0055$),
 the deeper ladder moves $\hat\gamma$ toward ½, by 0.012. The remaining 0.006 is about
 2 replicate se, and smaller than the planned bias of 0.015.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[0.4907, 0.5216]**, half-width **0.0155** ($1.96\sigma_{se}$ 0.0140, $B_{fs}$ 0.0009,
+$B_{good}$ 0.0006). It contains ½. The ±0.311 above predates 2026-11-02: since then
+$B_{fs}$ comes from the pilot refitted with γ pinned, which returns ω₁ = 0.449 (pilot fit
+0.153) and **warns** (χ² p = 0). The tiny $B_{fs}$ is therefore not trustworthy. The bias the
+plan predicted (0.0153) is as large as the whole half-width. The four-term bound of
+2026-11-02 was ±0.0457, of which B_bad was 0.0294.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `run_p0_cap262144` | 0.506147 | 0.449 ± 0.001 | 5.91e+03/6 ⚠ | 0.0155 | 0.178 ± 0.011 | 64..1024 | 1.48/2 | 0.145 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `run_p0_cap262144` | 0.506147 | 0.178 | 0.145 | 0.183 ± 0.0109 | 64..1024 (0.74) | -0.752 | 0.118 | 0.132 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `run_p0_cap262144` | 0.506147 | 0.183 | 0.132 | 0.151 ± 0.0687 | 128..8388608 (0.16) | -0.919 | 0.262 | 0.276 |

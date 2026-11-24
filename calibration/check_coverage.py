@@ -188,10 +188,8 @@ def srw_arm_cost(n_per_scale, trials: int, replicates: int) -> tuple[float, floa
 
 def make_wilson_experiment(m0: int, m: int, rho: float, n: int, *,
                            sigma_inf2: float, sigma_max2: float,
-                           a1: float, omega1: float, level: float = 0.95,
-                           Lambda: float | None = None,
-                           delta: float | None = None):
-    """Coverage arm for the article's Wilson bound (tools/wilson.py, eq. 720).
+                           a1: float, omega1: float, level: float = 0.95):
+    """Coverage arm for the article's Wilson bound (tools/wilson.py, eq:wilson).
 
     Differs from the other arms in what is being tested. Those ask whether an
     interval built from R replicate fits is the width it claims. This one asks
@@ -219,8 +217,7 @@ def make_wilson_experiment(m0: int, m: int, rho: float, n: int, *,
         y_bar = rng.normal(mu, sd / sqrt(n))
         g = float(gamma_closed_form(scales, y_bar, rho, m0))
         res = wilson_interval(g, n, m, m0, rho, sigma_inf2=sigma_inf2,
-                              sigma_max2=sigma_max2, a1=a1, omega1=omega1,
-                              Lambda=Lambda, delta=delta, level=level)
+                              sigma_max2=sigma_max2, a1=a1, omega1=omega1, level=level)
         return g, res["half_width"] / q
 
     return experiment

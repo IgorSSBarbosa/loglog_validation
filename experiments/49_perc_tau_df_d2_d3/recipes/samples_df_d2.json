@@ -1,0 +1,28 @@
+{
+  "kind": "samples",
+  "model": "percolation2d_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "anchor": "south",
+    "geometry": "cylinder"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000000.0
+  },
+  "seed": null,
+  "_note": [
+    "20's pilot recipe unchanged (percolation2d_gpu, south, cylinder, 8..1024, neyman 4e11). Experiment 49.",
+    "Replaced percolation_zd_gpu dim 2 face_far (2026-10-31 smoke: omega1 = 0.05 +- 0.01, plan bias 0.07)."
+  ]
+}

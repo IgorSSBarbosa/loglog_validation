@@ -1,0 +1,16 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_gpu",
+  "params": {
+    "dim": 3,
+    "eps0": 0.15,
+    "box_factor": 4.0,
+    "nu_box": 0.88,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [2, 4, 8, 16, 32, 64],
+  "n": 10000,
+  "seed": null,
+  "_comment": "User, 2026-11-02: the 2026-10-08 pilot's design (x-ladder, c = 4) at x = 2..64 with 10^4 samples per rung, so each replicate alone can identify omega1 (that pilot's se(omega1) = 2.3 came from per-replicate fits at n = 284 on the top rung). Experiment 51, run by run_study.sh with autopilot --time 4h."
+}

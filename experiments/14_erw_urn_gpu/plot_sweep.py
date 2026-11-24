@@ -24,13 +24,22 @@ gap wherever the final ladder doesn't start at 8192.
     final's gamma-hat) ± se, next to the pilot's eq. (232) omega1 and the conjecture.
     Run that driver on every study first; a missing file raises.
   - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
-    appendix (user, 2026-11-02), without titles. The omega figure draws only the pilot
-    refitted with gamma pinned to gamma-hat (answer.json's pilot_refit), open where its chi2
-    warns; the other two estimates are in the article's table. The gamma figure adds a panel of
-    gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
+    appendix (user, 2026-11-02), without titles. The omega figure draws only the joint
+    refit of pilot and long run (answer.json's joint_refit, user 2026-11-11), open where
+    its chi2 warns; the other two estimates are in the article's table. The gamma figure is gamma_hat
+    against p only (its gamma_hat - gamma panel was dropped, user, 2026-11-07). Needs
     --omega-loglog's inputs.
 
-    python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h [--omega-loglog] [--article DIR]
+  - with --aic (user, 2026-11-05): omega_aic_vs_p_<tag>.png, the AIC fit's omega
+    (src/estimate/omega_aic.py's range_fit: a + bk + c rho^(-omega k) on the AIC-chosen
+    range of the local-slope ladder) against the conjecture, error bars the fit's stat
+    error only; and gamma_aic_vs_p_<tag>.png, |gamma_aic - gamma| against p with the fit's
+    stat se, beside the standard method's |gamma_hat - gamma| (answer.json: the log-log
+    OLS on the final run's last m scales) with its replicate se. The range systematic is
+    left out of both figures (user, 2026-11-05): it double-counts each range's noise. A
+    study without omega_aic.json, or whose fit gave no estimate, is left out and named.
+
+    python3 experiments/14_erw_urn_gpu/plot_sweep.py --tag 2h [--omega-loglog] [--article DIR] [--aic]
 """
 
 from __future__ import annotations
@@ -211,50 +220,36 @@ def plot_omega_loglog(res: dict, data_root: Path, tag: str, out: Path, plt) -> N
 def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> None:
     ps = np.array(sorted(res))
     g = np.array([res[p]["answer"]["gamma"] for p in ps])
-    lo = np.array([res[p]["answer"]["wilson"]["interval"][0] for p in ps])
-    hi = np.array([res[p]["answer"]["wilson"]["interval"][1] for p in ps])
-    gt = np.array([gamma_true(p) for p in ps])
-    hit = (lo <= gt) & (gt <= hi)
     blue, grey = "#2a6fdb", "#7a7a7a"
     rc = {"font.size": 9, "axes.spines.top": False, "axes.spines.right": False,
           "legend.frameon": False, "axes.grid": True, "grid.color": "#e6e6e6"}
     with plt.rc_context(rc):
-        fig, (ax, axd) = plt.subplots(1, 2, figsize=(7.2, 3.0), constrained_layout=True)
+        # Only gamma_hat against p; the error panel was dropped (user, 2026-11-07).
+        fig, ax = plt.subplots(figsize=(4.6, 3.2), constrained_layout=True)
         ax.plot([0, 0.75], [0.5, 0.5], color=grey, lw=1.2, label=r"$\gamma=1/2$")
         ax.plot([0.75, 1], [0.5, 1], color=grey, lw=1.2, ls="--", label=r"$\gamma=2p-1$")
         ax.plot(ps, g, "o", color=blue, ms=4, label=r"$\hat\gamma$")
         ax.set(xlabel="$p$", ylabel=r"$\gamma$", xlim=(0, 1))
         ax.legend(loc="upper left")
-        ax.set_title(r"(a) $\hat\gamma$ against $p$", fontsize=9, loc="left")
-        d = g - gt
-        for sel, face, lab in ((hit, blue, "interval contains $\\gamma$"),
-                               (~hit, "white", "interval misses $\\gamma$")):
-            axd.errorbar(ps[sel], d[sel], yerr=[g[sel] - lo[sel], hi[sel] - g[sel]], fmt="o",
-                         color=blue, mfc=face, ms=4, capsize=2, lw=0, elinewidth=1, label=lab)
-        axd.axhline(0, color=grey, lw=0.8)
-        axd.set_yscale("symlog", linthresh=1e-4)
-        axd.set_ylim(top=0.08)
-        axd.set(xlabel="$p$", ylabel=r"$\hat\gamma-\gamma$", xlim=(0, 1))
-        axd.legend(loc="upper left")
-        axd.set_title(r"(b) error, with its 95% interval", fontsize=9, loc="left")
-        for a in (ax, axd):
-            a.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+        ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
         fig.savefig(out_dir / "erw_gamma_vs_p.pdf")
         plt.close(fig)
 
-        # Only the refit with gamma pinned to the final's gamma-hat: the omega1 of B_fs
-        # (report.py). The pilot fit and the loglog-log stay in the article's table (user,
+        # Only the joint refit of pilot and long run: the omega1 of B_fs (report.py,
+        # user 2026-11-11). The pilot fit and the loglog-log stay in the article's table (user,
         # 2026-11-02). Open where its chi2 warns.
         fig, ax = plt.subplots(figsize=(5.4, 3.4), constrained_layout=True)
         pp = np.linspace(0, 1, 801)
         ax.plot(pp, omega_conjecture(pp), color=grey, lw=1.2,
                 label=r"conjecture $\omega=\min\{1,|4p-3|\}$")
-        rf = [res[p]["answer"]["pilot_refit"] for p in ps]
+        rf = [res[p]["answer"]["joint_refit"] for p in ps]
         om = np.array([r["omega1"] for r in rf])
         se = np.array([r["omega1_se"] for r in rf])
         warn = np.array([r["warn"] for r in rf])
-        for sel, face, lab in ((~warn, blue, r"pilot refit $\hat\omega_1$, $\gamma=\hat\gamma$"),
-                               (warn, "white", r"pilot refit, $\chi^2$ warning")):
+        for sel, face, lab in ((~warn, blue, r"joint refit $\hat\omega_1$"),
+                               (warn, "white", r"joint refit, $\chi^2$ warning")):
+            if not sel.any():
+                continue
             ax.errorbar(ps[sel], om[sel], yerr=se[sel], fmt="o", color=blue, mfc=face, ms=4.5,
                         capsize=2, elinewidth=1, label=lab)
         ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
@@ -262,6 +257,73 @@ def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> No
         ax.legend(loc="lower left", fontsize=8)
         fig.savefig(out_dir / "erw_omega_vs_p.pdf")
         plt.close(fig)
+
+
+def plot_aic(res: dict, data_root: Path, tag: str, outs: dict, plt) -> None:
+    blue, grey, orange = "#2a78d6", "#888780", "#eb6834"
+    rows = []
+    for p in sorted(res):
+        f = data_root / f"sweep_p{label(p)}_{tag}" / "omega_aic.json"
+        rf = json.loads(f.read_text())["range_fit"] if f.exists() else None
+        if rf is None or rf["best"] is None:
+            print(f"[plot] sweep_p{label(p)}_{tag}: no AIC estimate (omega_aic.json "
+                  f"{'gives none' if rf else 'missing'}), left out of the AIC figures", flush=True)
+            continue
+        rows.append((p, rf))
+    if not rows:
+        raise SystemExit("no study has omega_aic.json: run src/estimate/omega_aic.py first")
+    ps = np.array([p for p, _ in rows])
+    rf = [r for _, r in rows]
+    om = np.array([r["omega"] for r in rf])
+    st = np.array([r["stat"] for r in rf])
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    pp = np.linspace(0, 1, 801)
+    ax.plot(pp, omega_conjecture(pp), color=grey, lw=1.2,
+            label="conjecture: ω = 1 (p < 1/2), |4p − 3| (p ≥ 1/2)")
+    ax.errorbar(ps, om, yerr=st, fmt="o", color=blue, ms=6, elinewidth=1.5, capsize=3,
+                label="ω̂ AIC fit ± stat (68% profile interval)")
+    for p, r in rows:
+        b = r["best"]
+        ax.text(p, 0.02, f"{b['i_min']}..{b['i_max']}", rotation=90, ha="center", va="bottom",
+                fontsize=6.5, color=grey)
+    ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+    ax.set(xlabel="p", ylabel="ω", xlim=(0, 1), ylim=(0, 1.25),
+           title="ω from the AIC fit a + bk + cρ^(−ωk) against p (grey: chosen range i_min..i_max)")
+    ax.title.set_fontsize(10)
+    ax.grid(True, color="#e1e0d9", lw=0.6)
+    ax.legend(fontsize=8, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(outs["omega_aic_vs_p"], dpi=130)
+    plt.close(fig)
+
+    g = np.array([r["gamma"] for r in rf])
+    gst = np.array([r["gamma_stat"] for r in rf])
+    truth = np.array([gamma_true(p) for p in ps])
+    err = np.abs(g - truth)
+    # the standard method: answer.json's gamma-hat, the log-log OLS on the final (long)
+    # run's last m scales, and its replicate se
+    std = [res[p]["answer"] for p in ps]
+    err_std = np.abs(np.array([a["gamma"] for a in std]) - truth)
+    se_std = np.array([a["se"] for a in std])
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    dx = 0.006
+    ax.plot(ps - dx, err, "o", color=blue, ms=7, label="|γ̂_AIC − γ|", zorder=3)
+    ax.plot(ps - dx, gst, "_", color=blue, ms=14, mew=2, label="AIC fit: estimated se (stat)")
+    ax.plot(ps + dx, err_std, "s", color=orange, ms=6, zorder=3,
+            label="|γ̂ − γ|, standard: log-log OLS on the final run's last m scales")
+    ax.plot(ps + dx, se_std, "_", color=orange, ms=14, mew=2,
+            label="standard: estimated se (replicates)")
+    ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+    ax.set_yscale("log")
+    ax.set(xlabel="p", ylabel="|γ̂ − γ|  and  se", xlim=(0, 1),
+           title="|γ̂ − γ| against p: AIC fit vs the standard final-run fit, each with its estimated se\n(γ = 1/2 for p ≤ 3/4, 2p − 1 above; reporting only)")
+    ax.title.set_fontsize(10)
+    ax.grid(True, color="#e1e0d9", lw=0.6, which="both")
+    ax.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(outs["gamma_aic_vs_p"], dpi=130)
+    plt.close(fig)
 
 
 def main() -> int:
@@ -273,6 +335,9 @@ def main() -> int:
                     help="also draw omega_loglog_vs_p_<tag>.png from each study's omega_loglog.json")
     ap.add_argument("--article", type=Path, default=None, metavar="DIR",
                     help="also write the article's erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf into DIR")
+    ap.add_argument("--aic", action="store_true",
+                    help="also draw omega_aic_vs_p_<tag>.png and gamma_aic_vs_p_<tag>.png from "
+                         "each study's omega_aic.json (the AIC fit)")
     args = ap.parse_args()
 
     pat = re.compile(rf"sweep_p([0-9.]+)_{re.escape(args.tag)}")
@@ -300,6 +365,10 @@ def main() -> int:
     if args.omega_loglog:
         outs["omega_loglog_vs_p"] = args.data_root / f"omega_loglog_vs_p_{args.tag}.png"
         plot_omega_loglog(res, args.data_root, args.tag, outs["omega_loglog_vs_p"], plt)
+    if args.aic:
+        for name in ("omega_aic_vs_p", "gamma_aic_vs_p"):
+            outs[name] = args.data_root / f"{name}_{args.tag}.png"
+        plot_aic(res, args.data_root, args.tag, outs, plt)
     if args.article:
         args.article.mkdir(parents=True, exist_ok=True)
         plot_article(res, args.data_root, args.tag, args.article, plt)

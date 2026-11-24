@@ -1,6 +1,6 @@
 # Experiment 25 — eq. (720) coverage for $\hat\tau$, $d=2$, tail observable
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). With box_exponent = 48/91 the eq. (720) bound covers 100/100 and the bias falls 5–10×; at 1/2 it covered 50 %.**The eq. (720) bound under-covers: 50 %.****
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-13). With box_exponent = 48/91 the eq. (720) bound covers 100/100 and the bias falls 5–10×; at 1/2 it covered 50 % (18 % with the three-term bound of 2026-11-04).**
 
 ## Acceptance criterion
 
@@ -113,3 +113,23 @@ now holds. Triage GREEN.
 **Conclusion.** With the box tied to the cluster size, the bias decays like a correction to
 scaling again, eq. (232) identifies it, and eq. (720) covers. The 50 % failure at
 `box_exponent` = 1/2 was the observable, not the bound.
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+| run | m₀ | half-width | coverage | bound/RMSE | Var ratio (thm:CLT) |
+|---|---|---|---|---|---|
+| `coverage` (box 1/2) | 7 | **0.0080** (was 0.0100) | **9/50 = 0.18 [0.10, 0.31]** (was 25/50) | 0.79 | 1.11 [0.69, 1.56]: pass |
+| `coverage_box_df` | 7 | 0.0168 (was 0.019) | 50/50 | 5.9 | **0.73 [0.48, 0.98]: FAIL** (was 0.75 [0.49, 1.01], pass) |
+| `coverage_box_df` | 8 (tuned) | 0.0148 (was 0.019) | 50/50 | 4.5 | 0.97 [0.52, 1.47]: pass |
+
+At box 1/2 the bias (+0.0099) sat at the edge of the old bound, so losing about 0.002 of
+non-$B_{fs}$ width drops coverage from 50 % to 18 %. The conclusion is unchanged: that run's
+bias does not decay like a correction, and at 48/91 the bound covers 100/100. The one CLT
+flip is at m₀ = 7 with box 48/91. That ratio is below 1 (the observed spread is smaller than
+predicted), and the CI's upper end, 0.985, lies just under 1. It is one fail among the
+three CLT tests in this experiment, and it flips because the prediction is now
+$\sqrt{36/35}$ wider.

@@ -234,3 +234,160 @@ p = 3/4. At p = 0.05 the miss is bias, not noise: exact $E|S_i|$ (DP to $2^{17}$
 last point extended with local exponent 1.000) gives $\hat\gamma-\tfrac12=2.80\times10^{-5}$
 on $2^{13}..2^{18}$, against the measured $2.76\times10^{-5}$, with $B_{fs}=0.93\times10^{-5}$.
 
+
+## Wilson interval in the article's three-term form, tag `2h` (2026-11-04)
+
+**Change (user, 2026-11-04).** The article dropped the logarithmic-moment assumption, and
+Theorem cor:wilson lost its $B_{bad}$ term with it. Now
+$W = \Phi^{-1}(1-\alpha/2)\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$:
+$B_{good}$ lost its $(c_0+2)$ factor, and the SE carries the exact $m(m^2-1)$, so it is
+$\sqrt{36/35}$ wider than the old $m^3$ form at $m=6$. $\hat\gamma$ and $B_{fs}$ are unchanged
+(same pinned refit). Every study was re-reported; nothing was redrawn.
+
+| p | Wilson 95% (three-term) | contains γ | half-width new/old | four-term (2026-11-02) | contains γ |
+|---|---|---|---|---|---|
+| 0.05 | [0.500007, 0.500049] | **no** | 0.92 | [0.500005, 0.500050] | **no** |
+| 0.1 | [0.500005, 0.500049] | **no** | 0.92 | [0.500003, 0.500051] | **no** |
+| 0.15 | [0.499998, 0.500043] | yes | 0.92 | [0.499996, 0.500045] | yes |
+| 0.2 | [0.499988, 0.500049] | yes | 0.91 | [0.499984, 0.500052] | yes |
+| 0.25 | [0.499979, 0.500028] | yes | 0.89 | [0.499976, 0.500031] | yes |
+| 0.3 | [0.499951, 0.500028] | yes | 0.86 | [0.499945, 0.500034] | yes |
+| 0.35 | [0.499977, 0.500035] | yes | 0.91 | [0.499974, 0.500038] | yes |
+| 0.4 | [0.499972, 0.500053] | yes | 0.91 | [0.499968, 0.500057] | yes |
+| 0.45 | [0.499973, 0.500032] | yes | 0.86 | [0.499968, 0.500037] | yes |
+| 0.5 | [0.499974, 0.500041] | yes | 0.86 | [0.499969, 0.500046] | yes |
+| 0.55 | [0.499964, 0.500032] | yes | 0.87 | [0.499959, 0.500037] | yes |
+| 0.6 | [0.499918, 0.500186] | yes | 0.88 | [0.499900, 0.500204] | yes |
+| 0.65 | [0.499808, 0.500971] | yes | 0.95 | [0.499776, 0.501003] | yes |
+| 0.7 | [0.499139, 0.506956] | yes | 0.95 | [0.498930, 0.507166] | yes |
+| 0.725 | [0.500620, 0.520329] | **no** | 0.97 | [0.500361, 0.520587] | **no** |
+| 0.75 | [0.513489, 0.540651] | — | 0.97 | [0.513075, 0.541065] | — |
+| 0.775 | [0.550202, 0.570167] | **no** | 0.98 | [0.549960, 0.570408] | yes |
+| 0.8 | [0.598622, 0.607348] | yes | 0.95 | [0.598376, 0.607594] | yes |
+| 0.85 | [0.699736, 0.700665] | yes | 0.88 | [0.699674, 0.700727] | yes |
+| 0.9 | [0.799914, 0.800185] | yes | 0.91 | [0.799901, 0.800198] | yes |
+| 0.95 | [0.899982, 0.900026] | yes | 0.92 | [0.899980, 0.900028] | yes |
+
+Coverage 17/20 → 16/20. The one change is p = 0.775, which now misses $2p-1=0.55$ by
+$2.0\times10^{-4}$. The bound there is all $B_{fs}$ ($9.6\times10^{-3}$ of $1.0\times10^{-2}$),
+and its refit warns ($\chi^2$ p = 1e-47), so the miss is the warned one-correction
+failure near p = 3/4, not the dropped term. All four misses warn.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.05_2h` | 0.500028 | 1.23 ± 0.0078 | 105/8 ⚠ | 2.09e-05 ✗ | 1.09 ± 0.099 | 8..2048 | 3.65/6 | 3.61e-05 ✓ |
+| `sweep_p0.05_smoke` | 0.500069 | 1.22 ± 0.0077 | 61.8/8 ⚠ | 6.14e-05 ✗ | 1.07 ± 0.049 | 16..4096 | 2.2/6 | 9.76e-05 ✓ |
+| `sweep_p0.15_2h` | 0.500020 | 1.18 ± 0.0086 | 70.4/8 ⚠ | 2.26e-05 ✓ | 1.01 ± 0.071 | 16..4096 | 2.09/6 | 5.07e-05 ✓ |
+| `sweep_p0.1_2h` | 0.500027 | 1.21 ± 0.0081 | 81.2/8 ⚠ | 2.19e-05 ✗ | 1 ± 0.085 | 16..4096 | 3.3/6 | 5.48e-05 ✓ |
+| `sweep_p0.25_2h` | 0.500003 | 1.09 ± 0.01 | 16.6/8 | 2.45e-05 ✓ | 1.02 ± 0.063 | 8..4096 | 3.21/7 | 3.04e-05 ✓ |
+| `sweep_p0.2_2h` | 0.500018 | 1.14 ± 0.0094 | 36.6/8 ⚠ | 3.08e-05 ✓ | 1.05 ± 0.058 | 8..4096 | 5.3/7 | 4.38e-05 ✓ |
+| `sweep_p0.35_2h` | 0.500006 | 0.993 ± 0.014 | 3.83/8 | 2.9e-05 ✓ | 1.03 ± 0.042 | 8..4096 | 1.79/7 | 2.6e-05 ✓ |
+| `sweep_p0.3_2h` | 0.499989 | 1.04 ± 0.012 | 10.4/8 | 3.82e-05 ✓ | 1 ± 0.047 | 8..4096 | 6.88/7 | 4.19e-05 ✓ |
+| `sweep_p0.45_2h` | 0.500002 | 0.928 ± 0.021 | 13.9/8 | 2.96e-05 ✓ | 1.54 ± 0.42 | 32..2048 | 2.22/4 | 2.26e-05 ✓ |
+| `sweep_p0.4_2h` | 0.500012 | 0.987 ± 0.017 | 10.8/8 | 4.07e-05 ✓ | 0.992 ± 0.13 | 4..1024 | 6.04/6 | 4e-05 ✓ |
+| `sweep_p0.55_2h` | 0.499998 | 0.89 ± 0.019 | 10.2/8 | 3.4e-05 ✓ | 0.89 ± 0.084 | 4..4096 | 10.2/8 | 3.4e-05 ✓ |
+| `sweep_p0.5_2h` | 0.500007 | 0.954 ± 0.025 | 5.3/8 | 3.35e-05 ✓ | 0.954 ± 0.049 | 4..4096 | 5.3/8 | 3.35e-05 ✓ |
+| `sweep_p0.65_2h` | 0.500390 | 0.486 ± 0.0042 | 51.1/8 ⚠ | 0.000581 ✓ | 0.437 ± 0.044 | 16..2048 | 2.48/5 | 0.000993 ✓ |
+| `sweep_p0.6_2h` | 0.500052 | 0.692 ± 0.0093 | 10.8/8 | 0.000134 ✓ | 0.701 ± 0.073 | 4..2048 | 4.74/7 | 0.000127 ✓ |
+| `sweep_p0.725_2h` | 0.510474 | 0.293 ± 0.0017 | 212/8 ⚠ | 0.00985 ✗ | 0.249 ± 0.011 | 32..4096 | 1.56/5 | 0.0205 ✓ |
+| `sweep_p0.75_2h` | 0.527070 | 0.27 ± 0.0015 | 216/8 ⚠ | 0.0136 | 0.296 ± 0.035 | 8..128 | 0.334/2 | 0.00822 |
+| `sweep_p0.775_2h` | 0.560184 | 0.293 ± 0.0016 | 241/8 ⚠ | 0.00998 ✗ | 0.315 ± 0.041 | 8..128 | 0.524/2 | 0.00657 ✗ |
+| `sweep_p0.7_2h` | 0.503048 | 0.338 ± 0.002 | 148/8 ⚠ | 0.00391 ✓ | 0.295 ± 0.015 | 32..4096 | 2.64/5 | 0.00747 ✓ |
+| `sweep_p0.85_2h` | 0.700201 | 0.472 ± 0.003 | 28.9/8 ⚠ | 0.000465 ✓ | 0.426 ± 0.027 | 16..512 | 1.31/3 | 0.000761 ✓ |
+| `sweep_p0.8_2h` | 0.602985 | 0.332 ± 0.0017 | 166/8 ⚠ | 0.00436 ✓ | 0.286 ± 0.021 | 32..4096 | 3.4/5 | 0.00881 ✓ |
+| `sweep_p0.95_2h` | 0.900004 | 0.818 ± 0.012 | 12.4/8 | 2.2e-05 ✓ | 0.809 ± 0.11 | 4..2048 | 7.25/7 | 2.27e-05 ✓ |
+| `sweep_p0.9_2h` | 0.800050 | 0.634 ± 0.0056 | 5.99/8 | 0.000135 ✓ | 0.634 ± 0.018 | 4..4096 | 5.99/8 | 0.000135 ✓ |
+
+Coverage of the exact $\gamma$: old 16/21, new 20/21.
+
+These are the article's ERW tables (`tab:erw-gamma`, `tab:erw-omega`) and `erw_omega_vs_p.pdf`,
+regenerated with `plot_sweep.py --tag 2h --article`. For $0.1 \le p \le 0.35$ the AIC refit gives
+$\hat\omega_1 = 1.00$–$1.05$, the conjectured 1, where the all-scales refit gave up to 1.23. The one
+miss, $p = 0.775$, and $p = 3/4$ both chose the short range $8..128$ and no longer warn: there the
+length of the range, not the $\chi^2$, is what says one correction does not describe the pilot.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.05_2h` | 0.500028 | 1.09 | 3.61e-05 ✓ | 1.06 ± 0.124 | 8..2048 (0.21) | -1.12 | 3.09e-05 | 4.25e-05 ✓ |
+| `sweep_p0.05_smoke` | 0.500069 | 1.07 | 9.76e-05 ✓ | 1.11 ± 0.16 | 16..4096 (0.20) | -1.24 | 4.73e-05 | 8.58e-05 ✓ |
+| `sweep_p0.15_2h` | 0.500020 | 1.01 | 5.07e-05 ✓ | 1.01 ± 0.102 | 16..4096 (0.18) | -0.834 | 3.8e-05 | 4.96e-05 ✓ |
+| `sweep_p0.1_2h` | 0.500027 | 1 | 5.48e-05 ✓ | 1.01 ± 0.214 | 16..4096 (0.31) | -0.899 | 3.96e-05 | 5.13e-05 ✓ |
+| `sweep_p0.25_2h` | 0.500003 | 1.02 | 3.04e-05 ✓ | 1.03 ± 0.13 | 8..4096 (0.34) | -0.722 | 1.38e-05 | 2.98e-05 ✓ |
+| `sweep_p0.2_2h` | 0.500018 | 1.05 | 4.38e-05 ✓ | 1.07 ± 0.114 | 8..4096 (0.20) | -0.887 | 2.25e-05 | 3.98e-05 ✓ |
+| `sweep_p0.35_2h` | 0.500006 | 1.03 | 2.6e-05 ✓ | 1.01 ± 0.101 | 8..4096 (0.20) | -0.489 | 1.1e-05 | 2.74e-05 ✓ |
+| `sweep_p0.3_2h` | 0.499989 | 1 | 4.19e-05 ✓ | 1.01 ± 0.0883 | 8..4096 (0.23) | -0.587 | 1.38e-05 | 4.12e-05 ✓ |
+| `sweep_p0.45_2h` | 0.500002 | 1.54 | 2.26e-05 ✓ | 1.16 ± 0.336 | 32..2048 (0.17) | -0.518 | 1.13e-06 | 2.37e-05 ✓ |
+| `sweep_p0.4_2h` | 0.500012 | 0.992 | 4e-05 ✓ | 0.995 ± 0.191 | 4..1024 (0.16) | -0.364 | 1.92e-05 | 3.94e-05 ✓ |
+| `sweep_p0.55_2h` | 0.499998 | 0.89 | 3.4e-05 ✓ | 0.91 ± 0.13 | 4..4096 (0.20) | -0.256 | 8.75e-06 | 3.21e-05 ✓ |
+| `sweep_p0.5_2h` | 0.500007 | 0.954 | 3.35e-05 ✓ | 0.978 ± 0.111 | 4..4096 (0.27) | -0.235 | 7.47e-06 | 3.18e-05 ✓ |
+| `sweep_p0.65_2h` | 0.500390 | 0.437 | 0.000993 ✓ | 0.426 ± 0.0501 | 16..2048 (0.16) | -0.353 | 0.00104 | 0.00113 ✓ |
+| `sweep_p0.6_2h` | 0.500052 | 0.701 | 0.000127 ✓ | 0.67 ± 0.0889 | 4..2048 (0.21) | -0.288 | 9.48e-05 | 0.000154 ✓ |
+| `sweep_p0.725_2h` | 0.510474 | 0.249 | 0.0205 ✓ | 0.251 ± 0.0128 | 32..4096 (0.26) | -0.69 | 0.0194 | 0.0198 ✓ |
+| `sweep_p0.75_2h` | 0.527070 | 0.296 | 0.00822 | 0.26 ± 0.0355 | 8..128 (0.36) | -0.783 | 0.0155 | 0.0161 |
+| `sweep_p0.775_2h` | 0.560184 | 0.315 | 0.00657 ✗ | 0.283 ± 0.0415 | 8..128 (0.38) | -0.722 | 0.0111 | 0.0115 ✓ |
+| `sweep_p0.7_2h` | 0.503048 | 0.295 | 0.00747 ✓ | 0.304 ± 0.0165 | 32..4096 (0.14) | -0.583 | 0.00613 | 0.00649 ✓ |
+| `sweep_p0.85_2h` | 0.700201 | 0.426 | 0.000761 ✓ | 0.453 ± 0.0307 | 16..512 (0.18) | -0.388 | 0.000403 | 0.000557 ✓ |
+| `sweep_p0.8_2h` | 0.602985 | 0.286 | 0.00881 ✓ | 0.294 ± 0.0232 | 32..4096 (0.15) | -0.58 | 0.00736 | 0.00778 ✓ |
+| `sweep_p0.95_2h` | 0.900004 | 0.809 | 2.27e-05 ✓ | 0.892 ± 0.202 | 4..2048 (0.13) | -0.141 | 3.2e-06 | 1.82e-05 ✓ |
+| `sweep_p0.9_2h` | 0.800050 | 0.634 | 0.000135 ✓ | 0.632 ± 0.0258 | 4..4096 (0.27) | -0.25 | 8.46e-05 | 0.000138 ✓ |
+
+Coverage of the exact $\gamma$: old 20/21, new 21/21.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `sweep_p0.05_2h` | 0.500028 | 1.06 | 4.25e-05 ✓ | 1.03 ± 0.151 | 16..262144 (0.13) | -1.01 | 3.8e-05 | 4.96e-05 ✓ |
+| `sweep_p0.05_smoke` | 0.500069 | 1.11 | 8.58e-05 ✓ | 1.07 ± 0.133 | 16..32768 (0.20) | -1.13 | 5.98e-05 | 9.83e-05 ✓ |
+| `sweep_p0.15_2h` | 0.500020 | 1.01 | 4.96e-05 ✓ | 1.05 ± 0.0759 | 8..262144 (0.17) | -0.935 | 3.01e-05 | 4.16e-05 ✓ |
+| `sweep_p0.1_2h` | 0.500027 | 1.01 | 5.13e-05 ✓ | 0.994 ± 0.13 | 16..65536 (0.28) | -0.848 | 4.53e-05 | 5.69e-05 ✓ |
+| `sweep_p0.25_2h` | 0.500003 | 1.03 | 2.98e-05 ✓ | 1.07 ± 0.283 | 8..131072 (0.18) | -0.786 | 9.83e-06 | 2.58e-05 ✓ |
+| `sweep_p0.2_2h` | 0.500018 | 1.07 | 3.98e-05 ✓ | 1.08 ± 0.14 | 8..262144 (0.22) | -0.906 | 2.14e-05 | 3.87e-05 ✓ |
+| `sweep_p0.35_2h` | 0.500006 | 1.01 | 2.74e-05 ✓ | 1.01 ± 0.094 | 8..524288 (0.17) | -0.485 | 1.15e-05 | 2.78e-05 ✓ |
+| `sweep_p0.3_2h` | 0.499989 | 1.01 | 4.12e-05 ✓ | 1.01 ± 0.0658 | 8..524288 (0.30) | -0.587 | 1.39e-05 | 4.13e-05 ✓ |
+| `sweep_p0.45_2h` | 0.500002 | 1.16 | 2.37e-05 ✓ | 1.01 ± 0.303 | 8..1048576 (0.24) | -0.304 | 3.55e-06 | 2.61e-05 ✓ |
+| `sweep_p0.4_2h` | 0.500012 | 0.995 | 3.94e-05 ✓ | 0.987 ± 0.156 | 4..262144 (0.14) | -0.361 | 2.06e-05 | 4.08e-05 ✓ |
+| `sweep_p0.55_2h` | 0.499998 | 0.91 | 3.21e-05 ✓ | 0.918 ± 0.164 | 4..1048576 (0.16) | -0.259 | 8.1e-06 | 3.14e-05 ✓ |
+| `sweep_p0.5_2h` | 0.500007 | 0.978 | 3.18e-05 ✓ | 1.01 ± 0.11 | 4..262144 (0.13) | -0.246 | 5.71e-06 | 3.01e-05 ✓ |
+| `sweep_p0.65_2h` | 0.500390 | 0.426 | 0.00113 ✓ | 0.468 ± 0.0861 | 16..16777216 (0.19) | -0.403 | 0.000629 | 0.00072 ✓ |
+| `sweep_p0.6_2h` | 0.500052 | 0.67 | 0.000154 ✓ | 0.664 ± 0.147 | 4..4096 (0.10) | -0.291 | 0.000102 | 0.000162 ✓ |
+| `sweep_p0.725_2h` | 0.510474 | 0.251 | 0.0198 ✓ | 0.252 ± 0.109 | 32..8388608 (0.11) | -0.69 | 0.0191 | 0.0196 ✓ |
+| `sweep_p0.75_2h` | 0.527070 | 0.26 | 0.0161 | 0.23 ± 0.148 | 1024..268435456 (0.17) | -0.947 | 0.0341 | 0.0347 |
+| `sweep_p0.775_2h` | 0.560184 | 0.283 | 0.0115 ✓ | 0.33 ± 0.271 | 2048..134217728 (0.11) | -1.42 | 0.00931 | 0.00972 ✗ |
+| `sweep_p0.7_2h` | 0.503048 | 0.304 | 0.00649 ✓ | 0.307 ± 0.078 | 8..4096 (0.16) | -0.598 | 0.00594 | 0.0063 ✓ |
+| `sweep_p0.85_2h` | 0.700201 | 0.453 | 0.000557 ✓ | 0.425 ± 0.119 | 1024..67108864 (0.10) | -0.398 | 0.000667 | 0.000822 ✓ |
+| `sweep_p0.8_2h` | 0.602985 | 0.294 | 0.00778 ✓ | 0.277 ± 0.067 | 64..134217728 (0.16) | -0.584 | 0.01 | 0.0104 ✓ |
+| `sweep_p0.95_2h` | 0.900004 | 0.892 | 1.82e-05 ✓ | 0.819 ± 0.224 | 4..2097152 (0.09) | -0.128 | 6.9e-06 | 2.19e-05 ✓ |
+| `sweep_p0.9_2h` | 0.800050 | 0.632 | 0.000138 ✓ | 0.633 ± 0.043 | 4..4194304 (0.34) | -0.251 | 8.43e-05 | 0.000137 ✓ |
+
+Coverage of every reference: old 21/21, new 20/21.

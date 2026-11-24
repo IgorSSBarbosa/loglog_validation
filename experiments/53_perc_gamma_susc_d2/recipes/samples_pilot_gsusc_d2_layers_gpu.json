@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers_gpu",
+  "params": {"dim": 2, "eps0": 0.5},
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512],
+  "n": 10000,
+  "seed": 2026111753,
+  "_comment": "User, 2026-11-17: pilot for gamma_susc in d = 2 on the GPU layers model (one cluster |C(0)| grown per sample), to replace the torus-labelling row of the article (todo 'Re-run the d=2 in the new algorithm?'). eps0 = 0.5 as that row. 10^4 samples per scale x 5 replicates on 2^2..2^9, run on missouri."
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 2,
+    "eps0": 0.5,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1,
+    "max_sites": 1000000000
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
+  "n": 200000,
+  "seed": null,
+  "_comment": "User, 2026-11-07: the exploration arm of experiment 53, after the torus run's interval missed 43/18 with its window capped at x = 512 by GPU memory. Same eps0 = 0.5 as samples_gsusc_d2_x4.json, S(p) from the cluster of one seed on infinite Z^2 (no box), as experiment 51's samples_gsusc_d3_explore.json. Probe 2026-11-07 on purus (30 threads): cv 2.20 / 2.46 / 2.60 at x = 16 / 64 / 128, 478 s per 1e6 samples at x = 128. n = 2e5 gives ~0.6% relative se per rung, as the d = 3 pilots had. Ladder extended to x = 256 (one rung beyond 51/53) so the pilot sees more of the slow correction that biased the torus run. max_sites 1e9 as in 51."
+}

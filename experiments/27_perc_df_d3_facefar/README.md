@@ -1,6 +1,6 @@
 # Experiment 27 — $\hat d_f$, $d=3$, `face_far`, planned run
 
-Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-09). d̂_f(3) = 2.5222 ± 0.0133 (eq. 720), literature 2.52293(10) inside.**
+Part of `plans/percolation_experiments.md` (2026-10-08). **Status: done (2026-10-09). d̂_f(3) = 2.5222 ± 0.0133 (eq. 720), literature 2.52293(10) inside. Three-term bound (2026-11-04): ± 0.0043, still inside.**
 
 ## Acceptance criterion
 
@@ -53,3 +53,61 @@ boxes ≤ 512³ and per-site cost grows with the box (the d̂ = 3.14 the pilot m
 so), so the clock has to extrapolate to 1024³.
 
 Report: `data/pilot/report.md` (`plot.png`, `fit.png`).
+
+## Wilson interval in the article's three-term form (2026-11-04)
+
+Theorem cor:wilson (article revision of 2026-11-04) dropped $B_{bad}$ together with the
+log-moment assumption: $W = 1.96\sqrt{12\sigma_\infty^2/(n\,m(m^2-1))} + B_{fs} + 6\sigma^2_{\max}/(n(m+1))$.
+Re-reported from the stored data; nothing was redrawn.
+
+**[2.5179, 2.5265]**, half-width **0.0043** ($1.96\sigma_{se}$ 0.0036, $B_{fs}$ 0.0007,
+$B_{good}$ 4e-5). It contains 2.52293. The pinned refit does not warn (ω₁ = 1.85, χ² p = 0.78).
+Gap (i) above is gone: the bound is now 3.6× the predicted RMSE (0.0012), not 11×, and
+the standard error dominates it. $B_{fs}$ = 0.0007 rather than 0.0009, because the refit
+with γ pinned has been used since 2026-11-02.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 2.522201 | 1.85 ± 0.071 | 2.5/5 | 0.00431 | 1.85 ± 0.2 | 4..512 | 2.5/5 | 0.00431 |
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 2.522201 | 1.85 | 0.00431 | 1.99 ± 0.348 | 4..512 (0.40) | -1.75 | 0.000479 | 0.0041 |
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `pilot` | 2.522201 | 1.99 | 0.0041 ✓ | 2 ± 0.48 | 4..512 (0.23) | -1.8 | 0.000476 | 0.0041 ✓ |
+
+Coverage of every reference: old 1/1, new 1/1.

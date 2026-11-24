@@ -1,0 +1,29 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "pilot_gsusc_d2_layers_batched",
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers",
+  "n": 108,
+  "params": {
+    "batch_exponent": 0.159,
+    "batch_factor": 16,
+    "dim": 2,
+    "eps0": 0.5
+  },
+  "replicates": 3,
+  "scales": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048
+  ],
+  "seed": null
+}

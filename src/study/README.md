@@ -275,6 +275,18 @@ read `|bias|` against the precision you need, because a bigger budget then buys
 samples and not depth. The tools do not learn *why* the ceiling is there, and nothing
 model-specific was added to them.
 
+**When the probe cannot resolve `d`, state it: `--d` (user, 2026-11-16).**
+A batched observable (experiment 61) costs $K_x\propto x^{\texttt{batch\_exponent}}$ raw
+samples, so its $d$ is $\hat d_{\rm raw}+\texttt{batch\_exponent}$. Its own probe hit
+its cap after one probe and returned 1.52. `plan.py --d X` plans on X and stamps it
+`user override (--d)` (`<-- NOT MEASURED`), so it never passes for a measurement in
+`plan.json`. Without `--throughput`, the throughput is restated at X. A `batched_cost`
+model's probe is refitted as $a+b\,i^X$ (`estimate_cost_affine_at_d`); a clock-timed
+pilot is rescaled by $\sum n\,i^X/\sum n\,i^{d}$; a `cost_hint` model's is unchanged. A
+`cost_refit.json` throughput was fitted at its own $d$, so with one present `--d`
+refuses unless `--throughput` is given too. `constants.json` is not touched:
+`local_slope.py` still reads the pilot's $d$ from it.
+
 **When the planned window ends above the pilot's scales, the cost is re-fitted there
 (user, 2026-10-31).** The article's Step 2, "Re-fitting the cost": the plan's seconds
 rest on `d` and a throughput measured on the pilot's ladder, and the cost at large
@@ -386,22 +398,105 @@ $\gamma$:
 | | what it is | blind to |
 |---|---|---|
 | replicate interval | $\hat\gamma \pm t_{R-1}\,\mathrm{sd}/\sqrt R$ — the ordinary Student-$t$ interval, nothing exotic | bias |
-| eq. (720) bound | $B_{\mathrm{fs}} + B_{\mathrm{good}} + B_{\mathrm{bad}} + \Phi(\alpha)\sigma_{\mathrm{se}}$, Theorem thm:wilson | nothing — but it *over*covers |
+| eq:wilson bound | $\Phi^{-1}(1-\alpha/2)\sigma_{\mathrm{se}} + B_{\mathrm{fs}} + B_{\mathrm{good}}$, Theorem cor:wilson | nothing — but it *over*covers |
 
 The $t_{R-1}$ quantile is not decoration: at $R=5$,
 $\Pr(|t_4|<1.96) = 0.8784$, so pairing a 5-point standard error with $1.96$
 gives an interval labelled 95% that covers 88%. This repo published exactly
 that mistake until `calibration/check_coverage.py` measured it.
 
-The bound needs three things the replicate interval does not. $\Lambda$ for
-$B_{\mathrm{bad}}$ comes from the `log_moment` summary field (`tools/summary.py`);
-a run drawn before that field existed gets no bound and is told which term is
-missing, never a term silently set to zero. $\sigma_\infty^2$ and
-$\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ come **from the pilot,
-never from a refit on the final data** — the plan deepens $m_0$ precisely to put
-the ladder where the correction has died, so refitting $\omega_1$ there fits
-noise. On this repo's own srw run the final refit returned $\omega_1 = 0.0295$
-with `converged = False`, against the pilot's $0.885$.
+The bound needs two things the replicate interval does not. (Since the 2026-11-04
+article revision it no longer needs $\Lambda$: the log-moment assumption and
+$B_{\mathrm{bad}}$ are gone.) $\sigma_\infty^2$ and
+$\sigma_{\max}^2$ come from `cv`. And $\omega_1, a_1$ **never come from a refit on the
+final data alone** — the plan deepens $m_0$ precisely to put the ladder where the
+correction has died, so refitting $\omega_1$ there fits noise. On this repo's own srw
+run the final-only refit returned $\omega_1 = 0.0295$ with `converged = False`,
+against the pilot's $0.885$.
+
+**The joint refit (user, 2026-11-11).** $\omega_1, a_1$ come from one AIC range fit
+(`local_slope.omega_ranges`, $\gamma$ free, $\ge 6$ consecutive scales) on the pilot
+and the long run together (`report.joint_refit`): one log-log point per scale, a
+scale drawn by both merged by inverse variance (the two draws are independent). The
+pilot's small scales anchor $\omega_1$, the long run adds the scales where the
+correction is decided; on srw it gives $\omega_1 = 1.00 \pm 0.09$. Only
+$\omega_1, a_1$ come from it; $\gamma$ stays the log-log estimator's own.
+
+It replaced the pilot refitted with $\gamma$ pinned to $\hat\gamma$ (2026-11-02; on
+AIC ranges of pilot scales since 2026-11-07), which is kept in `answer.json` as
+`pilot_refit` (and its all-scales version as `pilot_refit_all_scales`) for comparison
+only. The pin was circular: its width is $\hat\gamma$'s replicate se, which carries the
+scatter and not the finite-size bias, so wherever $B_{\rm fs} \gg$ se the pin forced
+$\omega_1$ to whatever makes the correction vanish on the window. Measured on perc
+$\gamma_{\rm susc}$, $d = 5$: bias 0.024 against se $2.3\times10^{-4}$, pinned
+$\omega_1 = 1.23$, joint $0.45 \pm 0.08$ (literature $\approx 0.4$–$0.55$). Widening
+the pin by the plan's bias recovered coverage too, but fed a pilot estimate of
+$\omega_1$ back into the prior of the fit that re-estimates it (user: "getting
+circular"). Rerun 2026-11-11 on every saved study (121
+reports): of the 67 with a reference (exact $\gamma$ for srw/ERW, literature values for
+percolation; scoring only), eq. (720) covers every reference in 64 with the joint
+refit against 59 with the pinned average. It newly covers ERW $p = 0.7$ (`12_erw_gpu`),
+$d_f$ $d = 4$ (face-far pilot and $C_1$), $\gamma_{\rm susc}$ $d = 2, 3, 5$; it newly
+misses ERW-urn $p = 0.775$ (by 0.0102 against a radius of 0.0097); it still misses
+$C_1$ $d = 5$ and `gsusc_d3_x4_4h` against 1.819. Three studies have no bound, as
+before: two with only 5 scales in all, one with no closed range. Per-study tables:
+each experiment README's 2026-11-11 section.
+
+What the joint refit does not fix: where $\omega_1$ is undetermined (RWRE without a
+known $\gamma$, $\omega_1 = 1.3 \pm 1.6$) $B_{\rm fs}$ can come out far smaller than
+before. The $B_{\rm fs}$ span warning is then the only signal, and it is not selective
+(it fires on most studies). Also, $B_{\rm fs}$ and $\hat\gamma$ now share the long-run
+data, while eq. (720) treats $a_1, \omega_1$ as constants; coverage is checked
+empirically above.
+
+**Why AIC with data cuts.** The model is $\log\overline Y_i = a + \gamma\log i +
+a_1 i^{-\omega_1}$ (eq. 232 at $J = 1$), all four parameters free. The left
+cut drops scales where $\omega_2, \dots$ still act, the right cut scales where the
+correction has sunk below the noise. $\chi^2$ cannot choose the range, since
+dropping points always lowers it. Jay & Neil (PRD 103, 114502 (2021),
+arXiv:2008.01069) turn the choice of range into model selection: the cut points
+get a "perfect" model with one parameter each, which adds no $\chi^2$ and costs 2
+per point, so $\mathrm{AIC} = \chi^2 + 2k + 2N_{\mathrm{cut}}$ with $k = 4$, and each
+range gets weight $\propto e^{-\mathrm{AIC}/2}$ (Akaike weights, Burnham & Anderson
+2002). Neil & Sitison (PRE 108, 045308 (2023), arXiv:2305.19417) derive it from
+the Kullback–Leibler divergence. Their eq. (26), $\chi^2_K + 2k - 2d_K + d$, is
+ours up to the range-independent constant $-m$. They prefer it to the AIC on
+the kept points alone (their eq. 17, used by BMW, Nature 593, 51 (2021)), which
+"has an undesirable tendency to cut data too aggressively".
+
+What the derivation assumes, and how it holds here:
+- *Cut and kept data uncorrelated* (their eq. 15). This holds exactly: every scale
+  draws independent randomness (ground rule 2).
+- *Gaussian data, large sample.* $\log\overline Y_i$ is Gaussian via the CLT and the
+  delta method, and the $2k$ penalty is an asymptotic correction. The sample size of
+  those asymptotics is the $n$ per scale (hundreds of thousands), not the
+  6–20 scales of a range.
+- *$a_1, \omega_1$ treated as constants by eq. (720).* They are estimates, and since
+  2026-11-11 they share the long-run averages with $\hat\gamma$; see above.
+
+**Averaging over ranges (user, 2026-11-09).** Like the papers, $\hat\omega_1$ is the
+AIC-weighted average over the kept ranges, $\sum_r P_r\hat\omega_{1,r}$ (Jay & Neil
+eq. 15), with error from their eq. (18): $\sum_r P_r\sigma_r^2$ ($\sigma_r$ the range's
+profile half-width) plus the weighted spread. Until 2026-11-07 we took the single
+highest-weight range instead; but that range never carried more than half the weight
+(median 0.31 over 102 studies), so selection was not the dominant-weight limit in which
+the two agree. On planted data the average has half the rms error (0.026 against 0.057),
+and its eq. (18) error over-covers (98–100% at nominal 68%). It enters only the reported
+B_fs span, not the interval.
+
+$a_1$ is not averaged. $a_1$ and $\omega_1$ trade off, so averaging both pairs values
+from different fits: on `pipeline_p0.6_1h` one range of weight 0.02 ($256..4096$,
+$\omega_1 = 1.6$, $a_1 = -43$) moved the average $a_1$ from $-0.3$ to $-1.16$ and B_fs
+3.7$\times$. Instead $a_1$ is refitted on the highest-weight range with $\omega_1$ fixed
+at the average, so eq. (720) gets one coherent $(a_1, \omega_1)$ (user, 2026-11-09). We
+also tried averaging B_fs itself over the ranges (Jay & Neil eq. 10 with $f = B_{\rm fs}$):
+it covered 39/39 but widened RWRE intervals up to 27$\times$, driven by low-weight
+ranges with small $\omega_1$. Rerun 2026-11-10 on 119 studies: eq. (720) covers the
+exact $\gamma$ in 38/39 srw/ERW studies (37/39 with the highest-weight range; the miss
+is ERW $p = 0.7$ in both), half-widths moved by a median factor 1.00
+($0.23$–$2.9\times$, the extremes RWRE studies where the best range fits the averaged
+$\omega_1$ poorly, $\chi^2$ up to 79 against 0.5 at its own optimum). Per-study tables:
+each experiment README's 2026-11-10 section.
 
 ### The bound inherits $\omega_1$'s error bar exponentially
 
@@ -448,6 +543,14 @@ the top of the final ladder (plans/local_slope.md).
 child 2 of its own seed (children 0 and 1 are the pilot's and the run's). Its
 draws are **not** inside `--time`; it prints its own prediction first.
 `--no-local-slope` skips it.
+
+Every completed `local_slope.py` run then calls `src/estimate/omega_aic.py`, the
+AIC fit: the same model on every run of $\ge 6$ points, the range chosen by AIC with
+data cuts, `omega_aic.json` + `omega_aic_fit.png` (see `src/README.md`). Then it calls
+`src/estimate/omega_windows.py` at width 5 (user, 2026-11-05). It draws nothing and fits
+$L_k = a + bk + c\rho^{-\omega k}$ by weighted least squares on each run of 5
+consecutive log-log points, next to $w_k$: `omega_windows.json` + `.png`. A
+hollow square (interval open, or $\hat\omega$ on a bound) is not read.
 
 ```bash
 python3 src/study/local_slope.py --study mystudy --data-root $D --seed 7 --dry-run

@@ -1,0 +1,16 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_gpu",
+  "params": {
+    "dim": 2,
+    "eps0": 0.5,
+    "box_factor": 4.0,
+    "nu_box": 1.3333333333333333,
+    "moment": 1,
+    "geometry": "torus"
+  },
+  "scales": [4, 8, 16, 32, 64, 128],
+  "n": 10000,
+  "seed": null,
+  "_comment": "User, 2026-11-05: experiment 51's pilot design (x-ladder, c = 4, 10^4 samples per rung, x = 4..128) in dim 2. eps0 = 0.5 as in experiments 06/09 at dim 2; nu_box = 4/3 is the exact nu(2), so L = ceil(4 x^(4/3)). Top scale capped at x = 512 (L = 16384, 2.7e8 sites, ~6.4 GB per sample at 24 B/site); x = 1024 would need ~41 GB."
+}

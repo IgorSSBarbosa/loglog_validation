@@ -1,0 +1,30 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "gsusc_d5_batched_n1m",
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "n": 112644,
+  "params": {
+    "batch_exponent": 0.77,
+    "batch_factor": 1.0,
+    "cut": 4194304,
+    "dim": 5,
+    "eps0": 0.07
+  },
+  "replicates": 3,
+  "scales": [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "seed": null
+}

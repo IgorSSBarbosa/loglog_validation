@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_layers",
+  "params": {"dim": 2, "eps0": 0.5, "batch_factor": 16, "batch_exponent": 0.159},
+  "scales": [4, 8, 16, 32, 64, 128, 256],
+  "n": 6000,
+  "seed": 2026111762,
+  "_comment": "User, 2026-11-17: batched pilot for gamma_susc in d = 2. batch_exponent = nu_hat = 0.159 +- 0.001, the slope of log cv^2 on 16..256 in pilot_gsusc_d2_layers (independent data, ground rule 4; local slopes 0.155-0.163 after a 4 -> 8 transient). batch_factor = 16 so the ceiling stays small at nu ~ 0.16 (kappa = 1 gives K = 2 almost everywhere): K = 20..33 here. n = 6000 batched samples ~ the raw pilot's draws at 2^8."
+}

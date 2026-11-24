@@ -149,3 +149,68 @@ python3 src/study/autopilot.py -meta experiments/11_erw/recipes/samples_super_p0
   separates the two error sources the Wilson interval (eq. 720) adds together, and
   would score $\mathcal B_{\rm fs}$ directly — at $p=3/4$ as well, where there is no
   $\omega_1$ for the interval to use.
+
+## Wilson interval with the AIC pilot refit (2026-11-07)
+
+B_fs now takes $\omega_1, a_1$ from the pilot refitted with $\gamma$ pinned to $\hat\gamma$ on a range of
+$\ge 5$ consecutive pilot scales chosen by AIC with data cuts (Jay & Neil 2021;
+`local_slope.omega_ranges`, `report.pinned_refit`), not on every pilot scale as in the
+2026-11-02 refit. $\hat\gamma$ is unchanged; only the eq. (720) half-width moves. The
+$\omega_1$ error is the profile error $\oplus$ the spread over ranges. Old = all-scales pinned
+refit (kept in `answer.json` as `pilot_refit_all_scales`), new = AIC refit (`pilot_refit`);
+reports rerun 2026-11-07. A warning is $\chi^2$ $p < 0.01$ (old: or $\omega_1$ on its bound). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old $\chi^2$/dof | old radius | new $\hat\omega_1$ | range | new $\chi^2$/dof | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.799 ± 0.026 | 5.18/5 | 0.00223 ✓ | 0.799 ± 0.072 | 4..512 | 5.18/5 | 0.00223 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.375 ± 0.0085 | 8.34/5 | 0.024 | 0.355 ± 0.022 | 8..512 | 2.51/4 | 0.0286 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.366 ± 0.0062 | 14.1/5 | 0.0201 | 0.387 ± 0.034 | 4..128 | 2/3 | 0.0162 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.384 ± 0.0065 | 11.1/5 | 0.0222 | 0.341 ± 0.027 | 16..512 | 1.65/3 | 0.0318 |
+| `ERW_p0.78` | 0.577894 | 0.371 ± 0.0069 | 13.8/5 | 0.0246 ✓ | 0.328 ± 0.024 | 16..512 | 1.21/3 | 0.0358 ✓ |
+| `ERW_p0.9` | 0.800466 | 0.662 ± 0.032 | 14/8 | 0.00253 ✓ | 1.16 ± 0.5 | 64..4096 | 2.46/4 | 0.00138 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.
+
+## Wilson interval with the AIC-weighted refit (2026-11-10)
+
+$\omega_1$ is now the AIC-weighted average over the kept ranges (Jay & Neil 2021, eq. 15),
+not the single highest-weight range; its error is their eq. (18). $a_1$ is refitted on the
+highest-weight range with $\omega_1$ fixed at that average, so B_fs takes one coherent
+$(a_1, \omega_1)$ (averaging $a_1$ separately pairs values from different fits). $\hat\gamma$
+is unchanged; only B_fs and the eq. (720) half-width move.
+Old = the 2026-11-07 highest-weight range, new = the average; reports rerun 2026-11-10.
+"best" is the highest-weight range and its share of the kept weight; its $\chi^2$ still
+gives the warning (⚠). ✓/✗: the interval contains / misses the exact $\gamma$.
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.799 | 0.00223 ✓ | 0.789 ± 0.11 | 4..512 (0.28) | -0.316 | 0.00112 | 0.0023 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.355 | 0.0286 | 0.36 ± 0.0245 | 8..512 (0.24) | -0.618 | 0.0224 | 0.0272 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.387 | 0.0162 | 0.355 ± 0.0367 | 4..128 (0.20) | -0.668 | 0.0202 | 0.0229 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.341 | 0.0318 | 0.358 ± 0.0296 | 16..512 (0.31) | -0.613 | 0.0229 | 0.0275 |
+| `ERW_p0.78` | 0.577894 | 0.328 | 0.0358 ✓ | 0.346 ± 0.0241 | 16..512 (0.25) | -0.604 | 0.0257 | 0.0303 ✓ |
+| `ERW_p0.9` | 0.800466 | 1.16 | 0.00138 ✓ | 0.872 ± 0.446 | 64..4096 (0.29) | -0.728 | 0.000786 | 0.00189 ✓ |
+
+Coverage of the exact $\gamma$: old 3/3, new 3/3.
+
+## Wilson interval with the joint refit (2026-11-11)
+
+B_fs now takes $\omega_1, a_1$ from one AIC range fit on the pilot **and** the long run
+together ($\gamma$ free, $\ge 6$ consecutive scales, a scale in both merged by inverse
+variance; `report.joint_refit`, user 2026-11-11), not from the pilot refitted with $\gamma$
+pinned to $\hat\gamma$, whose pin carries $\hat\gamma$'s scatter but not its bias (see
+`src/study/README.md`). $\hat\gamma$ is unchanged; only B_fs and the eq. (720) half-width
+move. Old = the 2026-11-10 pinned average (still in `answer.json` as `pilot_refit`), new =
+`joint_refit`; reports rerun 2026-11-11. "best" is the lowest-AIC range of the union and
+its share of the kept weight; its $\chi^2$ gives the warning (⚠). ✓/✗: the interval contains / misses the reference (one mark per reference; scoring only, ground rule 4).
+
+| study | $\hat\gamma$ | old $\hat\omega_1$ | old radius | new $\hat\omega_1$ | best (weight) | new $\hat a_1$ | new $B_{\rm fs}$ | new radius |
+|---|---|---|---|---|---|---|---|---|
+| `ERW_p0.6` | 0.501645 | 0.789 | 0.0023 ✓ | 0.834 ± 0.319 | 4..16384 (0.23) | -0.337 | 0.000873 | 0.00205 ✓ |
+| `ERW_p0.75` | 0.544482 | 0.36 | 0.0272 | 0.3 ± 0.0675 | 16..262144 (0.24) | -0.671 | 0.0494 | 0.0542 |
+| `ERW_p0.75_longrun` | 0.540815 | 0.355 | 0.0229 | 0.222 ± 0.113 | 32..524288 (0.25) | -0.73 | 0.123 | 0.126 |
+| `ERW_p0.75_secondAttenmpt` | 0.544126 | 0.358 | 0.0275 | 0.276 ± 0.0597 | 16..262144 (0.32) | -0.677 | 0.0666 | 0.0713 |
+| `ERW_p0.78` | 0.577894 | 0.346 | 0.0303 ✓ | 0.206 ± 0.127 | 64..262144 (0.30) | -0.719 | 0.175 | 0.179 ✓ |
+| `ERW_p0.9` | 0.800466 | 0.872 | 0.00189 ✓ | 0.627 ± 0.471 | 64..32768 (0.21) | -0.346 | 0.00263 | 0.00373 ✓ |
+
+Coverage of every reference: old 3/3, new 3/3.

@@ -25,7 +25,7 @@ the one that can be confidently wrong.
 
   Wilson bound         Theorem thm:wilson (eq. 720), for gamma only. A BOUND,
                        so it overcovers, but its width comes from a closed form
-                       -- sigma_se = sqrt(12*sigma_inf^2/(n*m^3)) -- rather than
+                       -- sigma_se = sqrt(12*sigma_inf^2/(n*m(m^2-1))) -- rather than
                        from a 5-point spread, so it needs no t widening and it
                        carries the finite-size bias the replicate interval has
                        no term for.
@@ -33,7 +33,7 @@ the one that can be confidently wrong.
 Disagreement between them is informative rather than alarming: the replicate
 interval measures scatter and ignores bias; the bound covers both.
 
-The bound is only as good as the pilot's omega1, and not linearly so: omega1
+The bound is only as good as its omega1, and not linearly so: omega1
 sits in an exponent, B_fs ~ rho**(-omega1*m0). Measured here, a pilot giving
 omega1 = 13.1 +/- 3.5 produced B_fs = 9.4e-07 and a bound that EXCLUDED the
 truth while printing tight; the same run under omega1 = 0.885 +/- 0.125 gives
@@ -42,13 +42,46 @@ the span is reported whenever it exceeds `_BFS_SPAN_LIMIT`. A bound whose bias
 term moves two orders of magnitude inside its own input's error bar is a
 statement about the pilot, not about gamma.
 
-Which omega1 (user, 2026-11-02). B_fs uses the PILOT refitted with gamma pinned
-to this run's gamma-hat (`correction.fit_correction_pinned`), not the plan's
-gamma-free pilot fit, which is kept in answer.json for comparison only. The
-refit's chi2 p-value is reported as a warning: below `REFIT_WARN_P` the pilot
-is not one power-law correction around gamma-hat, and B_fs, which assumes it
-is, may be wrong in either direction. No rule replaces B_fs when that happens;
-the warning is the answer.
+Which omega1 (user, 2026-11-11). B_fs takes omega1 and a1 from ONE range fit
+on the pilot and the long run together (`joint_refit`): eq. (232) at J = 1,
+gamma free, on every run of >= 6 consecutive scales of the union, a scale in
+both merged by inverse variance, the ranges weighted by AIC with data cuts
+(Jay & Neil 2021). The smallest scales are where omega_2, ... still act, and the
+range cut drops them. It replaced (user, 2026-11-11) the pilot refitted with
+gamma pinned to gamma-hat (2026-11-02, as AIC ranges since 2026-11-07), which
+was circular -- the pin's width was gamma-hat's scatter, not its bias, so where
+B_fs >> se the pin dragged omega1 away (perc gamma_susc d = 5: 1.23 pinned,
+0.45 +/- 0.08 joint, literature ~0.4-0.55). Over 114 saved studies the joint fit
+covers 64 of 67 known references against 59 for the pinned one
+(src/study/README.md). gamma-hat stays the log-log estimator's own; the joint
+fit's gamma is reported for comparison only. omega1 is the AIC-weighted average
+over the kept ranges (Jay & Neil eq. (15); user, 2026-11-09), not the single
+best range. omega1_se is their eq. (18): the weighted mean of the ranges'
+profile variances plus the weighted spread over ranges. a1 is not averaged: a1
+and omega1 trade off, so the averaged pair fits nothing. a1 is refitted on the
+highest-weight range with omega1 fixed at the average, so B_fs takes one
+coherent (a1, omega1), as eq. (720) assumes (user, 2026-11-09). chi2, dof,
+p_value, i_min, i_max describe the highest-weight range; its chi2 p-value below
+`REFIT_WARN_P` is reported as a warning (one correction does not explain the
+data) and nothing replaces B_fs then: the warning is the answer. The pinned
+refits stay in answer.json as `pilot_refit` and `pilot_refit_all_scales`, for
+comparison only. With no closed range there is no omega1 and no bound, and
+`wilson_why` says so.
+
+What the joint fit does not fix. When omega1 is undetermined (RWRE without a
+known gamma: omega1 = 1.3 +/- 1.6) B_fs can come out far smaller than before;
+the B_fs span warning below is then the reader's only signal.
+
+Why this AIC. chi2 cannot choose a range: dropping points always lowers it.
+Jay & Neil (PRD 103, 114502 (2021)) give each cut point a "perfect" one-parameter
+model (zero chi2, penalty 2), so AIC = chi2 + 2k + 2 N_cut, weight ~ exp(-AIC/2).
+Neil & Sitison (PRE 108, 045308 (2023), eq. 26) derive it from the KL divergence.
+It equals ours up to a range-independent constant, and they prefer it to the AIC
+on the kept points alone, which cuts too much data. It assumes cut and kept
+points are uncorrelated, which holds exactly here (independent scales, ground
+rule 2), and Gaussian data at large sample size, where the sample size is the
+n per scale, not the 5-10 scales of a range. As in the papers, the
+estimate is the average over ranges (src/study/README.md).
 
 CLI:
     python3 src/study/report.py --study mystudy --data-root experiments/01_srw/data
@@ -80,9 +113,9 @@ from tools.artifacts import artifact_path, read_artifact, write_artifact  # noqa
 from tools.constants import format_table, load, measured  # noqa: E402
 from tools.correction import fit_correction, fit_correction_pinned  # noqa: E402
 from tools.coverage import interval  # noqa: E402
+from tools.local_slope import omega_ranges  # noqa: E402
 from tools.loglog import gamma_all_points, gamma_closed_form  # noqa: E402
 from tools.loglog_plot import fit_plot, loglog_plot  # noqa: E402
-from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
 from tools.wilson import (  # noqa: E402
     finite_size_bias, sigma_se, wilson_interval)
 
@@ -105,8 +138,8 @@ _BFS_SPAN_LIMIT = 10.0
 def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = None) -> dict:
     """The eq. (720) constants, each from the only place it can honestly come from.
 
-    omega1 and a1 come from the PILOT, never from a refit on the final data,
-    and this is not a preference. The plan deepens m0 precisely to put the
+    omega1 and a1 never come from a refit on the final data ALONE, and this is
+    not a preference. The plan deepens m0 precisely to put the
     ladder where the correction has died -- that is what makes gamma-hat
     unbiased -- so refitting omega1 there fits noise. On this repo's own srw
     run the final refit returned omega1 = 0.0295 with converged = False, and
@@ -114,12 +147,13 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = 
     which deliberately ladders down to the small scales, measured 0.885.
 
     sigma_inf2 and sigma_max2 come from cv, which IS a function of the sample
-    mean and so survives summarization; Lambda comes from the log_moment field
-    (`tools/summary.py`), absent from any run drawn before that field existed.
+    mean and so survives summarization. (The bound needs nothing else since the
+    2026-11-04 article revision dropped B_bad and its Lambda.)
 
-    `refit` is the pilot refitted with gamma pinned to this run's gamma-hat
-    (user, 2026-11-02): still pilot data, so the reason above stands; only
-    gamma is borrowed from the run. When it is given, its omega1/a1 are used.
+    `refit` is `joint_refit`, the pilot and the long run in one AIC range fit
+    (user, 2026-11-11): the pilot's small scales are in it, so the reason above
+    does not apply (srw: omega1 = 1.00 +/- 0.09 joint, against 1). When it is
+    given, its omega1/a1 are used.
 
     Returns the kwargs `wilson_interval` wants, plus `why` naming whatever is
     missing. A missing piece is reported, never defaulted: eq. (720) with a
@@ -128,35 +162,136 @@ def wilson_inputs(final: dict, cv: np.ndarray, reps: list, refit: dict | None = 
     why = []
     if refit is not None:
         omega1, a1, omega1_se = refit["omega1"], refit["a1"], refit["omega1_se"]
+        if omega1 is None:
+            why.append(f"omega1 (joint AIC refit: {refit['reason']})")
     else:
         c = (final.get("plan") or {}).get("constants_at_plan_time") or {}
         omega1 = (c.get("omega1") or {}).get("value")
         a1 = (c.get("a1") or {}).get("value")
         omega1_se = (c.get("omega1") or {}).get("se")
-        why.append("the pinned pilot refit (no pilot.json beside final.json)")
+        why.append("the joint refit (no pilot.json beside final.json)")
         if omega1 is None or a1 is None:
             why.append("omega1/a1 (the plan recorded no constants_at_plan_time)")
-
-    lm = [r.get("log_moment") for r in reps]
-    if any(x is None for x in lm):
-        Lambda = None
-        why.append("Lambda (this run predates the log_moment summary field)")
-    else:
-        # Lambda is max_k E|log xi_k|^(2+delta): an expectation, so replicates
-        # average; the max is over scales.
-        Lambda = float(np.mean(np.array(lm, float), axis=0).max())
 
     return {
         "sigma_inf2": float(cv[-1] ** 2),   # largest scale -- moment_bounds' definition
         "sigma_max2": float((cv ** 2).max()),
         "omega1": omega1, "a1": a1, "omega1_se": omega1_se,
-        "Lambda": Lambda, "delta": LOG_MOMENT_DELTA if Lambda is not None else None,
         "why": why,
     }
 
 
+#: Fewest consecutive pilot scales a pinned range fit may use: 3 free parameters
+#: plus the pin leave dof = 2, and 5 is the article's pilot minimum.
+REFIT_MIN_POINTS = 5
+
+
 def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
-    """The pilot's eq. (232) fit with gamma pinned to the run's gamma-hat, plus its warning."""
+    """omega1, a1 for B_fs: the pilot's AIC range fit with gamma pinned to gamma-hat.
+
+    Keeps the field names of the all-scales fit (omega1, omega1_se, a1, chi2, dof,
+    p_value, omega1_at_bound, warn), so every reader of answer.json's pilot_refit
+    still works. omega1 is the AIC-weighted average over the kept ranges and
+    omega1_se its eq. (18) error (Jay & Neil; user, 2026-11-09). a1 and a0 come from
+    refitting the highest-weight range with omega fixed at that average, so
+    (gamma, a0, a1, omega1) is one fit, the curve to draw; `chi2_at_omega1` is its
+    chi2. chi2, dof,
+    p_value, i_min, i_max and the warning are the highest-weight range's own fit.
+    Natural log as the base: omega1 and a1 do not depend on it, and pilots need not
+    sit on the run's rho^k ladder.
+    """
+    rf = omega_ranges(pilot["scales"], np.log(pilot["y_bar"]), pilot["sigma_log"], np.e,
+                      min_points=REFIT_MIN_POINTS, gamma_pin=(gamma, gamma_se))
+    out = {"method": "AIC range fit, gamma pinned (local_slope.omega_ranges)",
+           "criterion": rf["criterion"], "warn_p": REFIT_WARN_P,
+           "ranges": len(rf["fits"]), "weight_left_out": rf["weight_left_out"]}
+    b = rf["best"]
+    if b is None:
+        return {**out, "omega1": None, "a1": None, "omega1_se": None, "chi2": None,
+                "dof": None, "p_value": None, "omega1_at_bound": False, "warn": True,
+                "reason": rf["reason"]}
+    return {**out, "omega1": rf["omega"], "a1": rf["a1"], "omega1_se": rf["total"],
+            "omega1_stat": rf["stat"], "omega1_systematic": rf["systematic"],
+            "omega1_lo": b["omega_lo"], "omega1_hi": b["omega_hi"],
+            "i_min": b["i_min"], "i_max": b["i_max"], "points": b["points"],
+            "a0": float(np.exp(rf["log_a0"])), "best_weight": rf["best_weight"],
+            "chi2_at_omega1": rf["chi2_at_omega"],
+            "gamma": rf["gamma_at_omega"], "chi2": b["chi2"], "dof": b["dof"],
+            "p_value": b["p_value"], "omega1_at_bound": False,
+            "warn": bool(b["p_value"] < REFIT_WARN_P)}
+
+
+#: Fewest consecutive scales a joint (gamma-free) range fit may use: 4 parameters,
+#: dof = 2, as in `omega_ranges`' own default.
+JOINT_MIN_POINTS = 6
+
+
+def joint_points(pilot: dict, scales, y_bar, sigma_log) -> tuple[np.ndarray, ...]:
+    """One log-log point per scale from the pilot and the long run together.
+
+    The two are independent draws (ground rule 2), so where a scale is in both their
+    means of log Y are merged by inverse variance. Returns (scales, log_y, se_log,
+    source), source 'pilot', 'run' or 'both' per scale.
+    """
+    pts: dict[float, list] = {}
+    for tag, sc, yb, sl in (("pilot", pilot["scales"], pilot["y_bar"], pilot["sigma_log"]),
+                            ("run", scales, y_bar, sigma_log)):
+        for s, ly, e in zip(sc, np.log(np.asarray(yb, float)), sl):
+            pts.setdefault(float(s), []).append((tag, float(ly), float(e)))
+    sc = np.array(sorted(pts))
+    ly, le, src = [], [], []
+    for s in sc:
+        w = np.array([1 / e ** 2 for _, _, e in pts[s]])
+        ly.append(float(w @ np.array([y for _, y, _ in pts[s]]) / w.sum()))
+        le.append(float(1 / sqrt(w.sum())))
+        tags = {t for t, _, _ in pts[s]}
+        src.append("both" if len(tags) == 2 else tags.pop())
+    return sc, np.array(ly), np.array(le), np.array(src)
+
+
+def joint_refit(pilot: dict, scales, y_bar, sigma_log) -> dict:
+    """omega1, a1 for B_fs: one AIC range fit on the pilot and the long run together.
+
+    Jay & Neil's model average (eqs. 15, 18) over every run of >= JOINT_MIN_POINTS
+    consecutive scales of `joint_points`, gamma free (user, 2026-11-11). It replaced
+    the pilot refit with gamma pinned to gamma-hat, whose pin width is gamma-hat's
+    scatter, not its bias: where B_fs >> se (perc gamma_susc d = 5: bias 0.024 against
+    se 2.3e-4) the pin forced omega1 = 1.23 on a pilot whose free fit and joint fit
+    give 0.45. The joint fit feeds nothing estimated back as a prior. The pilot's
+    small scales anchor omega1, which `wilson_inputs` explains the long run alone
+    cannot; the long run adds the large scales where the correction is decided.
+    Same field names as `pinned_refit`, so readers of either work.
+    """
+    sc, ly, le, src = joint_points(pilot, scales, y_bar, sigma_log)
+    out = {"method": "AIC range fit on pilot + long run, gamma free (local_slope.omega_ranges)",
+           "warn_p": REFIT_WARN_P, "scales": sc.tolist(), "source": src.tolist()}
+    none = {"omega1": None, "a1": None, "omega1_se": None, "chi2": None, "dof": None,
+            "p_value": None, "omega1_at_bound": False, "warn": True}
+    if sc.size < JOINT_MIN_POINTS:
+        return {**out, **none, "ranges": 0,
+                "reason": f"{sc.size} scales in pilot + long run, a range needs {JOINT_MIN_POINTS}"}
+    rf = omega_ranges(sc, ly, le, np.e, min_points=JOINT_MIN_POINTS, gamma_pin=None)
+    out.update(criterion=rf["criterion"], ranges=len(rf["fits"]),
+               weight_left_out=rf["weight_left_out"])
+    b = rf["best"]
+    if b is None:
+        return {**out, **none, "reason": rf["reason"]}
+    return {**out, "omega1": rf["omega"], "a1": rf["a1"], "omega1_se": rf["total"],
+            "omega1_stat": rf["stat"], "omega1_systematic": rf["systematic"],
+            "omega1_lo": b["omega_lo"], "omega1_hi": b["omega_hi"],
+            "i_min": b["i_min"], "i_max": b["i_max"], "points": b["points"],
+            "a0": float(np.exp(rf["log_a0"])), "best_weight": rf["best_weight"],
+            "chi2_at_omega1": rf["chi2_at_omega"],
+            # gamma, a0, a1, omega1: one curve, as in pinned_refit; gamma_avg is the
+            # AIC average of the ranges' slopes, for comparison only
+            "gamma": rf["gamma_at_omega"], "gamma_avg": rf["gamma"],
+            "gamma_avg_se": rf["gamma_total"], "chi2": b["chi2"], "dof": b["dof"],
+            "p_value": b["p_value"], "omega1_at_bound": False,
+            "warn": bool(b["p_value"] < REFIT_WARN_P)}
+
+
+def pinned_refit_all_scales(pilot: dict, gamma: float, gamma_se: float) -> dict:
+    """The 2026-11-02 refit, one fit on every pilot scale; kept for comparison only."""
     r = fit_correction_pinned(pilot["scales"], pilot["y_bar"], pilot["sigma_log"],
                               gamma, gamma_se)
     r["warn"] = bool(r["p_value"] < REFIT_WARN_P or r["omega1_at_bound"])
@@ -167,7 +302,7 @@ def pinned_refit(pilot: dict, gamma: float, gamma_se: float) -> dict:
 def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dict:
     """gamma-hat and its error from a completed run's per-replicate summaries.
 
-    `pilot` (pilot.json) enables the pinned refit that B_fs is built from; without
+    `pilot` (pilot.json) enables the joint refit that B_fs is built from; without
     it the eq. (720) bound is not assembled, and `wilson_why` says so.
     """
     scales = final["scales"]
@@ -206,8 +341,13 @@ def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dic
     w_sd = sigma_se(n, m, rho, sigma_inf2)      # (n, m, rho, sigma_inf2) -- not cv first
     # gamma-hat's error for the pin: the replicate se, or with one replicate the
     # closed-form sd (which is then the same thing, without the spread).
-    refit = None if pilot is None else pinned_refit(pilot, gamma, se if se else w_sd)
-    wi = wilson_inputs(final, cv, reps, refit)
+    pin_se = se if se else w_sd
+    # B_fs's omega1, a1: the joint fit (user, 2026-11-11). The two pilot-only refits
+    # with gamma pinned are kept in answer.json for comparison only.
+    joint = None if pilot is None else joint_refit(pilot, scales, y_pool, sig_pool)
+    refit = None if pilot is None else pinned_refit(pilot, gamma, pin_se)
+    refit_all = None if pilot is None else pinned_refit_all_scales(pilot, gamma, pin_se)
+    wi = wilson_inputs(final, cv, reps, joint)
 
     # Theorem thm:wilson (eq. 720). A BOUND on |gamma_hat - gamma|, so it
     # overcovers; unlike the replicate interval it carries the finite-size
@@ -216,8 +356,7 @@ def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dic
     if not wi["why"]:
         wilson = wilson_interval(gamma, n, m, m0, rho,
                                  sigma_inf2=wi["sigma_inf2"], sigma_max2=wi["sigma_max2"],
-                                 a1=wi["a1"], omega1=wi["omega1"],
-                                 Lambda=wi["Lambda"], delta=wi["delta"], level=level)
+                                 a1=wi["a1"], omega1=wi["omega1"], level=level)
     wilson_why = wi["why"]
 
     # B_fs = |a1| * rho**(-omega1*m0) / (rho**omega1 - 1): omega1 sits in an
@@ -242,10 +381,11 @@ def analyse(final: dict, level: float = LEVEL, pilot: dict | None = None) -> dic
             "fit": fit, "scales": scales, "n": n, "m0": m0, "m": m, "rho": rho,
             "y_bar": y_pool.tolist(), "sigma_log": sig_pool.tolist(),
             "cv": cv.tolist(), "sigma_inf2": sigma_inf2, "wilson_sd": w_sd,
-            "sigma_max2": wi["sigma_max2"], "Lambda": wi["Lambda"],
+            "sigma_max2": wi["sigma_max2"],
             "wilson": wilson, "wilson_why": wilson_why,
             "wilson_bfs_span": b_span, "omega1_se": wi["omega1_se"],
-            "pilot_refit": refit,
+            "joint_refit": joint,
+            "pilot_refit": refit, "pilot_refit_all_scales": refit_all,
             "omega1_pilot_fit": ((final.get("plan") or {}).get("constants_at_plan_time")
                                  or {}).get("omega1")}
 
@@ -316,12 +456,12 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
         lines += [
             "| term | value | what it is |",
             "|---|---|---|",
-            f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot "
-            f"refitted with gamma pinned to gamma-hat (omega1 = "
-            f"{res['pilot_refit']['omega1']:.3g}) |",
-            f"| B_good | {w['B_good']:.3g} | Jensen bias of the log |",
-            f"| B_bad | {w['B_bad']:.3g} | the stray-sample-mean event, needs "
-            f"Lambda = {res['Lambda']:.3g} |",
+            f"| B_fs | {w['B_fs']:.3g} | finite-size bias, from the pilot and "
+            f"the long run in one AIC range fit, omega1 = "
+            f"{res['joint_refit']['omega1']:.3g} averaged over its ranges, a1 = "
+            f"{res['joint_refit']['a1']:+.3g} refitted at it |",
+            f"| B_good | {w['B_good']:.3g} | Taylor remainder of the log on the "
+            f"good event (lem:Q-prob b) |",
             f"| {w['quantile']:.3g}·sigma_se | {w['se_term']:.3g} | the only "
             f"random term; sigma_se is a closed form, so no t widening |",
             "",
@@ -340,7 +480,7 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
         sp = res.get("wilson_bfs_span")
         if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
             lines += [
-                f"> **B_fs is not determined by this pilot.** omega1 sits in an "
+                f"> **B_fs is not determined by the data.** omega1 sits in an "
                 f"exponent, so moving it by its own +/- 1 se "
                 f"({res['omega1_se']:.3g}) swings B_fs across "
                 f"[{sp[0]:.3g}, {sp[1]:.3g}] -- a factor of {sp[1] / sp[0]:.3g}. "
@@ -382,8 +522,8 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
         f"Cross-checks: the all-points OLS slope gives "
         f"{res['gamma_all_points']:+.5f}; the eq. (232) fit gives "
         f"{res['fit']['gamma']:+.5f}.", "",
-        f"The closed-form sd of a single estimate (eq. 583/720, "
-        f"`sqrt(12*sigma_inf2/(n*m^3))/log(rho)`, no replicates involved) is "
+        f"The closed-form sd of a single estimate (thm:CLT / eq:wilson, "
+        f"`sqrt(12*sigma_inf2/(n*m(m^2-1)))/log(rho)`, no replicates involved) is "
         f"**{res['wilson_sd']:.3g}**"
         + (f", against **{res['sd_over_reps']:.3g}** measured as the spread of "
            f"{R} replicates." if res.get("sd_over_reps") else ".")
@@ -400,24 +540,34 @@ def write_report(sd: Path, res: dict, final: dict, consts: dict, plan: dict) -> 
 
 
 def _refit_lines(res: dict) -> list[str]:
-    """report.md's paragraph on the pinned refit, with its warning when it fires."""
-    r = res.get("pilot_refit")
+    """report.md's paragraph on the joint refit, with its warning when it fires."""
+    r = res.get("joint_refit")
     if r is None:
         return []
+    if r["omega1"] is None:
+        return [f"> **No omega1 for B_fs:** the joint AIC refit of pilot and long run found "
+                f"no usable range ({r['reason']}), so the eq. (720) bound is not assembled.", ""]
     o0 = (res.get("omega1_pilot_fit") or {}).get("value")
-    out = [f"B_fs comes from the pilot refitted with gamma pinned to gamma-hat: "
-           f"omega1 = {_fmt(r['omega1'], r['omega1_se'])}, a1 = {r['a1']:+.4g}, "
-           f"chi2 = {r['chi2']:.3g} on {r['dof']} dof, p = {r['p_value']:.3g}"
-           + (f" (the plan's gamma-free pilot fit had omega1 = {o0:.4g})." if o0 is not None else "."),
+    rp = res.get("pilot_refit") or {}
+    n_p = sum(t != "run" for t in r["source"])
+    out = [f"B_fs comes from the pilot ({n_p} scales) and the long run fitted together, "
+           f"{len(r['scales'])} scales, gamma free, on {r['ranges']} ranges weighted by AIC "
+           f"with data cuts: omega1 = {_fmt(r['omega1'], r['omega1_se'])}, their weighted "
+           f"average (profiles ± {r['omega1_stat']:.2g} ⊕ range ± {r['omega1_systematic']:.2g}), "
+           f"and a1 = {r['a1']:+.4g}, refitted at it on the highest-weight range "
+           f"{r['i_min']}..{r['i_max']} (weight {r['best_weight']:.2f}), whose own fit has "
+           f"chi2 = {r['chi2']:.3g} on {r['dof']} dof, p = {r['p_value']:.3g}. The joint "
+           f"fit's own gamma, averaged over the ranges, is "
+           f"{_fmt(r['gamma_avg'], r['gamma_avg_se'])}, for comparison only"
+           + (f". The pilot refit with gamma pinned had omega1 = {rp['omega1']:.4g}"
+              if rp.get("omega1") is not None else "")
+           + (f"; the plan's gamma-free pilot fit, {o0:.4g}." if o0 is not None else "."),
            ""]
     if r["warn"]:
-        why = ("omega1 sits at its fit bound" if r["omega1_at_bound"] else
-               f"chi2 p = {r['p_value']:.2g} < {r['warn_p']}")
-        out += [f"> **Warning: one correction to scaling does not explain the pilot "
-                f"around gamma-hat** ({why}). B_fs assumes it does, so the bound "
-                f"above may be wrong in either direction. Seen in this repo near "
-                f"the ERW's critical p = 3/4 and when the long run sits on the "
-                f"pilot's own scales (gamma-hat itself biased).", ""]
+        out += [f"> **Warning: one correction to scaling does not explain the data** "
+                f"(chi2 p = {r['p_value']:.2g} < {r['warn_p']} on the highest-weight "
+                f"range). B_fs assumes it does, so the bound above may be wrong in "
+                f"either direction.", ""]
     return out
 
 
@@ -494,6 +644,11 @@ def write_details(sd: Path, res: dict, final: dict, consts: dict, plan: dict) ->
         f"- plan: `{artifact_path(sd, 'plan').name}`",
         f"- run: `{artifact_path(sd, 'final').name}` "
         f"({'samples kept' if final.get('samples_kept') else 'summaries only'})",
+        *([f"- closed early: {final['replicates']} of {final['replicates_planned']} "
+           f"planned replicates (run.py --close-partial)"] if final.get("closed_partial") else []),
+        *([f"- extended: {final['replicates_added']} replicate(s) added to the "
+           f"{plan.get('replicates', '?')} planned (run.py --more)"]
+          if final.get("replicates_added") else []),
         f"- seeds: `{final.get('seeds')}`", "",
     ]
     p = sd / "details.md"
@@ -505,6 +660,8 @@ def write_budget_analysis(sd: Path, res: dict, final: dict, plan: dict) -> Path:
     """Optional: did the run cost and deliver what the plan promised?"""
     got_t = final["elapsed_seconds"]
     want_t = plan.get("total_seconds")
+    if final.get("replicates_added"):    # run.py --more: the plan priced fewer
+        want_t = plan["seconds"] * final["replicates"]
     want_e = plan.get("rmse")
     got_e = res["se"] * sqrt(res["replicates"]) if res["se"] else None
     lines = [
@@ -567,10 +724,14 @@ def _plot(sd: Path, res: dict, final: dict) -> Path:
     a0 = float(np.exp(np.sum(w * (log_y - gamma * np.log(scales))) / np.sum(w)))
     summary = {i: (y, y * s, res["n"])
                for i, y, s in zip(res["scales"], res["y_bar"], res["sigma_log"])}
+    # The eq. (720) radius, when the bound could be assembled; without it the
+    # label shows gamma-hat alone rather than a smaller, bias-blind error bar.
+    w = res.get("wilson")
+    pm = rf" \pm {w['half_width']:.3g}$ (eq. 720)" if w else "$"
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     loglog_plot(summary, ax=ax,
                 fit_fn=lambda x: a0 * np.asarray(x, float) ** gamma,
-                fit_label=rf"$\hat\gamma = {gamma:.5f}$")
+                fit_label=rf"$\hat\gamma = {gamma:.5f}{pm}")
     ax.set_title(f"{final['model']}  --  {res['replicates']} replicate(s), "
                  f"n = {res['n']:,} per scale")
     fig.tight_layout()
@@ -617,17 +778,17 @@ def print_answer(res: dict, *, log=print) -> None:
         log(f"  {pct}% [{res['ci'][0]:.5f}, {res['ci'][1]:.5f}]  "
               f"Student t({res['dof']}), {res['replicates']} replicates "
               f"-- scatter only, no bias term")
-    r = res.get("pilot_refit")
-    if r is not None and r["warn"]:
-        log(f"  !! pilot refit with gamma pinned: chi2 = {r['chi2']:.3g}/{r['dof']}, "
-            f"p = {r['p_value']:.2g}"
-            + (", omega1 at its bound" if r["omega1_at_bound"] else "")
-            + " -- one correction to scaling does not explain the pilot; B_fs may be wrong")
+    r = res.get("joint_refit")
+    if r is not None and r["omega1"] is None:
+        log(f"  !! joint AIC refit of pilot + long run: {r['reason']} -- no omega1, no B_fs")
+    elif r is not None and r["warn"]:
+        log(f"  !! joint refit: chi2 = {r['chi2']:.3g}/{r['dof']}, p = {r['p_value']:.2g}"
+            " -- one correction to scaling does not explain the data; B_fs may be wrong")
     if w is not None:
         sp = res.get("wilson_bfs_span")
         if sp and sp[0] > 0 and sp[1] / sp[0] > _BFS_SPAN_LIMIT:
             log(f"  !! B_fs spans [{sp[0]:.2g}, {sp[1]:.2g}] over omega1 +/- 1 se "
-                  f"-- the bound's bias term is not determined by this pilot")
+                  f"-- the bound's bias term is not determined by the data")
     elif res.get("wilson_why"):
         log(f"  no eq. (720) bound ({', '.join(res['wilson_why'])}) -- the "
               f"interval above has no bias term")

@@ -4,11 +4,11 @@ Reads `src/budget/allocation_experiment.py`'s `allocation_sweep` (per-cell,
 per-replicate closed-form gamma-hat values) and a pilot study directory
 (`constants.json` + `pilot.json`), and checks three statements per sweep:
 
-  CLT, eq. (583)     sqrt(n m^3) (gamma_hat - E gamma_hat) -> N(0, 12 sigma_inf^2 / log^2 rho).
+  CLT, thm:CLT       sqrt(n m(m^2-1)) (gamma_hat - E gamma_hat) -> N(0, 12 sigma_inf^2 / log^2 rho).
                      Per cell: observed Var(gamma_hat) / predicted, with a
                      percentile bootstrap CI over replicates, and a KS test of
                      (gamma_hat - own mean) / predicted sd against N(0, 1).
-  thm:wilson, (720)  |gamma_hat - gamma| <= B_fs + B_good + B_bad + Phi(alpha) sigma_se.
+  cor:wilson         |gamma_hat - gamma| <= Phi^-1(1-alpha/2) sigma_se + B_fs + B_good.
                      Per cell: the fraction of replicates inside the bound,
                      with a Wilson score CI, and bound / RMSE.
   prop:opt, (945-6)  per budget, best m0 vs prop:opt's m0 vs the tuned m0
@@ -18,21 +18,20 @@ per-replicate closed-form gamma-hat values) and a pilot study directory
 
 Where each input comes from, and why:
 
-- The predicted sd is `tools/wilson.py`'s `sigma_se` -- eq. (583)'s and eq.
-  (720)'s sqrt(12 sigma_inf2/(n m^3))/log(rho), verbatim. sigma_inf2 is the
-  pilot's cv^2 at its LARGEST scale, `moment_bounds`' and report.py's
-  definition. The exact finite-m variance (`sigma_se_per_scale`) is reported
-  beside it whenever the pilot measured cv at every scale of the cell; it is
-  1.4% wider at m = 6 (see its docstring). Neither is silently substituted
-  for the other: both ratios are recorded.
-- eq. (720)'s constants follow report.py's `wilson_inputs`: sigma_max2 =
-  max cv^2 over the pilot's scales, Lambda = max over scales of the
-  replicate-mean log_moment, delta = `LOG_MOMENT_DELTA`. omega1 and a1 come
+- The predicted sd is `tools/wilson.py`'s `sigma_se` -- thm:CLT's and
+  eq:wilson's sqrt(12 sigma_inf2/(n m(m^2-1)))/log(rho), verbatim. sigma_inf2
+  is the pilot's cv^2 at its LARGEST scale, `moment_bounds`' and report.py's
+  definition. The per-scale variance (`sigma_se_per_scale`, cv^2 at each scale
+  of the cell) is reported beside it whenever the pilot measured cv at every
+  scale of the cell; with the m(m^2-1) form they differ only through cv
+  varying across the window. Both ratios are recorded.
+- eq:wilson's constants follow report.py's `wilson_inputs`: sigma_max2 =
+  max cv^2 over the pilot's scales. omega1 and a1 come
   from the PILOT's constants.json, never from the sweep's values.
   experiments/exponents_report.md's extension 3 is applied when a1 is
   unidentified (`plan.unidentified`) and omega1 is identified (se < omega1/2):
   B_fs uses |a1| + 2 se(a1). With omega1 unidentified there is no bound.
-- The sweep's n is uniform per cell, so eq. (720) is evaluated as stated, with
+- The sweep's n is uniform per cell, so eq:wilson is evaluated as stated, with
   no harmonic-mean extension.
 - `true_gamma` scores finished estimates only (ground rule 4); it is read from
   the sweep, where allocation_experiment recorded it from its recipe.
@@ -66,7 +65,6 @@ from tools.artifacts import artifact_path, read_artifact, write_artifact  # noqa
 from tools.constants import load, require  # noqa: E402
 from tools.coverage import wilson_score_interval  # noqa: E402
 from tools.rng import seed_record, spawn  # noqa: E402
-from tools.summary import LOG_MOMENT_DELTA  # noqa: E402
 from tools.wilson import finite_size_bias, sigma_se, sigma_se_per_scale, wilson_interval  # noqa: E402
 
 from src.budget.allocation_experiment import summarize  # noqa: E402
@@ -75,7 +73,7 @@ from src.study.plan import unidentified  # noqa: E402
 LEVEL = 0.95
 N_BOOT = 4000
 KS_ALPHA = 0.05
-ESTIMATOR = "closed_form"     # prop:opt and eq. (720) are stated for eq. (523)-(526)
+ESTIMATOR = "closed_form"     # def:alloc and eq:wilson are stated for eq:hatbeta
 
 
 # --------------------------------------------------------------------------
@@ -83,7 +81,7 @@ ESTIMATOR = "closed_form"     # prop:opt and eq. (720) are stated for eq. (523)-
 # --------------------------------------------------------------------------
 
 def pilot_inputs(pilot_dir: Path) -> dict:
-    """eq. (720)'s constants from a pilot study, as report.py's `wilson_inputs` takes them.
+    """eq:wilson's constants from a pilot study, as report.py's `wilson_inputs` takes them.
 
     Returns the constants plus `why`, naming anything missing. Missing pieces
     are reported, never defaulted: a bound with a term set to zero is not one.
@@ -94,14 +92,6 @@ def pilot_inputs(pilot_dir: Path) -> dict:
     a1 = require(consts, "a1")
     cv = np.asarray(pilot["cv_per_scale"], float)
     why = []
-
-    lm = [r.get("log_moment") for r in pilot["per_replicate"]]
-    Lambda = None
-    if any(x is None for x in lm):
-        why.append("Lambda (this pilot predates the log_moment summary field)")
-    else:
-        # An expectation, so replicates average; the max is over scales.
-        Lambda = float(np.mean(np.array(lm, float), axis=0).max())
 
     # exponents_report.md, "Three extensions", item 3.
     if omega1.se is not None and omega1.se >= omega1.value / 2:
@@ -121,8 +111,6 @@ def pilot_inputs(pilot_dir: Path) -> dict:
         "cv2_by_scale": {int(s): float(c ** 2) for s, c in zip(pilot["scales"], cv)},
         "sigma_inf2": float(cv[-1] ** 2),   # largest scale -- moment_bounds' definition
         "sigma_max2": float((cv ** 2).max()),
-        "Lambda": Lambda,
-        "delta": LOG_MOMENT_DELTA if Lambda is not None else None,
         "omega1": omega1.value, "omega1_se": omega1.se,
         "a1": a1.value, "a1_se": a1.se, "a1_used": a1_used, "a1_rule": a1_rule,
         "why": why,
@@ -193,13 +181,12 @@ def coverage_check(values: np.ndarray, true_gamma: float, half_width: float,
 
 
 def wilson_bound(n: int, m: int, m0: int, rho: float, pc: dict) -> dict | None:
-    """eq. (720) for one cell, exactly as report.py calls `wilson_interval`."""
+    """eq:wilson for one cell, exactly as report.py calls `wilson_interval`."""
     if pc["why"]:
         return None
     w = wilson_interval(0.0, n, m, m0, rho,
                         sigma_inf2=pc["sigma_inf2"], sigma_max2=pc["sigma_max2"],
-                        a1=pc["a1_used"], omega1=pc["omega1"],
-                        Lambda=pc["Lambda"], delta=pc["delta"], level=LEVEL)
+                        a1=pc["a1_used"], omega1=pc["omega1"], level=LEVEL)
     # The half-width does not depend on gamma_hat; drop the placeholder centre.
     w = {k: v for k, v in w.items() if k not in ("gamma_hat", "interval")}
     # report.py's B_fs span: omega1 sits in an exponent of B_fs.
@@ -325,7 +312,7 @@ def markdown(res: dict) -> str:
     for w in res["warnings"]:
         L.append(f"> WARNING: {w}")
     L += [f"pilot `{pc['pilot_dir']}`: sigma_inf2 = {pc['sigma_inf2']:.4g}, "
-          f"sigma_max2 = {pc['sigma_max2']:.4g}, Lambda = {pc['Lambda']}, "
+          f"sigma_max2 = {pc['sigma_max2']:.4g}, "
           f"omega1 = {pc['omega1']:.4g} +/- {pc['omega1_se']}, a1 used: {pc['a1_rule']}", ""]
     if pc["why"]:
         L += [f"No eq. (720) bound: {'; '.join(pc['why'])}.", ""]

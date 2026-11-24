@@ -213,7 +213,7 @@ python3 src/study/autopilot.py -meta <recipe> --study <name> --time 30m
 
 $\mathbb{E}Y_i = a_0 i^\gamma \exp(\sum_j a_j i^{-\omega_j})$ (article eq. 232), realized
 as $Y_i = \mathbb{E}Y_i\cdot\xi_i$ with $\xi_i>0$, $\mathbb{E}\xi_i=1$,
-$\mathrm{Var}(\xi_i) = \sigma_\infty^2$ exactly — so Assumption 6 holds *by construction*
+$\mathrm{Var}(\xi_i) = \sigma_\infty^2$ exactly — so Assumption 5 (σ convergence) holds *by construction*
 rather than only in the limit. Params: `gamma`, `a0`, `corrections` (a list of
 $(a_j,\omega_j)$ pairs, validated for $0<\omega_1<\omega_2<\cdots$), `sigma_inf2`,
 `family` (`NOISE_FAMILIES`, currently `lognormal`), `cost_d`, `cost_scale`.
@@ -372,7 +372,7 @@ argued (`experiments/03_percolation_zd/README.md`, P3 and P4):
 
 - **`anchor`** — `"south"` (default) or `"origin"` (the cluster of the centre site, what
   `presentation18-05-2026` measured). Same exponent, but the origin's
-  $\mathrm{Var}(\xi_i)\asymp 1/\pi_1(i)\to\infty$ **violates Assumption 6**, and its
+  $\mathrm{Var}(\xi_i)\asymp 1/\pi_1(i)\to\infty$ **violates Assumption 5 (σ convergence)**, and its
   correction amplitude is far larger. At equal budget: $15.7\times$ worse in RMSE.
 - **`geometry`** — `"box"` (default, four walls) or `"cylinder"` (periodic in $x$). For a
   south-anchored count the side walls are pure finite-size contamination. Measured on two
@@ -694,7 +694,7 @@ degenerate on its own terms — $3.045$ against $3$ — so its crossover is slow
 over $h\in[i/2,i)$ and gives $i^{d_f}$ in **every** dimension. It keeps both properties
 that made the face anchor beat the origin anchor in 2-D — the count is a sum over
 $\sim i^{\texttt{dim}-1}$ decorrelating columns, so $\mathrm{Var}(\xi_i) = O(1)$ and
-Assumption 6 holds; and $Y_i=0$ is a crossing failure, an $O(1)$ probability rather than
+Assumption 5 (σ convergence) holds; and $Y_i=0$ is a crossing failure, an $O(1)$ probability rather than
 one tending to $1$. Measured at `dim` $=3$ over $i=8\ldots64$ (cylinder,
 $6\times10^{8}$ sites), local slopes:
 
@@ -795,7 +795,7 @@ faster than needed). The option `percolation_tau.py` documents as *available* be
 **mandatory** above two dimensions. Two consequences: the cost exponent is
 $d = \texttt{dim}/d_f = \tau-1 = -\gamma$ — the article's cost exponent and the exponent
 being measured are the same number — and $\lambda(s)$, the mean count per box, is
-constant along the ladder, so Assumption 6 holds outright.
+constant along the ladder, so Assumption 5 (σ convergence) holds outright.
 
 `DF_LOWER` is a **design** constant in exactly the sense an allocation rule's `omega1`
 is: it sizes boxes, never reaches an estimator, and getting it wrong changes the noise

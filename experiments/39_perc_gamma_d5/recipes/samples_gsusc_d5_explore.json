@@ -1,0 +1,35 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 5,
+    "eps0": 0.07,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1,
+    "max_sites": 1000000000
+  },
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "n": [
+    450000,
+    700000,
+    1120000,
+    1940000,
+    3140000,
+    4940000,
+    9480000,
+    16420000
+  ],
+  "seed": null,
+  "_comment": "User, 2026-11-07: AIC-quality pilot for gamma, d = 5, by exploration (dim 5 enabled the same day). The pooled torus data (39 + 09) stop at x = 64: 5 points, 1 dof. eps0 = 0.07 as 39 (p_c = 0.14080, site). n = (cv / 0.01)^2 per rung, cv from a purus probe the same day: 6.7 at x = 4 to 40.5 at x = 512. Means at 4..64 match 39's torus within ~1.5 sigma. Stops at 512: the key range is +-2047 sites at dim 5, and over ~1.6e7 samples at 1024 one cluster reaching it would raise and lose the replicate (20,000 samples at 1024 ran clean, 63 us each)."
+}

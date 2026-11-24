@@ -1,0 +1,13 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_hybrid",
+  "params": {
+    "dim": 5,
+    "eps0": 0.07,
+    "cut": 4194304
+  },
+  "scales": [4, 8, 16, 32, 64, 128, 256, 512],
+  "n": [25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000, 25000000],
+  "seed": null,
+  "_comment": "User, 2026-11-12: second d = 5 hybrid pilot, n = 25e6 at every scale, scales 2**2..2**9. Same model params as samples_gsusc_d5_hybrid.json (cut 2**22)."
+}
