@@ -906,25 +906,44 @@ reports, one adapting the pipeline to their own model. Decided with the user
   experiments go in is still open.
 
 ### P0 — before the article points here
-- [ ] Commit the work in progress on `gpu-layers-explore` and merge it to `master`. Tag
-      `v1.0-article`, archive the tag on Zenodo for a DOI, and cite the tag/DOI in the
-      article instead of the bare GitHub URL
-- [ ] `ARTICLE.md`: one row per figure and table of the paper, giving article label →
-      experiment dir → recipe(s) (the accepted `*_final.json`) → exact commands →
-      result file → hardware and wall time
-- [ ] Find or write the generator of every article figure. Missing so far:
-      `pipeline_check_A1/A1A2/A4/A5/A6` and `rwre_p0.04/p0.3_pipeline_{pilot,longrun,checks}`.
-      `perc_exploration` has two candidate scripts (`51_…`, `58_…`); pick one
-- [ ] Commit the small results behind each article number (`constants.json`,
-      `report.md`, `details.md`, run logs). Data (`.npz`) stays out. Requires a narrow
-      `.gitignore` exception or a `results/` folder next to `data/`
-- [ ] Commit the accepted `*_final.json` recipe of every article run. It fixes the
-      allocation, so a rerun does not depend on the reader's machine throughput
+- [x] ~~Commit the work in progress on `gpu-layers-explore` and merge it to `master`
+      (`171242d`, pushed 2026-11-24)~~
+- [ ] Tag `v1.0-article` once the P0 and P1 items below are done, archive the tag on
+      Zenodo for a DOI, and cite the tag/DOI in the article instead of the bare GitHub URL
+- [x] ~~`ARTICLE.md` (draft, 2026-11-24): every simulated figure and table → experiment →
+      study → sampler → device → long-run seed, with the Step 1–5 → command map. Each
+      article number was matched to its study's `answer.json`/`final.json`. Still
+      missing from it: exact command chains and hardware (items below)~~
+- [x] ~~Find the generator of every article figure. All found. The `rwre_p0.*_pipeline_*`
+      figures are commented out in `main.tex`. `perc_exploration` is experiment 58's
+      (the layered algorithm), not 51's (the stack)~~
+- [ ] Move `rwre_step.py` (Fig. `fig:rwre-dynamics` (a)) from the article's `images/`
+      into `experiments/50_rwre_lazy_long_omega/`, so every figure's script is in the repo
+- [ ] Commit the small results behind each article number. Include `pilot.json`,
+      `constants.json` and `plan.json` as well as `final.json`, `answer.json`,
+      `report.md` and `local_slope.json`: with the first three, `run.py --seed`
+      redraws the long run at the article's allocation, and without them it cannot.
+      Data (`.npz`) stays out. Needs a narrow `.gitignore` exception or a `results/` folder
+- [ ] `plan.py:576` stores `recipe_path` as an absolute path (`/impa/home/...`), and
+      `run.py:167` and `autopilot.py:785` read it back. So the study files leak the home
+      directory and break on a clone. Store the path relative to the repo root, and
+      rewrite the field in the files published above
+- [ ] Commit the exact command chain of every article study. They are now only in the
+      gitignored `data/<study>_chain.sh` / `data/<study>.sh` (e.g. 47, 53, 61) or nowhere.
+      Most experiment READMEs give no command for their article run, and two don't name it:
+      53's README does not mention `pilot_gsusc_d2_layers_batched`, and 47's does not
+      mention `pilot_c1_d2_n10m` or `pilot_c1_d3_n1m`.
+      51's "Results" section is about `gsusc_d3_x4_4h`, not the article's `gsusc_d3_explore`
+- [ ] Record the machine (CPU model and threads, GPU model) in each study's files.
+      No study file has it, and the article's "time" columns depend on it
+- [x] ~~Commit the accepted `*_final.json` recipe of every article run (all 34 tracked,
+      checked 2026-11-24)~~
 - [ ] State reproducibility honestly: same recipe + seed + pinned versions should
       give the same draws on CPU; GPU draws only on the same cupy/CUDA version
       (`requirements.txt` comment). Check on one CPU run before claiming it
-- [ ] Map the article's Steps 1–5 to commands (which one does the Step 5 joint ω₁ fit)
-      and the checks A1–A6 to the article's assumption numbers
+- [x] ~~Map the article's Steps 1–5 to commands (`ARTICLE.md`, "How to read a row"):
+      Step 5 is `report.py`'s `joint_refit`~~
+- [ ] Map the checks A1–A6 to the article's assumption numbers
 - [ ] Add a `LICENSE` and a `CITATION.cff`
 
 ### P1 — organize for the two readers
