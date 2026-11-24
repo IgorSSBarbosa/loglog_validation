@@ -107,15 +107,116 @@ def collapse(s: dict, ref: dict, nu: float, kmin: float = 2**6) -> tuple:
     return s["D"][m], pred, se
 
 
+def running_nu(s: dict, ref: dict) -> tuple:
+    """nu(k) solving D(k, p) = D(k eps^nu, 0) exactly, per scale (user, 2026-11-07).
+
+    The p = 0 curve is inverted by linear interpolation in log2 k (it is increasing on the
+    whole ladder), so log2 k0(D) - log2 k = nu log2 eps. Scales whose D is below the p = 0
+    curve's first point (k = 4) cannot be placed and are dropped. se: D's se at p and the
+    p = 0 curve's se at k0, divided by the p = 0 slope dD/dlog2 k (a secant over one
+    doubling each side, because single doublings near the top are noisy) and by |log2 eps|.
+    """
+    x0, D0, s0 = np.log2(ref["k"]), ref["D"], ref["Dse"]
+    m = (s["D"] >= D0[0]) & (s["D"] <= D0[-1])
+    x0_of_D = np.interp(s["D"][m], D0, x0)
+    slope = np.interp(x0_of_D, x0[1:-1], (D0[2:] - D0[:-2]) / (x0[2:] - x0[:-2]))
+    le = np.log2(s["eps"])
+    nu = (x0_of_D - np.log2(s["k"][m])) / le
+    se = np.hypot(s["Dse"][m], np.interp(x0_of_D, x0, s0)) / (slope * abs(le))
+    return s["k"][m], nu, se
+
+
+def plot_running_nu(S: dict, out: Path) -> None:
+    ref = S["0"]
+    ps = [p for p in P_GRID if p not in ("0", "0.5")]
+    fig, axes = plt.subplots(3, 3, figsize=(15, 11), sharex=True)
+    print("\nrunning nu(k): D(k, p) = D(k eps^nu, 0)")
+    for ax, p in zip(axes.flat, ps):
+        k, nu, se = running_nu(S[p], ref)
+        ax.axhline(4, color="0.6", lw=1, ls="--", label=r"$\nu=4$")
+        ax.errorbar(np.log2(k), nu, se, fmt="-o", ms=4, lw=1.5, capsize=2, color="#1f4e8c")
+        ax.set_title(rf"$p={p}$, $\varepsilon={S[p]['eps']:.2f}$", fontsize=10)
+        lo = max(2.0, np.nanmin(nu - se) - 0.3) if len(nu) else 2.0
+        ax.set_ylim(min(lo, 3.5), min(7.0, max(5.0, np.nanmax(nu + se) + 0.3)))
+        ax.grid(alpha=0.3)
+        ax.spines[["top", "right"]].set_visible(False)
+        print(f"  p={p:5}: " + "  ".join(f"2^{int(np.log2(kk))}:{v:.2f}±{e:.2f}"
+                                         for kk, v, e in zip(k, nu, se) if np.log2(kk) % 3 == 0 or kk == k[-1]))
+    for ax in axes[-1]:
+        ax.set_xlabel(r"$\log_2 k$")
+    for ax in axes[:, 0]:
+        ax.set_ylabel(r"$\nu(k)$")
+    axes[0, 0].legend(fontsize=8, frameon=False)
+    fig.suptitle(r"Running collapse exponent: the $\nu(k)$ that puts $D(k,p)$ exactly on the $p=0$ curve, "
+                 r"$D(k,p)=D(k\varepsilon^{\nu},0)$, $\varepsilon=1-2p$." "\n"
+                 r"Exact collapse would give a flat line. Scales with $D(k,p)<D(4,0)$ have no $p=0$ partner and are absent.",
+                 fontsize=10)
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=110)
+    print(f"wrote {out}")
+
+
+def plot_running_dinf(S: dict, theta: float, out: Path, span: int = 6) -> None:
+    """D_inf refitted as the ladder grows (user, 2026-11-07), against log2(k_max eps^4).
+
+    At each k_max: D_inf - A k^-theta (theta fixed) on k_max / 2^span .. k_max, se inflated
+    by sqrt(chi2/dof) when > 1. The measured D(k_max) is drawn alongside. A converged
+    estimate would go flat; the eps^4 axis puts every p on the p = 0 clock.
+    """
+    cmap = plt.get_cmap("Blues")
+    fig, ax = plt.subplots(1, 2, figsize=(15, 5.4), sharey=True)
+    print(f"\nrunning D_inf (theta = {theta:.4f}, window k_max/2^{span}..k_max), at the top k_max:")
+    for p in P_GRID[:-1]:
+        s = S[p]
+        x = np.log2(s["k"])
+        xs = x + 4 * np.log2(s["eps"])
+        c = cmap(0.35 + 0.6 * float(p) / 0.5)
+        pts = []
+        for j in range(len(x)):
+            if x[j] - span < x[0]:
+                continue
+            sub = {key: s[key][(x >= x[j] - span) & (x <= x[j])] for key in ("k", "D", "Dse")}
+            Di, se, *_ = tail_fit(sub, theta, sub["k"][0])
+            pts.append((xs[j], Di, se))
+        if not pts:
+            continue
+        a = np.array(pts)
+        for axis in ax:
+            axis.plot(xs, s["D"], ":", lw=1.2, color=c)
+        ax[0].plot(a[:, 0], a[:, 1], "-o", ms=3, lw=2 if p != "0" else 4, color=c if p != "0" else "0.6",
+                   label=f"p={p}", zorder=3 if p == "0" else 2)
+        ax[1].errorbar(a[:, 0], a[:, 1], a[:, 2], fmt="-o", ms=3, lw=1.5, capsize=2,
+                       color=c if p != "0" else "0.6", label=f"p={p}")
+        print(f"  p={p:5}: log2(k_max eps^4) = {a[-1, 0]:5.1f}  D_inf = {a[-1, 1]:.3f} ± {a[-1, 2]:.3f}")
+    for axis, t in zip(ax, ("(a) running $D_\\infty$ (dotted: measured $D(k)$)", "(b) the same, with se")):
+        axis.set(xlabel=r"$\log_2(k_{\max}\,\varepsilon^4)$,  $\varepsilon=1-2p$", title=t)
+        axis.grid(alpha=0.3)
+        axis.spines[["top", "right"]].set_visible(False)
+    ax[0].set_ylabel(r"$D_\infty$ fitted on $k\in[k_{\max}/2^{%d},\,k_{\max}]$" % span)
+    ax[1].set_ylim(1, 8)
+    ax[0].legend(fontsize=8, ncol=2, frameon=False, loc="upper left")
+    fig.suptitle(rf"How the $D_\infty$ estimate moves as each $p$'s ladder grows: $D_\infty-Ak^{{-{theta:.4f}}}$, "
+                 rf"$\theta$ fixed from the $p=0$ tail. A converged estimate goes flat.", fontsize=10)
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=110)
+    print(f"wrote {out}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=EXP / "data/diffusion_coefficient_vs_p.png")
+    ap.add_argument("--out-running", type=Path, default=EXP / "data/running_nu.png")
+    ap.add_argument("--out-dinf", type=Path, default=EXP / "data/running_dinf.png")
     args = ap.parse_args()
 
     S = {p: series(p) for p in P_GRID}
     ref = S["0"]
+    plot_running_nu(S, args.out_running)
 
     th0 = tail_fit(ref, None, 2**10)[4]
+    plot_running_dinf(S, th0, args.out_dinf)
     print(f"p = 0 tail, k >= 2^10, theta free: theta = {th0:.4f}")
     lk, m = np.log(ref["k"]), ref["k"] >= 2**10
     for name, f, p0 in (("a + c ln k", lambda lk, a, c: a + c * lk, (1, 0.3)),

@@ -20,6 +20,8 @@
    with the planner's cost model; (A1)+(A2) is the log-log plot of pilot and long
    run together, with the pilot's fit extrapolated across the window and the pilot
    and long run refitted together (report.joint_refit: the omega1, a1 of B_fs), with its chi2.
+   `pipeline_check_<A1|A1A2|A4|A5|A6>`: each of those panels alone, for the article's
+   side-by-side layout of Step 4.
 
 Reads a finished study directory only (pilot.json, plan.json, final.json, answer.json).
 Truths appear nowhere (ground rule 4).
@@ -240,26 +242,21 @@ def fig_longrun(d: dict, rho: float):
     return fig
 
 
-def fig_checks(d: dict, rho: float):
-    pilot, plan, final = d["pilot"], d["plan"], d["final"]
-    reps = final["per_replicate"]
-    i = np.asarray(final["scales"], float)
-    k = np.log(i) / math.log(rho)
-    R, n = len(reps), final["n"]
-    # Five panels: three on top, the two wider ones (cost, extrapolation) below.
-    fig = plt.figure(figsize=(7.2, 4.4), constrained_layout=True)
-    ax_ = fig.subplot_mosaic([["A1", "A1", "A4", "A4", "A5", "A5"],
-                              ["A6", "A6", "A6", "X", "X", "X"]])
+def _per_rep(ax, k, values, label):
+    """Each replicate a light point, their mean a full one; scales are not joined."""
+    for v in values:
+        ax.plot(k, v, "o", color=DATA, alpha=0.35, ms=3.5)
+    mean = np.mean(values, axis=0)
+    ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
+    return mean
 
-    def per_rep(ax, values, label):
-        """Each replicate a light point, their mean a full one; scales are not joined."""
-        for v in values:
-            ax.plot(k, v, "o", color=DATA, alpha=0.35, ms=3.5)
-        mean = np.mean(values, axis=0)
-        ax.plot(k, mean, "o", color=DATA, ms=5.5, label=label)
-        return mean
 
-    ax = ax_["A1"]
+def _window_k(d: dict, rho: float) -> np.ndarray:
+    return np.log(np.asarray(d["final"]["scales"], float)) / math.log(rho)
+
+
+def check_A1(ax, d: dict, rho: float) -> None:
+    k = _window_k(d, rho)
     ls = d["local_slope"]["analysis"]
     # s_k is the slope between rho^k and rho^(k+1), so it sits between them.
     ks = np.log(ls["scales"][:-1]) / math.log(rho) + 0.5
@@ -271,49 +268,69 @@ def fig_checks(d: dict, rho: float):
     ax.set_ylabel(r"$s_k$")
     ax.set_title(r"(A1) local slopes $s_k$", fontsize=9, loc="left")
     ax.xaxis.set_major_locator(MaxNLocator(integer=True, steps=[1, 2, 5, 10]))   # k is an integer (user, 2026-11-03)
+    ax.set_xlabel(r"$k=\log_\rho i$")
     ax.legend(loc="upper right", fontsize=7)
 
-    per_rep(ax_["A4"], [r["abs_moment"] for r in reps], r"$\overline{|\xi_i|^{3}}$")
-    ax_["A4"].set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
-    ax_["A4"].ticklabel_format(axis="y", useOffset=False)
 
-    ax = ax_["A5"]
-    s2 = per_rep(ax, [np.square(r["cv"]) for r in reps], r"$\hat\sigma_i^2$")
+def check_A4(ax, d: dict, rho: float) -> None:
+    _per_rep(ax, _window_k(d, rho), [r["abs_moment"] for r in d["final"]["per_replicate"]],
+             r"$\overline{|\xi_i|^{3}}$")
+    ax.set_title(r"(A4) $\mathbb{E}|\xi_i|^{2+\delta}$, $\delta=1$", fontsize=9, loc="left")
+    ax.ticklabel_format(axis="y", useOffset=False)
+    ax.set_xlabel(r"$k=\log_\rho i$")
+    ax.legend(loc="upper right", fontsize=7)
+
+
+def check_A5(ax, d: dict, rho: float) -> None:
+    s2 = _per_rep(ax, _window_k(d, rho), [np.square(r["cv"]) for r in d["final"]["per_replicate"]],
+                  r"$\hat\sigma_i^2$")
     ax.axhline(s2.max(), color=REF, ls="--", lw=1, label=rf"$\hat\sigma^2_{{\max}}={s2.max():.4f}$")
     ax.set_title(r"(A5) $\hat\sigma_i^2=\widehat{\mathrm{var}}\,\xi_i$", fontsize=9, loc="left")
+    ax.set_xlabel(r"$k=\log_\rho i$")
+    ax.legend(loc="upper right", fontsize=7)
 
-    ax = ax_["A6"]
+
+def check_A6(ax, d: dict, rho: float) -> None:
+    pilot, final = d["pilot"], d["final"]
+    i = np.asarray(final["scales"], float)
+    R, n = len(final["per_replicate"]), final["n"]
     c = pilot["cost"]
     ps = np.asarray(c["probes"][0]["scales"], float)
     med = np.median([pr["elapsed"] for pr in c["probes"]], axis=0)
-    # The planner's own cost model (plan.py's plan_for_budget): i^d, converted to
-    # the model's work unit by cost_ratio, at the pilot's throughput.
-    dd, tp = plan["constants_at_plan_time"]["d"]["value"], plan["throughput"]
-    plan_cost = lambda s: np.asarray(s, float) ** dd * plan["cost_ratio"] / tp
-    assert math.isclose(n * float(np.sum(plan_cost(i))), plan["seconds"], rel_tol=1e-3)
     ii = np.geomspace(ps[0], i[-1], 200)
     ax.loglog(ps, med, "o", color=DATA, ms=3.5, label="pilot probe (median)")
     for r in [r for r in ((d["cost_refit"] or {}).get("rounds") or []) if not r["skipped"]]:
         ax.loglog(r["scales"], r["per_sample"], "^", color=REF, ms=4.5, zorder=3,
                   label=f"cost re-fit, {r['n_short']:,} per scale")
-    ax.loglog(ii, plan_cost(ii), color=FIT, label="planner's model")
+    # The article's cost-hat, fitted as in fig_pilot (b). The planner's own model
+    # (i^d at one throughput) is not drawn: the check is against cost-hat (user,
+    # 2026-11-17).
+    aff = fit_cost_probe({"scales": list(ps), "elapsed": list(med)})["affine"]
+    cost_hat = lambda s: aff["a"] + aff["b"] * np.asarray(s, float) ** aff["d"]
+    ax.loglog(ii, cost_hat(ii), color=FIT,
+              label=r"$\widehat{\rm cost}=\hat\kappa_0+\hat\kappa_1 i^{\hat d}$")
     # The long run times whole replicates, not single scales: its measured total is
-    # shared across the window in the proportions the plan predicts.
-    ratio = final["elapsed_seconds"] / (R * plan["seconds"])
-    ax.loglog(i, plan_cost(i) * ratio, "s", color=DATA, mfc="white", ms=4,
-              label=rf"long run ($\times{ratio:.2f}$)")
+    # shared across the window in the proportions cost-hat predicts, and the ratio
+    # is measured over cost-hat's prediction.
+    ratio = final["elapsed_seconds"] / (R * n * float(np.sum(cost_hat(i))))
+    ax.loglog(i, cost_hat(i) * ratio, "s", color=DATA, mfc="white", ms=4,
+              label=rf"long run ($\times{ratio:.2f}$ of $\widehat{{\rm cost}}$)")
     ax.set_xlabel("scale $i$")
     ax.set_ylabel("s per sample")
     ax.set_title("(A6) cost", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    ax = ax_["X"]
+
+def check_A1A2(ax, d: dict, rho: float) -> None:
+    pilot = d["pilot"]
+    k = _window_k(d, rho)
     full, _ = pilot_curve(pilot["direct_fit"], rho)
     kp = np.log(pilot["scales"]) / math.log(rho)
     kin = np.linspace(kp[0] - 0.3, kp[-1], 100)
     kout = np.linspace(kp[-1], k[-1] + 0.3, 100)
     ax.plot(kp, np.log(pilot["y_bar"]), "o", color=DATA, ms=3.5, label="pilot")
-    ax.plot(k, np.log(pooled(reps, "y_bar")), "s", color=DATA, mfc="white", ms=4, label="long run")
+    ax.plot(k, np.log(pooled(d["final"]["per_replicate"], "y_bar")), "s", color=DATA, mfc="white",
+            ms=4, label="long run")
     ax.plot(kin, full(kin), color=FIT, label="pilot fit $f(k)$")
     ax.plot(kout, full(kout), "--", color=FIT, label="...extrapolated")
     # The joint refit of pilot and long run is what B_fs is built from (report.py,
@@ -328,14 +345,33 @@ def fig_checks(d: dict, rho: float):
             rf"$p={rf['p_value']:.1g}$" + (", warning" if rf["warn"] else ""),
             transform=ax.transAxes, ha="right", va="bottom", fontsize=7)
     ax.set_ylabel(r"$\log\overline{Y}$")
+    ax.set_xlabel(r"$k=\log_\rho i$")
     ax.set_title("(A1)+(A2) extrapolation", fontsize=9, loc="left")
     ax.legend(loc="upper left", fontsize=7)
 
-    for name in ("A1", "A4", "A5", "X"):
-        ax_[name].set_xlabel(r"$k=\log_\rho i$")
-    for name in ("A4", "A5"):
-        ax_[name].legend(loc="upper right", fontsize=7)
+
+# Article file suffix -> panel. The article places each panel beside its check in
+# Step 4 (user, 2026-11-16); the combined figure stays for the README.
+CHECKS = {"A1": check_A1, "A1A2": check_A1A2, "A4": check_A4, "A5": check_A5, "A6": check_A6}
+
+
+def fig_checks(d: dict, rho: float):
+    # Five panels: three on top, the two wider ones (cost, extrapolation) below.
+    fig = plt.figure(figsize=(7.2, 4.4), constrained_layout=True)
+    ax_ = fig.subplot_mosaic([["A1", "A1", "A4", "A4", "A5", "A5"],
+                              ["A6", "A6", "A6", "A1A2", "A1A2", "A1A2"]])
+    for name, draw in CHECKS.items():
+        draw(ax_[name], d, rho)
     return fig
+
+
+def fig_check(name: str):
+    """One Step 4 panel alone, sized for a minipage of about half the text width."""
+    def make(d: dict, rho: float):
+        fig, ax = plt.subplots(figsize=(3.4, 2.6), constrained_layout=True)
+        CHECKS[name](ax, d, rho)
+        return fig
+    return make
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -349,7 +385,8 @@ def main(argv: list[str] | None = None) -> None:
     rho = float(d["plan"]["rho"])
     for name, make in (("pipeline_pilot", fig_pilot), ("pipeline_allocation", fig_allocation),
                        ("pipeline_extrapolation", fig_extrapolation),
-                       ("pipeline_longrun", fig_longrun), ("pipeline_checks", fig_checks)):
+                       ("pipeline_longrun", fig_longrun), ("pipeline_checks", fig_checks),
+                       *((f"pipeline_check_{c}", fig_check(c)) for c in CHECKS)):
         fig = make(d, rho)
         for ext in ("pdf", "png"):
             fig.savefig(out / f"{name}.{ext}", dpi=200)

@@ -26,8 +26,8 @@ gap wherever the final ladder doesn't start at 8192.
   - with --article DIR: erw_gamma_vs_p.pdf and erw_omega_vs_p.pdf for the article's ERW
     appendix (user, 2026-11-02), without titles. The omega figure draws only the joint
     refit of pilot and long run (answer.json's joint_refit, user 2026-11-11), open where
-    its chi2 warns; the other two estimates are in the article's table. The gamma figure adds a panel of
-    gamma_hat - gamma with its Wilson interval, which panel (a)'s scale hides. Needs
+    its chi2 warns; the other two estimates are in the article's table. The gamma figure is gamma_hat
+    against p only (its gamma_hat - gamma panel was dropped, user, 2026-11-07). Needs
     --omega-loglog's inputs.
 
   - with --aic (user, 2026-11-05): omega_aic_vs_p_<tag>.png, the AIC fit's omega
@@ -220,34 +220,18 @@ def plot_omega_loglog(res: dict, data_root: Path, tag: str, out: Path, plt) -> N
 def plot_article(res: dict, data_root: Path, tag: str, out_dir: Path, plt) -> None:
     ps = np.array(sorted(res))
     g = np.array([res[p]["answer"]["gamma"] for p in ps])
-    lo = np.array([res[p]["answer"]["wilson"]["interval"][0] for p in ps])
-    hi = np.array([res[p]["answer"]["wilson"]["interval"][1] for p in ps])
-    gt = np.array([gamma_true(p) for p in ps])
-    hit = (lo <= gt) & (gt <= hi)
     blue, grey = "#2a6fdb", "#7a7a7a"
     rc = {"font.size": 9, "axes.spines.top": False, "axes.spines.right": False,
           "legend.frameon": False, "axes.grid": True, "grid.color": "#e6e6e6"}
     with plt.rc_context(rc):
-        fig, (ax, axd) = plt.subplots(1, 2, figsize=(7.2, 3.0), constrained_layout=True)
+        # Only gamma_hat against p; the error panel was dropped (user, 2026-11-07).
+        fig, ax = plt.subplots(figsize=(4.6, 3.2), constrained_layout=True)
         ax.plot([0, 0.75], [0.5, 0.5], color=grey, lw=1.2, label=r"$\gamma=1/2$")
         ax.plot([0.75, 1], [0.5, 1], color=grey, lw=1.2, ls="--", label=r"$\gamma=2p-1$")
         ax.plot(ps, g, "o", color=blue, ms=4, label=r"$\hat\gamma$")
         ax.set(xlabel="$p$", ylabel=r"$\gamma$", xlim=(0, 1))
         ax.legend(loc="upper left")
-        ax.set_title(r"(a) $\hat\gamma$ against $p$", fontsize=9, loc="left")
-        d = g - gt
-        for sel, face, lab in ((hit, blue, "interval contains $\\gamma$"),
-                               (~hit, "white", "interval misses $\\gamma$")):
-            axd.errorbar(ps[sel], d[sel], yerr=[g[sel] - lo[sel], hi[sel] - g[sel]], fmt="o",
-                         color=blue, mfc=face, ms=4, capsize=2, lw=0, elinewidth=1, label=lab)
-        axd.axhline(0, color=grey, lw=0.8)
-        axd.set_yscale("symlog", linthresh=1e-4)
-        axd.set_ylim(top=0.08)
-        axd.set(xlabel="$p$", ylabel=r"$\hat\gamma-\gamma$", xlim=(0, 1))
-        axd.legend(loc="upper left")
-        axd.set_title(r"(b) error, with its 95% interval", fontsize=9, loc="left")
-        for a in (ax, axd):
-            a.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
+        ax.axvline(0.75, color="#c0bfb8", lw=0.6, ls=":")
         fig.savefig(out_dir / "erw_gamma_vs_p.pdf")
         plt.close(fig)
 
