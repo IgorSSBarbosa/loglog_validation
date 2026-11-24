@@ -644,6 +644,11 @@ def write_details(sd: Path, res: dict, final: dict, consts: dict, plan: dict) ->
         f"- plan: `{artifact_path(sd, 'plan').name}`",
         f"- run: `{artifact_path(sd, 'final').name}` "
         f"({'samples kept' if final.get('samples_kept') else 'summaries only'})",
+        *([f"- closed early: {final['replicates']} of {final['replicates_planned']} "
+           f"planned replicates (run.py --close-partial)"] if final.get("closed_partial") else []),
+        *([f"- extended: {final['replicates_added']} replicate(s) added to the "
+           f"{plan.get('replicates', '?')} planned (run.py --more)"]
+          if final.get("replicates_added") else []),
         f"- seeds: `{final.get('seeds')}`", "",
     ]
     p = sd / "details.md"
@@ -655,6 +660,8 @@ def write_budget_analysis(sd: Path, res: dict, final: dict, plan: dict) -> Path:
     """Optional: did the run cost and deliver what the plan promised?"""
     got_t = final["elapsed_seconds"]
     want_t = plan.get("total_seconds")
+    if final.get("replicates_added"):    # run.py --more: the plan priced fewer
+        want_t = plan["seconds"] * final["replicates"]
     want_e = plan.get("rmse")
     got_e = res["se"] * sqrt(res["replicates"]) if res["se"] else None
     lines = [
@@ -717,10 +724,14 @@ def _plot(sd: Path, res: dict, final: dict) -> Path:
     a0 = float(np.exp(np.sum(w * (log_y - gamma * np.log(scales))) / np.sum(w)))
     summary = {i: (y, y * s, res["n"])
                for i, y, s in zip(res["scales"], res["y_bar"], res["sigma_log"])}
+    # The eq. (720) radius, when the bound could be assembled; without it the
+    # label shows gamma-hat alone rather than a smaller, bias-blind error bar.
+    w = res.get("wilson")
+    pm = rf" \pm {w['half_width']:.3g}$ (eq. 720)" if w else "$"
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     loglog_plot(summary, ax=ax,
                 fit_fn=lambda x: a0 * np.asarray(x, float) ** gamma,
-                fit_label=rf"$\hat\gamma = {gamma:.5f}$")
+                fit_label=rf"$\hat\gamma = {gamma:.5f}{pm}")
     ax.set_title(f"{final['model']}  --  {res['replicates']} replicate(s), "
                  f"n = {res['n']:,} per scale")
     fig.tight_layout()

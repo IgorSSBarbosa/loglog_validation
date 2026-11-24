@@ -30,6 +30,21 @@ it is the raw draws, not the summaries, that `reduce=` exists to discard.
 CLI:
     python3 src/study/run.py --study mystudy --data-root experiments/01_srw/data
     python3 src/study/run.py --study mystudy --data-root ... --dry-run
+    python3 src/study/run.py --study mystudy --data-root ... --close-partial
+    python3 src/study/run.py --study mystudy --data-root ... --seed S --more 2
+
+--close-partial ends a run that died mid-draw on the replicates it finished
+(user, 2026-11-03: experiment 50's p=0.04 host went down after 3 of 5). It
+draws nothing: `final_partial.json` becomes `final.json` as written, keeping
+`replicates_planned` and its seeds, and is marked `"closed_partial": true`,
+so report.py and everything downstream see a final run of fewer replicates.
+
+--more K adds K replicates to a finished run on the same plan (user, 2026-11-18:
+the d = 2 long runs of experiments 47 and 53 were planned at plan.py's default
+of 3 replicates, the article's other runs have 5). It must be given the run's
+own --seed and draws children R..R+K-1 of it (`tools/rng.py:spawn`'s skip), so
+the result is the run one call for R+K replicates would have drawn.
+`replicates_added` records it; the plan is left as it was accepted.
 """
 
 from __future__ import annotations
@@ -45,7 +60,7 @@ ROOT = HERE.parent.parent
 if str(ROOT) not in sys.path:    # run as a script: `tools.*`/`src.*`/`models.*`
     sys.path.insert(0, str(ROOT))   # resolve from the repo root, nowhere else
 
-from tools.artifacts import artifact_path, load_recipe, write_artifact  # noqa: E402
+from tools.artifacts import artifact_path, load_recipe, read_artifact, write_artifact  # noqa: E402
 from tools import progress as P  # noqa: E402
 from tools.rng import seed_record, spawn  # noqa: E402
 from tools.summary import replicate_summary, summarize_scale  # noqa: E402
@@ -84,28 +99,37 @@ def preflight(model: str, scales, params: dict) -> None:
 
 def execute(plan: dict, recipe: dict, sd: Path, *,
             seed=None, keep_samples=False, on_scale=None, on_scale_start=None,
-            quiet=False) -> dict:
+            quiet=False, prior: dict | None = None, more: int = 0) -> dict:
     """Draw the plan's replicates; return the per-replicate summaries.
 
     The recipe says WHAT to draw (model, params) and the plan says HOW MUCH
     (scales, n, replicates) -- they agree by construction, since plan.py wrote
     the recipe from the plan. Each replicate gets its own spawned seed, and
     the seed is recorded, so any one of them can be redrawn alone.
+
+    With `prior` (a finished final.json), draws `more` replicates after the
+    prior's R, from children R.. of the same seed, and returns all R + more.
     """
     model, params = recipe["model"], recipe.get("params", {})
     scales, n, R = plan["scales"], plan["n"], plan.get("replicates", 1)
     preflight(model, scales, params)
     reps, seeds = [], []
+    t_prior, skip = 0.0, 0
+    if prior is not None:
+        reps, seeds = list(prior["per_replicate"]), list(prior["seeds"])
+        t_prior, skip = prior["elapsed_seconds"], len(reps)
+        R = skip + more
     t0 = time.perf_counter()
 
     def result():
         return {"replicates": len(reps), "scales": scales, "n": n, "m0": plan["m0"],
                 "rho": plan["rho"], "m": plan["m"], "model": model,
                 "params": params, "per_replicate": reps, "seeds": seeds,
-                "elapsed_seconds": time.perf_counter() - t0,
-                "samples_kept": bool(keep_samples)}
+                "elapsed_seconds": t_prior + time.perf_counter() - t0,
+                "samples_kept": bool(keep_samples),
+                **({"replicates_added": more} if prior is not None else {})}
 
-    for k, ss in enumerate(spawn(seed, R)):
+    for k, ss in enumerate(spawn(seed, R - skip, skip=skip), start=skip):
         if not quiet:
             P.say(f"  replicate {k + 1}/{R}  (n={n:,} x {len(scales)} scales) ...")
         t = time.perf_counter()
@@ -174,6 +198,12 @@ def _main(argv=None) -> None:
                         "and nothing downstream reads them")
     p.add_argument("--dry-run", action="store_true",
                    help="print what would be drawn and stop")
+    p.add_argument("--close-partial", action="store_true",
+                   help="draw nothing: promote final_partial.json (the replicates a "
+                        "run that died had finished) to final.json, marked as closed early")
+    p.add_argument("--more", type=int, default=0,
+                   help="add this many replicates to the finished run, on its plan; "
+                        "needs the run's own --seed")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="per-rung probe timings and per-scale draw sizes as well as the phase lines")
     a = p.parse_args(argv)
@@ -188,6 +218,32 @@ def _main(argv=None) -> None:
             f"    python3 src/study/plan.py --study {a.study} "
             f"--data-root {a.data_root} --time <duration> --accept")
     plan = json.loads(pj.read_text())
+
+    if a.close_partial:
+        partial = read_artifact(sd, "final_partial")
+        if artifact_path(sd, "final").exists():
+            raise SystemExit(f"{artifact_path(sd, 'final')} exists: that run finished")
+        if partial["plan"] != plan:
+            raise SystemExit(f"final_partial.json was drawn on a different plan than {pj}")
+        result = {k: v for k, v in partial.items()
+                  if k not in ("artifact", "created", "produced_by")}
+        result["closed_partial"] = True
+        write_artifact(sd, "final", result, produced_by="src/study/run.py --close-partial")
+        print(f"closed {sd.name} on {result['replicates']} of "
+              f"{result['replicates_planned']} replicate(s) -> {artifact_path(sd, 'final')}")
+        return
+
+    prior = None
+    if a.more:
+        prior = read_artifact(sd, "final")
+        if prior["plan"] != plan:
+            raise SystemExit(f"final.json was drawn on a different plan than {pj}")
+        R0 = prior["replicates"]
+        want = [seed_record(s) for s in spawn(a.seed, R0)]
+        if a.seed is None or prior["seeds"] != want:
+            raise SystemExit(f"--more needs the run's own --seed: final.json's seeds are "
+                             f"{prior['seeds']}, --seed {a.seed} gives {want}")
+        print(f"adding {a.more} replicate(s) to the {R0} in {artifact_path(sd, 'final')}")
 
     recipe = _load_plan_recipe(plan, sd, a.study, a.data_root)
 
@@ -204,11 +260,13 @@ def _main(argv=None) -> None:
 
     print(file=sys.stderr)
     result = execute(plan, recipe, sd, seed=a.seed,
-                     keep_samples=a.keep_samples)
+                     keep_samples=a.keep_samples, prior=prior, more=a.more)
     result["plan"] = plan
     write_artifact(sd, "final", result, produced_by="src/study/run.py")
 
     got, want = result["elapsed_seconds"], plan.get("total_seconds")
+    if a.more:    # the plan priced its own replicate count, not R + more
+        want = plan["seconds"] * result["replicates"]
     print(f"\ndrew {result['replicates']} replicate(s) in {human_time(got)}"
           + (f"  (predicted {human_time(want)}, ratio {got / want:.2f}x)"
              if want else ""))
