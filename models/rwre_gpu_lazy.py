@@ -93,8 +93,14 @@ that covers the same [-cap/2, cap/2) as the warp kernel's buffer (so the same
 samples overflow); warp w starts its first sample once warp 0 is
 `stagger` * w / warps of the way through its own, and each warp then claims the
 next sample as it finishes one, so the warps' ages stay spread. A warp that
-finds no free page waits; if every holder waits, the block aborts and its
-unfinished samples are rerun with half the warps. Bits, blocks and Philox
+finds no free page waits; if every holder waits, the youngest sample is evicted
+(restarted from t = 0 later: the same draws) and the block runs one sample
+fewer at a time, so each block settles at what its pool holds at that k. Only
+a sample alone that outgrows the pool aborts its block, and the host then
+raises: fewer warps would not help it, as they get a smaller pool (3 blocks per
+SM at <= 16 warps). So a sample can fail here below `cap`, when its pages
+outnumber the pool's (185 pages, 378,880 cells, on the RTX 5090 at 32 warps
+and cap 393216), loudly, never by a changed draw. Bits, blocks and Philox
 counters are BitEnv's, so the output is bit-identical to `layout` "bit".
 
 No GPU present: as models/rwre_gpu.py, importing never imports cupy and `walk`
@@ -133,7 +139,7 @@ _DEFAULTS = {
 STATS = ("x", "reveals", "ones", "reads", "width", "left", "right", "error")
 
 #: error codes in the "error" column. DEBUG is only ever set by a debug build;
-#: POOL (a block's pool ran dry with every warp waiting) is rerun, never returned.
+#: POOL (a sample alone outgrew its block's pool) raises, never returned.
 _OK, _OVERFLOW, _DEBUG_FAILED, _POOL = 0, 1, 2, 3
 
 #: The most a block gets without opting in, and the fixed opt-in ceiling (fits
@@ -148,11 +154,13 @@ _BYTES_PER_CELL = {"byte": 1.0, "bit": 0.25}
 _CHUNK = 1 << 16
 
 #: The pooled kernel's page (cells), its bytes (two planes), the block's
-#: bookkeeping (sizeof PoolMeta) and the most pages a free map of 8 words holds.
+#: bookkeeping (sizeof PoolMeta) and the most pages a page table can name: its
+#: entries are bytes and 0xff is NO_PAGE, so page 255 would read as unmapped
+#: and be mapped over, losing its cells.
 _PAGE_CELLS = 2048
 _PAGE_BYTES = _PAGE_CELLS // 4
-_POOL_META = 80
-_MAX_PAGES = 256
+_POOL_META = 352
+_MAX_PAGES = 255
 
 _SOURCE = r"""
 #define TAG_STEP   1u
@@ -477,13 +485,20 @@ extern "C" __global__ void lazy_walk_bit(ARGS) {
 #define PAGE_WORDS 128                   // 64 words of K, then 64 of V: 512 bytes
 #define NO_PAGE 0xffu
 #define POOL_ABORT 3
+#define POOL_EVICT 4                     // internal: the sample restarts, never written
 
 struct PoolMeta {
     long long lead;                      // steps warp 0 has made in its first sample
     long long sum, cnt;                  // pages in use, sampled by warp 0
-    int used, peak, stalled, holders, abort, pad;
-    unsigned free[8];                    // bit set = page free; at most 256 pages
+    long long prog[32];                  // steps of each warp's sample; -1: holds none
+    int used, peak, stalled, holders, abort;
+    int victim;                          // the warp told to give its sample up, or -1
+    int slots;                           // at most this many samples hold pages at once
+    int evictions;
+    unsigned free[8];                    // bit set = page free; at most 255 pages (NO_PAGE)
+    int pad[2];
 };
+static_assert(sizeof(PoolMeta) == 352, "_POOL_META on the host");
 
 // A warp's view: absolute cell j lives in logical page j >> PAGE_SHIFT, which
 // tab maps to a pool page. tab covers cells [-cap/2, cap/2), the warp kernel's
@@ -567,13 +582,18 @@ struct PoolEnv {
     }
 };
 
-// A free page, or -1 once the block aborts. Lane 0 claims a bit of the free
-// map; while none is free the warp waits. If every warp holding pages waits,
-// none will ever free one: the block aborts and the host reruns its unfinished
-// samples with fewer warps (the same draws: they are keyed by sample, not slot).
-// A finishing warp frees its pages before it stops counting as a holder, so a
-// wait that sees stalled == holders four times running is a real deadlock.
-__device__ int pool_alloc(PoolMeta* m, const unsigned lane) {
+// A free page; -2 if this warp is told to give its sample up; -1 once the
+// block aborts. Lane 0 claims a bit of the free map; while none is free the
+// warp waits. If every warp holding pages waits, none will ever free one: the
+// youngest sample is evicted -- it frees its pages and restarts from t = 0
+// later, the same draws, as they are keyed by sample and step -- and the block
+// runs one sample fewer at a time from then on, so it settles at what the pool
+// holds. The oldest sample is never evicted, so the block always progresses;
+// only a sample alone that outgrows the pool aborts the block (the host then
+// raises). A finishing warp frees its pages before it stops counting as a
+// holder, so stalled == holders four times running is a real deadlock.
+__device__ int pool_alloc(PoolMeta* m, const unsigned lane, const unsigned warp,
+                          const unsigned W) {
     int pg = -1;
     if (lane == 0) {
         volatile PoolMeta* v = m;
@@ -590,10 +610,25 @@ __device__ int pool_alloc(PoolMeta* m, const unsigned lane) {
                 }
             }
             if (pg >= 0 || v->abort) break;
+            if (v->victim == (int)warp) { pg = -2; break; }
             if (!stalled) { atomicAdd(&m->stalled, 1); stalled = true; }
             __threadfence_block();
             if (v->stalled == v->holders) {
-                if (++strikes == 4) { atomicExch(&m->abort, 1); break; }
+                if (++strikes == 4) {
+                    if (v->holders == 1) { atomicExch(&m->abort, 1); break; }
+                    // A pick can land after its warp finished: clear it, or no
+                    // later pick could be made.
+                    const int stale = v->victim;
+                    if (stale >= 0 && v->prog[stale] < 0) atomicCAS(&m->victim, stale, -1);
+                    int young = -1;
+                    long long least = 0x7fffffffffffffffLL;
+                    for (unsigned w = 0; w < W; ++w) {
+                        const long long t = v->prog[w];
+                        if (t >= 0 && t < least) { least = t; young = (int)w; }
+                    }
+                    if (young >= 0) atomicCAS(&m->victim, -1, young);
+                    strikes = 0;
+                }
             } else {
                 strikes = 0;
             }
@@ -605,13 +640,15 @@ __device__ int pool_alloc(PoolMeta* m, const unsigned lane) {
     return __shfl_sync(FULL, pg, 0);
 }
 
-// Map every unmapped logical page of [L, R], each zeroed (U). 0 or POOL_ABORT.
+// Map every unmapped logical page of [L, R], each zeroed (U). 0, POOL_EVICT
+// or POOL_ABORT.
 __device__ int pool_map(PoolMeta* m, const PoolEnv& env, const int L, const int R,
-                        int& PL, int& PR, const unsigned lane) {
+                        int& PL, int& PR, const unsigned lane, const unsigned warp,
+                        const unsigned W) {
     for (int lp = L >> PAGE_SHIFT; lp <= (R >> PAGE_SHIFT); ++lp) {
         if (env.tab[lp + env.half] != NO_PAGE) continue;
-        const int pg = pool_alloc(m, lane);
-        if (pg < 0) return POOL_ABORT;
+        const int pg = pool_alloc(m, lane, warp, W);
+        if (pg < 0) return pg == -2 ? POOL_EVICT : POOL_ABORT;
         unsigned* q = env.pool + PAGE_WORDS * pg;
         for (int w = (int)lane; w < PAGE_WORDS; w += 32) q[w] = 0u;
         __syncwarp();
@@ -640,6 +677,25 @@ __device__ void pool_free(PoolMeta* m, const PoolEnv& env, const int T, const un
     __syncwarp();
 }
 
+// Take one of the block's slots before holding pages; false once it aborts.
+// Holders is touched only when a slot looks free: a waiter bumping it up and
+// down would keep breaking pool_alloc's stalled == holders deadlock test.
+__device__ bool pool_enter(PoolMeta* m, const unsigned lane) {
+    bool ok = true;
+    if (lane == 0) {
+        volatile PoolMeta* v = m;
+        for (;;) {
+            if (v->abort) { ok = false; break; }
+            if (v->holders < v->slots) {
+                if (atomicAdd(&m->holders, 1) < v->slots) break;
+                atomicSub(&m->holders, 1);
+            }
+            __nanosleep(2000);
+        }
+    }
+    return __shfl_sync(FULL, ok, 0);
+}
+
 // Persistent: each warp claims samples ids[i] from a global counter until none
 // are left. Rows of out are indexed by sample; error -1 (set by the host) marks
 // a row not reached. lazy_walk's step loop, in absolute coordinates: the same
@@ -661,7 +717,10 @@ __device__ __forceinline__ void pool_walk(POOL_ARGS) {
     unsigned char* tabs = (unsigned char*)(pool + PAGE_WORDS * npages);
     if (threadIdx.x == 0) {
         m->lead = m->sum = m->cnt = 0;
-        m->used = m->peak = m->stalled = m->holders = m->abort = 0;
+        m->used = m->peak = m->stalled = m->holders = m->abort = m->evictions = 0;
+        m->victim = -1;
+        m->slots = (int)W;
+        for (int w = 0; w < 32; ++w) m->prog[w] = -1;
         for (int w = 0; w < 8; ++w) {
             const int left = npages - 32 * w;
             m->free[w] = left >= 32 ? FULL : left > 0 ? (1u << left) - 1u : 0u;
@@ -691,73 +750,93 @@ __device__ __forceinline__ void pool_walk(POOL_ARGS) {
         i = __shfl_sync(FULL, i, 0);
         if (i >= (unsigned long long)rows) break;
         const unsigned sample = ids[i];
-        if (lane == 0) atomicAdd(&m->holders, 1);
-
-        long long x = 0, reveals = 0, ones = 0, reads = 0;
-        int L = 0, R = 0, PL = 0, PR = -1;
-        int err = pool_map(m, env, L, R, PL, PR, lane);
-        unsigned s = 0;
-        uint4 pr;
-        for (long long t = 0; t < k && !err; ++t) {
-            if (!(t & 63)) {
-                if (__shfl_sync(FULL, lane == 0 ? vm->abort : 0, 0)) { err = POOL_ABORT; break; }
-                if (lane == 0 && warp == 0 && !(t & 1023)) {
-                    if (leader) vm->lead = t;
-                    m->sum += vm->used;
-                    ++m->cnt;
+        long long x, reveals, ones, reads;
+        int L, R, err;
+        for (;;) {                               // until not evicted
+            x = reveals = ones = reads = 0;
+            L = R = 0;
+            if (!pool_enter(m, lane)) { err = POOL_ABORT; break; }
+            if (lane == 0) vm->prog[warp] = 0;
+            int PL = 0, PR = -1;
+            err = pool_map(m, env, L, R, PL, PR, lane, warp, W);
+            unsigned s = 0;
+            uint4 pr;
+            for (long long t = 0; t < k && !err; ++t) {
+                if (!(t & 63)) {
+                    int flag = 0;
+                    if (lane == 0) {
+                        flag = vm->abort ? POOL_ABORT : vm->victim == (int)warp ? POOL_EVICT : 0;
+                        vm->prog[warp] = t;
+                    }
+                    if ((err = __shfl_sync(FULL, flag, 0))) break;
+                    if (lane == 0 && warp == 0 && !(t & 1023)) {
+                        if (leader) vm->lead = t;
+                        m->sum += vm->used;
+                        ++m->cnt;
+                    }
                 }
-            }
-            const uint4 r = philox(make_uint4((unsigned)t, (unsigned)(t >> 32), sample, TAG_STEP), key);
-            const double u = ((r.x >> 5) * 67108864.0 + (r.y >> 6)) * (1.0 / 9007199254740992.0);
-            bool left;
-            if (skip_read && u < lo) {
-                left = true;
-            } else if (skip_read && u >= hi) {
-                left = false;
-            } else {
-                if (x < -c || x >= c) { err = 1; break; }
-                const int j = (int)x;
-                while (j <= L) L -= growth;
-                while (j >= R) R += growth;
-                if (L < -c || R >= c) { err = 1; break; }
-                if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
-                    err = pool_map(m, env, L, R, PL, PR, lane);
-                    if (err) break;
-                }
-                unsigned one;
-                if (env.known(j)) {
-                    one = env.one(j);
+                const uint4 r = philox(make_uint4((unsigned)t, (unsigned)(t >> 32), sample, TAG_STEP), key);
+                const double u = ((r.x >> 5) * 67108864.0 + (r.y >> 6)) * (1.0 / 9007199254740992.0);
+                bool left;
+                if (skip_read && u < lo) {
+                    left = true;
+                } else if (skip_read && u >= hi) {
+                    left = false;
                 } else {
-                    one = unit24(r.z) < alpha;
-                    ++reveals;
-                    ones += one;
-                    __syncwarp();
-                    if (lane == 0) env.reveal(j, one);
+                    if (x < -c || x >= c) { err = 1; break; }
+                    const int j = (int)x;
+                    while (j <= L) L -= growth;
+                    while (j >= R) R += growth;
+                    if (L < -c || R >= c) { err = 1; break; }
+                    if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
+                        err = pool_map(m, env, L, R, PL, PR, lane, warp, W);
+                        if (err) break;
+                    }
+                    unsigned one;
+                    if (env.known(j)) {
+                        one = env.one(j);
+                    } else {
+                        one = unit24(r.z) < alpha;
+                        ++reveals;
+                        ones += one;
+                        __syncwarp();
+                        if (lane == 0) env.reveal(j, one);
+                    }
+                    ++reads;
+                    left = u < (one ? p : 1.0 - p);
                 }
-                ++reads;
-                left = u < (one ? p : 1.0 - p);
-            }
-            x += left ? -1 : 1;
-            __syncwarp();
-            if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
-            for (int i = 0; i < sweeps; ++i, ++s) {
-                if (!(s & 127)) pr = philox(make_uint4(s >> 7, 0u, sample, TAG_PARITY), key);
-                const int b = (word(pr, (s >> 5) & 3) >> (s & 31)) & 1u;
-                env.sweep(L, R, b, s, sample, key, lane);
+                x += left ? -1 : 1;
                 __syncwarp();
-                if (env.known(L)) L -= growth;
-                if (env.known(R)) R += growth;
-                if (L < -c || R >= c) { err = 1; break; }
-                if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
-                    err = pool_map(m, env, L, R, PL, PR, lane);
-                    if (err) break;
-                }
                 if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
+                for (int i = 0; i < sweeps; ++i, ++s) {
+                    if (!(s & 127)) pr = philox(make_uint4(s >> 7, 0u, sample, TAG_PARITY), key);
+                    const int b = (word(pr, (s >> 5) & 3) >> (s & 31)) & 1u;
+                    env.sweep(L, R, b, s, sample, key, lane);
+                    __syncwarp();
+                    if (env.known(L)) L -= growth;
+                    if (env.known(R)) R += growth;
+                    if (L < -c || R >= c) { err = 1; break; }
+                    if ((L >> PAGE_SHIFT) < PL || (R >> PAGE_SHIFT) > PR) {
+                        err = pool_map(m, env, L, R, PL, PR, lane, warp, W);
+                        if (err) break;
+                    }
+                    if (debug && !deque_ok(env, L, R, reveals, ones, lane)) { err = 2; break; }
+                }
             }
+            if (lane == 0) vm->prog[warp] = -1;
+            pool_free(m, env, T, lane);
+            if (lane == 0) {
+                atomicSub(&m->holders, 1);
+                if (err == POOL_EVICT) {
+                    if (atomicSub(&m->slots, 1) <= 1) atomicAdd(&m->slots, 1);
+                    atomicAdd(&m->evictions, 1);
+                }
+                atomicCAS(&m->victim, (int)warp, -1);    // also a pick that came too late
+            }
+            __syncwarp();
+            if (err != POOL_EVICT) break;
         }
-        pool_free(m, env, T, lane);
         if (lane == 0) {
-            atomicSub(&m->holders, 1);
             if (leader) vm->lead = 0x7fffffffffffffffLL;
             long long* o = out + (long long)sample * NSTAT;
             o[0] = x; o[1] = reveals; o[2] = ones; o[3] = reads;
@@ -768,8 +847,9 @@ __device__ __forceinline__ void pool_walk(POOL_ARGS) {
     if (lane == 0 && warp == 0) vm->lead = 0x7fffffffffffffffLL;
     __syncthreads();
     if (threadIdx.x == 0) {
-        long long* b = bstat + 4 * (long long)blockIdx.x;
+        long long* b = bstat + 6 * (long long)blockIdx.x;
         b[0] = m->peak; b[1] = m->sum; b[2] = m->cnt; b[3] = m->abort;
+        b[4] = m->evictions; b[5] = m->slots;
     }
 }
 
@@ -881,55 +961,58 @@ def _walk_pool(cp, q: dict, k: int, n: int, seed: int, debug: bool,
                report: list | None) -> np.ndarray:
     """All n samples through `lazy_walk_pool`: (n, len(STATS)) int64.
 
-    A block whose pool runs dry with every warp waiting aborts; its unfinished
-    samples are rerun with half the warps, the same seed and sample indices, so
-    the same draws. One warp that still runs dry needs more than the pool alone.
-    Each launch appends its memory figures to `report`.
+    One launch. Contention is settled inside the block by eviction, so a block
+    aborts only when a sample alone outgrows its pool; that raises, as rerunning
+    with fewer warps would give it a smaller pool, not a larger one (user,
+    2026-11-03). The launch appends its memory figures to `report`.
     """
     attr = cp.cuda.Device().attributes
     optin, per_sm = attr["MaxSharedMemoryPerBlockOptin"], attr["MaxSharedMemoryPerMultiprocessor"]
     T = q["cap"] // _PAGE_CELLS
     out = cp.full((n, len(STATS)), -1, dtype=cp.int64)
-    todo = np.arange(n, dtype=np.uint32)
+    if n == 0:
+        return out.get()
     warps = q["warps"]
-    while todo.size:
-        blocks = 3 if warps <= 16 else 1            # the variant's launch bounds
-        kernel = _compiled(cp).get_function("lazy_walk_pool3" if blocks == 3 else "lazy_walk_pool")
-        tables = warps * T
-        room = (min(optin, per_sm // blocks - 1024) - _POOL_META - tables) // _PAGE_BYTES
-        npages = min(_MAX_PAGES, room, q["pool"] // _PAGE_BYTES if q["pool"] else room)
-        if npages < 1:
-            raise RuntimeError(f"no room for a page: {warps} page tables of {T} entries")
-        shared = _POOL_META + npages * _PAGE_BYTES + tables
-        kernel.max_dynamic_shared_size_bytes = shared
-        # Blocks per SM: the shared memory (1 KiB reserved per block), 48 warps,
-        # and the kernel's register budget.
-        per = max(1, min(attr["MaxThreadsPerMultiProcessor"] // (32 * warps),
-                         per_sm // (shared + 1024),
-                         attr["MaxRegistersPerMultiprocessor"] // (kernel.num_regs * 32 * warps)))
-        grid = attr["MultiProcessorCount"] * per
-        bstat = cp.zeros((grid, 4), dtype=cp.int64)
-        kernel((grid,), (32 * warps,),
-               (cp.uint64(seed), cp.asarray(todo), cp.int64(todo.size), cp.int64(k),
-                cp.int32(q["env_sweeps"]), cp.float64(q["p"]), cp.float32(q["alpha"]),
-                cp.int32(q["skip_read"]), cp.int32(q["cap"]), cp.int32(q["growth"]),
-                cp.int32(debug), cp.float32(q["stagger"]), cp.int32(npages),
-                cp.zeros(1, dtype=cp.uint64), out, bstat),
-               shared_mem=shared)
-        err = out[:, STATS.index("error")].get()[todo]
-        rerun = todo[(err == _POOL) | (err == -1)]
-        b = bstat.get()
-        if report is not None:
-            report.append({"warps": warps, "pages": int(npages), "page_bytes": _PAGE_BYTES,
-                           "shared": int(shared), "blocks_per_sm": int(per), "samples": int(todo.size),
-                           "peak_pages": b[:, 0].tolist(),
-                           "mean_pages": (b[:, 1] / np.maximum(b[:, 2], 1)).tolist(),
-                           "aborted_blocks": int(b[:, 3].sum()), "rerun": int(rerun.size)})
-        if rerun.size and warps == 1:
-            raise RuntimeError(f"sample {int(rerun[0])} at k = {k} needs more than a pool of "
-                               f"{npages} pages ({npages * _PAGE_CELLS} cells)")
-        todo, warps = rerun, max(1, warps // 2)
-    return out.get()
+    blocks = 3 if warps <= 16 else 1                # the variant's launch bounds
+    kernel = _compiled(cp).get_function("lazy_walk_pool3" if blocks == 3 else "lazy_walk_pool")
+    tables = warps * T
+    room = (min(optin, per_sm // blocks - 1024) - _POOL_META - tables) // _PAGE_BYTES
+    npages = min(_MAX_PAGES, room, q["pool"] // _PAGE_BYTES if q["pool"] else room)
+    if npages < 1:
+        raise RuntimeError(f"no room for a page: {warps} page tables of {T} entries")
+    shared = _POOL_META + npages * _PAGE_BYTES + tables
+    kernel.max_dynamic_shared_size_bytes = shared
+    # Blocks per SM: the shared memory (1 KiB reserved per block), 48 warps,
+    # and the kernel's register budget.
+    per = max(1, min(attr["MaxThreadsPerMultiProcessor"] // (32 * warps),
+                     per_sm // (shared + 1024),
+                     attr["MaxRegistersPerMultiprocessor"] // (kernel.num_regs * 32 * warps)))
+    grid = attr["MultiProcessorCount"] * per
+    bstat = cp.zeros((grid, 6), dtype=cp.int64)
+    kernel((grid,), (32 * warps,),
+           (cp.uint64(seed), cp.asarray(np.arange(n, dtype=np.uint32)), cp.int64(n), cp.int64(k),
+            cp.int32(q["env_sweeps"]), cp.float64(q["p"]), cp.float32(q["alpha"]),
+            cp.int32(q["skip_read"]), cp.int32(q["cap"]), cp.int32(q["growth"]),
+            cp.int32(debug), cp.float32(q["stagger"]), cp.int32(npages),
+            cp.zeros(1, dtype=cp.uint64), out, bstat),
+           shared_mem=shared)
+    res = out.get()
+    err = res[:, STATS.index("error")]
+    unfinished = np.flatnonzero((err == _POOL) | (err == -1))
+    b = bstat.get()
+    if report is not None:
+        report.append({"warps": warps, "pages": int(npages), "page_bytes": _PAGE_BYTES,
+                       "shared": int(shared), "blocks_per_sm": int(per), "samples": n,
+                       "peak_pages": b[:, 0].tolist(),
+                       "mean_pages": (b[:, 1] / np.maximum(b[:, 2], 1)).tolist(),
+                       "aborted_blocks": int(b[:, 3].sum()), "unfinished": int(unfinished.size),
+                       "evictions": b[:, 4].tolist(), "slots": b[:, 5].tolist()})
+    if unfinished.size:
+        raise RuntimeError(f"at k = {k} a sample alone needed more than its block's pool of "
+                           f"{npages} pages ({npages * _PAGE_CELLS} cells, below cap = "
+                           f"{q['cap']}); {int(b[:, 3].sum())} block(s) aborted, "
+                           f"{unfinished.size} sample(s) unfinished, first {int(unfinished[0])}")
+    return res
 
 
 def walk_stats(k: int, n: int = 1, params: dict | None = None,
