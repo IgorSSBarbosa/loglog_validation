@@ -44,3 +44,16 @@ Not the explore model's axis seeds (`axis_factor`, `nu_axis`). Those sum several
   - cv of $Z$ over the scales: 3.74 → 4.07, a fitted growth exponent of about 0.02.
   - **Against the known values** (experiment 58: $\gamma=1.1792(7)$, $\Delta_1\approx0.41$): $\hat\gamma$ is 0.0006 off. Both intervals contain 1.1792, and both $\omega_1$ values are within 1 se of 0.41.
   - Experiment 60's raw run (same model, 4096…131072) gave $1.0385$, with a bound of $[0.953,\,1.124]$ that excludes 1.1792.
+
+## Step 3 — pipeline checks (purus, 2026-11-16)
+
+- `local_slope.py --seed 2026111662`: 4…512 redrawn at the final's $n=112{,}644$ ×5 (the pilot's $n=10^6$ means cannot be shrunk); 1024…4096 reused from the long run. 40 cells in 19.0 min.
+  - Its prediction (384 ms) is wrong for a batched model: it uses the pilot's $i^d$ throughput.
+- Local slopes $s_k$ fall from 1.269 ($x=4$) to 1.153 (2048). Every $\Delta s_k$ but one is within 2 se, so no $w_k$ can be read.
+  - (P) $\gamma+c\,i^{-\omega}$: $\gamma=1.1524$, $\omega=0.28\pm0.16$, $p=0.10$.
+  - (L) $\gamma+c/\ln i$: $\gamma=1.1583\pm0.0065$, $p=0.07$.
+- AIC fit, 4…4096, 11 points: $\omega=0.419\pm0.257$ (stat) $\pm0.214$ (range), $\gamma=1.1652\pm0.0257\pm0.0204$. The central $\omega$ is on $\Delta_1\approx0.41$, but its error is about 80%. Window fits (width 5): every interval open.
+- `plot_pipeline.py`: wrote `pipeline_pilot`, then stopped on `eq. (m0-star) disagrees with the plan`, the same failure as experiments 56, 57 and 60.
+  - The plan's $n$, bias and sd pass their asserts. The article's plug-in curves (eqs. bFS, bSE) cross at $m_0=8$; the plan's RMSE minimum is $m_0=6$.
+  - At $m_0=6$ the plug-in $b_{FS}$ is 0.0154, against the plan's bias of 0.0076 (2.0×). The plug-in $b_{SE}$ is 0.0026, against the plan's sd of 0.0038 (0.7×). The constant factors do move the crossing, contrary to the script's docstring.
+- Log: `data/gsusc_d5_batched_n1m_checks.log`.
