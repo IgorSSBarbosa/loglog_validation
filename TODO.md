@@ -891,3 +891,70 @@ its numeric acceptance criterion (see PLAN.md) passes, not when it runs without 
         $\sqrt2$ grid up to $L=181$; each its own plan
   - [ ] eq. (720)'s $\omega_2$ piece is missing (needs $\varphi_+$): the interval is a lower
         estimate of the true bound
+
+## Publication housekeeping (companion repo for the article)
+
+The repo is linked from the article (`main.tex` Section "Simulations" and Appendix
+"Experiments"), so it must serve two readers: one checking the experiments the paper
+reports, one adapting the pipeline to their own model. Decided with the user
+(2026-11-24):
+- `tools/tests/` stays local. These are our own sanity tests, not part of the published repo.
+- Publish **recipes + small results**, not sample data and not a container. A reader
+  checks the numbers from the committed results and reruns from the recipe if they want.
+- Exploration experiments: choose a small set of interesting examples. The published
+  repo separates *paper* experiments from *other (exploratory)* experiments. Which
+  experiments go in is still open.
+
+### P0 — before the article points here
+- [ ] Commit the work in progress on `gpu-layers-explore` and merge it to `master`. Tag
+      `v1.0-article`, archive the tag on Zenodo for a DOI, and cite the tag/DOI in the
+      article instead of the bare GitHub URL
+- [ ] `ARTICLE.md`: one row per figure and table of the paper, giving article label →
+      experiment dir → recipe(s) (the accepted `*_final.json`) → exact commands →
+      result file → hardware and wall time
+- [ ] Find or write the generator of every article figure. Missing so far:
+      `pipeline_check_A1/A1A2/A4/A5/A6` and `rwre_p0.04/p0.3_pipeline_{pilot,longrun,checks}`.
+      `perc_exploration` has two candidate scripts (`51_…`, `58_…`); pick one
+- [ ] Commit the small results behind each article number (`constants.json`,
+      `report.md`, `details.md`, run logs). Data (`.npz`) stays out. Requires a narrow
+      `.gitignore` exception or a `results/` folder next to `data/`
+- [ ] Commit the accepted `*_final.json` recipe of every article run. It fixes the
+      allocation, so a rerun does not depend on the reader's machine throughput
+- [ ] State reproducibility honestly: same recipe + seed + pinned versions should
+      give the same draws on CPU; GPU draws only on the same cupy/CUDA version
+      (`requirements.txt` comment). Check on one CPU run before claiming it
+- [ ] Map the article's Steps 1–5 to commands (which one does the Step 5 joint ω₁ fit)
+      and the checks A1–A6 to the article's assumption numbers
+- [ ] Add a `LICENSE` and a `CITATION.cff`
+
+### P1 — organize for the two readers
+- [ ] Rewrite the top of `README.md` around two entry points, "Reproduce the paper"
+      (→ `ARTICLE.md`) and "Use it on your own model" (→ tutorial). Drop the stale
+      Status section ("all three experiments pass", models `srw`/`synthetic` only)
+- [ ] Split `experiments/` into paper experiments and a curated set of exploratory
+      examples, with an index (`experiments/README.md`) giving one line per experiment:
+      question, model, status. First decide which exploratory experiments go in
+- [ ] Tutorial "use it on your own model": a template `models/template.py` and a template
+      recipe, which recipe fields matter (scales, ρ, n, R), `cost_hint`, running
+      `autopilot.py`, reading the verdicts, what to do when a check fails. Promote the
+      "Adding a model" section of `models/README.md`
+- [ ] Mark each `tools/models.py` registry entry as used in the article or exploratory
+- [ ] Move `cupy-cuda12x` to `requirements-gpu.txt`. State the Python versions actually
+      tested (3.10 here, 3.12 on the GPU hosts) instead of the 3.9.2 pin
+
+### P2 — cleanup
+- [ ] Remove stub/empty experiments (04, 28, 31–37, 40) and leftover recipes
+      (`samples_autopilottest*`, `samples_finalTest`, `samples_huge`, …) from the published
+      tree. List them for the user before deleting anything
+- [ ] Rename `61_bached_perc_susc_hybrid` → `61_batched_…` (update every reference)
+- [ ] Move internal working notes (`plans/`, this `TODO.md`, the working parts of
+      `PLAN.md`) to `docs/dev/` or out of the published tree. Keep PLAN.md's
+      object → article-equation table, which readers need
+- [ ] Rewrite the READMEs' development-log passages ("this repo shipped that bug once",
+      "user request, <date>") as neutral descriptions. Dated design decisions stay in docstrings
+- [ ] Fix `CLAUDE.md`'s import rule (it says bare names; code uses `from tools.x import`)
+
+### Acceptance
+- [ ] Fresh clone of the tag on a clean machine: reproduce one cheap `ARTICLE.md` row by
+      following it word for word, and get a toy model through the tutorial. Anything that
+      breaks goes back on this list
