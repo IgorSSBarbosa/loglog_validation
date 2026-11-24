@@ -1,0 +1,32 @@
+{
+  "kind": "samples",
+  "model": "percolation_tau_gpu",
+  "params": {
+    "p": 0.5927460507921,
+    "observable": "tail",
+    "box_factor": 16.0,
+    "box_exponent": 0.5274725274725275,
+    "geometry": "torus"
+  },
+  "scales": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "n": {
+    "rule": "neyman",
+    "budget": 400000000.0
+  },
+  "seed": null,
+  "_note": [
+    "25's box_exponent = 48/91 pilot recipe unchanged (tail, torus, 8..8192). Experiment 49."
+  ]
+}

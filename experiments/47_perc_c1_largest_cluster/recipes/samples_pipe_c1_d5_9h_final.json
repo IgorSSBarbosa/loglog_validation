@@ -1,0 +1,26 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "pipe_c1_d5_9h",
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "n": 21929,
+  "params": {
+    "dim": 5,
+    "geometry": "torus"
+  },
+  "replicates": 5,
+  "scales": [
+    4,
+    8,
+    16,
+    32,
+    64
+  ],
+  "seed": null
+}

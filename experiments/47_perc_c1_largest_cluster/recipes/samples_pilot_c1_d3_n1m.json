@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 3, "geometry": "torus"},
+  "scales": [4, 8, 16, 32, 64, 128],
+  "n": 1000000,
+  "seed": 2026111847,
+  "_comment": "Experiment 47, d = 3 rerun without the Neyman rule, as pilot_c1_d2_n10m (user, 2026-11-18): fixed 10^6 samples per scale in each replicate on 4..128. omega1 ~ 2.2 here (pipe_c1_d3_9h), so the correction is below the per-scale se past ~2^6; 128 keeps the pilot near 40 min."
+}

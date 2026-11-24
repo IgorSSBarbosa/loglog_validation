@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 2, "geometry": "torus"},
+  "scales": [8, 16, 32, 64, 128, 256, 512, 1024],
+  "n": 1000000,
+  "seed": 2026111747,
+  "_comment": "Experiment 47, A3 rerun without the Neyman rule (user, 2026-11-17): the same 2-D torus pilot as samples_pilot_c1_d2.json, but a fixed 10^6 samples per scale in each replicate."
+}

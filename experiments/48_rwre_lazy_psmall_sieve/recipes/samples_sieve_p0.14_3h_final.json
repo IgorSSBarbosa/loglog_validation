@@ -1,0 +1,27 @@
+{
+  "_generated_by": "src/study/plan.py",
+  "_note": [
+    "GENERATED -- rewritten every time this study's plan is accepted.",
+    "Edit the pilot recipe and re-plan rather than editing this file;",
+    "run.py reads it back, so a hand edit here silently decouples the",
+    "run from the plan.json it is reported against."
+  ],
+  "_study": "sieve_p0.14_3h",
+  "kind": "samples",
+  "model": "rwre_gpu_lazy",
+  "n": 46976,
+  "params": {
+    "alpha": 0.5,
+    "p": 0.14
+  },
+  "replicates": 5,
+  "scales": [
+    524288,
+    1048576,
+    2097152,
+    4194304,
+    8388608,
+    16777216
+  ],
+  "seed": null
+}

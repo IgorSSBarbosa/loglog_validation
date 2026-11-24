@@ -1,0 +1,9 @@
+{
+  "kind": "samples",
+  "model": "percolation_c1_gpu",
+  "params": {"dim": 2, "geometry": "torus"},
+  "scales": [8, 16, 32, 64, 128, 256],
+  "n": 10000000,
+  "seed": 2026111748,
+  "_comment": "Experiment 47, A3 rerun without the Neyman rule (user, 2026-11-17): fixed 10^7 samples per scale in each replicate on 8..256. In pilot_c1_d2_n1m (10^6 on 8..1024) the correction was noise above 2^7 and a1 = -0.16 +/- 0.17."
+}

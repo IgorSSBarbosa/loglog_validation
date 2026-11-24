@@ -1,0 +1,16 @@
+{
+  "kind": "samples",
+  "model": "percolation_susceptibility_explore",
+  "params": {
+    "dim": 3,
+    "eps0": 0.15,
+    "axis_factor": 1.0,
+    "nu_axis": 0.0,
+    "axis_spacing": 1,
+    "moment": 1
+  },
+  "scales": [256, 512],
+  "n": 2000000,
+  "seed": null,
+  "_comment": "User, 2026-11-03: local slopes 128->256->512 of the exploration observable, to break the gamma-omega1 degeneracy of the 4..128 pilots (gamma = 1.826 at omega1 = 0.25 to 1.784 at 1.41, chi2 flat). Predicted 256->512 slopes differ by 0.008-0.012 across omega1 = 0.43..1.0, so ~1e7 samples per scale (sigma_log ~ 0.003). Drawn as 5 independent batches of 2e6 (run_local_slope.sh), each saved on its own; x = 128 comes from the pilot gsusc_d3_explore (independent streams)."
+}
